@@ -70,6 +70,7 @@ final class OverlayController {
         var latchedInteraction = false
         var scrubArmed = false
         var moved = false
+        var confirm = ConfirmAccumulator()
     }
 
     private struct ScrollSession {
@@ -90,7 +91,8 @@ final class OverlayController {
         var lastActivity: TimeInterval = 0
         var retract: CGFloat = 0
         var scrubArmed = false
-        var confirmAccumulated: CGFloat = 0
+        var confirmTravel: CGFloat = 0
+        var confirm = ConfirmAccumulator()
         var wiggle = WiggleDetector()
     }
 
@@ -375,7 +377,13 @@ final class OverlayController {
             model.exposure = exposure
             if pullDistance >= layout.grabDetent {
                 session.grabbed = true
-                model.confirmProgress = 0
+                let extraAtGrab = max(0, pullDistance - layout.grabDetent)
+                session.confirm.begin(
+                    extra: extraAtGrab,
+                    timestamp: timestamp,
+                    distance: layout.confirmDistance
+                )
+                model.confirmProgress = session.confirm.progress
                 model.showConfirmGauge = true
                 session.grabExposure = layout.fullExposure
                 session.angleAtGrab = model.angle
@@ -394,13 +402,14 @@ final class OverlayController {
         }
 
         if session.grabbed {
-            // Continuing downward after the detent fills the confirm gauge. When
-            // it is full, the open state is confirmed (latched).
+            // Continuing downward after the detent fills the confirm gauge. The
+            // farther/faster the pull, the more each point counts. When the meter
+            // is full, the open state is confirmed (latched).
             let extraPull = max(0, pullDistance - layout.grabDetent)
-            model.confirmProgress = min(1, Double(extraPull / layout.confirmDistance))
-            if !latched, extraPull >= layout.confirmDistance {
+            if !latched, session.confirm.update(extra: extraPull, timestamp: timestamp) {
                 confirmLatch()
             }
+            model.confirmProgress = session.confirm.progress
             model.showConfirmGauge = !latched
 
             // Magnet put-back: a deliberate upward lift puts the record away.
@@ -829,6 +838,12 @@ final class OverlayController {
                         return
                     }
                     scroll.grabbed = true
+                    scroll.confirmTravel = 0
+                    scroll.confirm.begin(
+                        extra: 0,
+                        timestamp: timestamp,
+                        distance: layout.confirmDistance
+                    )
                     model.confirmProgress = 0
                     model.showConfirmGauge = true
                     scroll.grabbedExposure = layout.fullExposure
@@ -854,19 +869,19 @@ final class OverlayController {
             return
         }
 
-        // Grabbed: extra downward travel confirms (latches) the open state.
+        // Grabbed: extra downward travel fills the confirm meter. A faster scroll
+        // counts each point more heavily.
         if !latched {
             if pull > 0.01 {
-                scroll.confirmAccumulated += pull * scrollPullScale
-                if scroll.confirmAccumulated >= layout.confirmDistance {
-                    confirmLatch()
-                }
+                scroll.confirmTravel += pull * scrollPullScale
             } else if pull < -0.01 {
-                scroll.confirmAccumulated = max(0, scroll.confirmAccumulated - (-pull) * scrollPullScale)
+                scroll.confirmTravel = max(0, scroll.confirmTravel - (-pull) * scrollPullScale)
+            }
+            if scroll.confirm.update(extra: scroll.confirmTravel, timestamp: timestamp) {
+                confirmLatch()
             }
         }
-
-        model.confirmProgress = min(1, Double(scroll.confirmAccumulated / layout.confirmDistance))
+        model.confirmProgress = scroll.confirm.progress
         model.showConfirmGauge = !latched
 
         // Grabbed: only a deliberately vertical reverse scroll puts the record

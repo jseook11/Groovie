@@ -120,6 +120,36 @@ public enum SelfChecks {
         expect(natural.pull == traditional.pull, "both scrolling preferences must produce the same vertical pull")
         expect(natural.pull < 0, "the vertical direction is inverted relative to the first implementation")
 
+        // MARK: Confirm meter
+
+        var slowMeter = ConfirmAccumulator()
+        slowMeter.begin(extra: 0, timestamp: 0, distance: 240)
+        for step in 1...3 {
+            _ = slowMeter.update(extra: CGFloat(step * 40), timestamp: Double(step) * 0.5)
+        }
+        expect(!slowMeter.isComplete, "a slow 120 pt pull must not fill a 240 pt meter")
+        expect(slowMeter.progress > 0.45 && slowMeter.progress < 0.6,
+               "slow pull progress should track raw distance")
+
+        var fastMeter = ConfirmAccumulator()
+        fastMeter.begin(extra: 0, timestamp: 0, distance: 240)
+        for step in 1...3 {
+            _ = fastMeter.update(extra: CGFloat(step * 40), timestamp: Double(step) * 0.02)
+        }
+        expect(fastMeter.isComplete, "a fast 120 pt pull must fill the meter via acceleration")
+        expect(fastMeter.progress > slowMeter.progress, "faster pulls must fill the meter faster")
+
+        var backingOff = ConfirmAccumulator()
+        backingOff.begin(extra: 0, timestamp: 0, distance: 240)
+        _ = backingOff.update(extra: 120, timestamp: 0.6)
+        let high = backingOff.progress
+        _ = backingOff.update(extra: 60, timestamp: 1.2)
+        expect(backingOff.progress < high, "moving back up must reduce the confirm meter")
+
+        let meter = ConfirmAccumulator()
+        expect(meter.accelerationFactor(forSpeed: 200) < 1.2, "slow pulls stay near 1x")
+        expect(meter.accelerationFactor(forSpeed: 1800) > 3.0, "fast pulls approach 3.2x")
+
         // MARK: Layout
 
         let layout = VinylLayout(notchWidth: 179, capHeight: 32, emergenceInset: 32)
