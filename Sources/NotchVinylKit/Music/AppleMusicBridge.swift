@@ -1,0 +1,255 @@
+import AppKit
+import Foundation
+
+/// Result of a single read of Music.app.
+enum AppleMusicRead: Equatable {
+    case notRunning
+    case noTrack
+    case track(
+        state: String,
+        positionMilliseconds: Int,
+        persistentID: String,
+        title: String,
+        artist: String,
+        album: String,
+        durationMilliseconds: Int
+    )
+}
+
+enum AppleMusicBridgeError: Error, Equatable {
+    case permissionDenied
+    case notRunning
+    case scriptError(Int, String)
+
+    var isPermissionDenied: Bool {
+        if case .permissionDenied = self { return true }
+        return false
+    }
+}
+
+/// All AppleScript traffic is funnelled through one serial queue. Seeks are
+/// coalesced so a slow AppleEvent can never build up a backlog.
+final class AppleMusicBridge {
+    private let queue = DispatchQueue(label: "com.notchvinyl.applemusic", qos: .userInitiated)
+
+    private var readScript: NSAppleScript?
+    private var readScriptFailed = false
+
+    private var seekInFlight = false
+    private var pendingSeek: Double?
+    private var pendingFinish: (position: Double, wasPlaying: Bool, completion: (() -> Void)?)?
+
+    private static let delimiter = "\u{1F}"
+
+    // MARK: - Reading
+
+    func read(completion: @escaping (Result<AppleMusicRead, AppleMusicBridgeError>) -> Void) {
+        queue.async {
+            let result = self.performRead()
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    private func performRead() -> Result<AppleMusicRead, AppleMusicBridgeError> {
+        if readScriptFailed {
+            return .failure(.scriptError(-1, "read script unavailable"))
+        }
+        if readScript == nil {
+            readScript = NSAppleScript(source: Self.readSource)
+            if readScript == nil {
+                readScriptFailed = true
+                return .failure(.scriptError(-1, "could not compile read script"))
+            }
+        }
+        guard let script = readScript else {
+            return .failure(.scriptError(-1, "no read script"))
+        }
+
+        var errorInfo: NSDictionary?
+        let descriptor = script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            return .failure(Self.bridgeError(from: errorInfo))
+        }
+        guard let text = descriptor.stringValue else {
+            return .failure(.scriptError(-1, "empty script result"))
+        }
+        return Self.parse(text)
+    }
+
+    static func parse(_ text: String) -> Result<AppleMusicRead, AppleMusicBridgeError> {
+        if text == "NOTRUNNING" { return .success(.notRunning) }
+        if text == "NOTRACK" { return .success(.noTrack) }
+
+        let parts = text.components(separatedBy: delimiter)
+        guard parts.count >= 7 else {
+            return .failure(.scriptError(-1, "unexpected read result"))
+        }
+        guard let position = Int(parts[1]),
+              let duration = Int(parts[6])
+        else {
+            return .failure(.scriptError(-1, "unexpected numeric result"))
+        }
+
+        return .success(.track(
+            state: parts[0],
+            positionMilliseconds: position,
+            persistentID: parts[2],
+            title: parts[3],
+            artist: parts[4],
+            album: parts[5],
+            durationMilliseconds: duration
+        ))
+    }
+
+    // MARK: - Seeking
+
+    /// Live scrubbing. Coalesced: only the newest target survives.
+    func setPosition(_ seconds: Double) {
+        queue.async {
+            self.pendingSeek = max(0, seconds)
+            self.pumpSeeks()
+        }
+    }
+
+    /// Final seek followed by the play/pause policy. Runs after any live seeks.
+    func finish(position: Double, wasPlaying: Bool, completion: (() -> Void)? = nil) {
+        queue.async {
+            self.pendingSeek = nil
+            self.pendingFinish = (position, wasPlaying, completion)
+            self.pumpSeeks()
+            self.pumpFinish()
+        }
+    }
+
+    private func pumpSeeks() {
+        guard !seekInFlight, let target = pendingSeek else { return }
+        pendingSeek = nil
+        seekInFlight = true
+        runPositionScript(target) {
+            self.seekInFlight = false
+            self.pumpSeeks()
+            self.pumpFinish()
+        }
+    }
+
+    private func pumpFinish() {
+        guard let finish = pendingFinish, !seekInFlight, pendingSeek == nil else { return }
+        pendingFinish = nil
+        runPositionScript(finish.position) {
+            self.runPlaybackScript(play: finish.wasPlaying) {
+                if let completion = finish.completion {
+                    DispatchQueue.main.async { completion() }
+                }
+            }
+        }
+    }
+
+    private func runPositionScript(_ seconds: Double, completion: @escaping () -> Void) {
+        let clamped = String(format: "%.3f", max(0, seconds))
+        let source = """
+        tell application "Music"
+            if it is running then
+                set player position to \(clamped)
+            end if
+        end tell
+        """
+        let script = NSAppleScript(source: source)
+        var errorInfo: NSDictionary?
+        script?.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            let error = Self.bridgeError(from: errorInfo)
+            if case .permissionDenied = error {
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .notchVinylMusicPermissionDenied, object: nil)
+                }
+            }
+        }
+        completion()
+    }
+
+    private func runPlaybackScript(play: Bool, completion: @escaping () -> Void) {
+        let action = play ? "play" : "pause"
+        let source = """
+        tell application "Music"
+            if it is running then
+                \(action)
+            end if
+        end tell
+        """
+        let script = NSAppleScript(source: source)
+        var errorInfo: NSDictionary?
+        script?.executeAndReturnError(&errorInfo)
+        completion()
+    }
+
+    // MARK: - Artwork
+
+    func readArtwork(completion: @escaping (Data?) -> Void) {
+        queue.async {
+            let data = self.performArtworkRead()
+            DispatchQueue.main.async { completion(data) }
+        }
+    }
+
+    private func performArtworkRead() -> Data? {
+        let source = """
+        tell application "Music"
+            if it is running then
+                try
+                    set currentTrackRef to current track
+                    if (count of artworks of currentTrackRef) > 0 then
+                        return raw data of artwork 1 of currentTrackRef
+                    end if
+                end try
+            end if
+        end tell
+        """
+        guard let script = NSAppleScript(source: source) else { return nil }
+        var errorInfo: NSDictionary?
+        let descriptor = script.executeAndReturnError(&errorInfo)
+        if errorInfo != nil { return nil }
+        let data = descriptor.data
+        guard !data.isEmpty else { return nil }
+        return data
+    }
+
+    // MARK: - Helpers
+
+    private static func bridgeError(from info: NSDictionary) -> AppleMusicBridgeError {
+        let number = (info[NSAppleScript.errorNumber] as? NSNumber)?.intValue ?? -1
+        let message = (info[NSAppleScript.errorMessage] as? String) ?? "AppleScript error"
+        if number == -1743 { return .permissionDenied }
+        if number == -600 { return .notRunning }
+        return .scriptError(number, message)
+    }
+
+    private static let readSource = """
+    tell application "Music"
+        if it is running then
+            set stateText to (player state as string)
+            try
+                set currentTrackRef to current track
+                if currentTrackRef is missing value then return "NOTRACK"
+                set trackPersistentID to (persistent ID of currentTrackRef) as text
+                set trackName to (name of currentTrackRef) as text
+                set trackArtist to (artist of currentTrackRef) as text
+                set trackAlbum to (album of currentTrackRef) as text
+                set trackDuration to (duration of currentTrackRef) as real
+                set playerPositionSeconds to (player position) as real
+            on error
+                return "NOTRACK"
+            end try
+            set positionMilliseconds to (playerPositionSeconds * 1000) as integer
+            set durationMilliseconds to (trackDuration * 1000) as integer
+            set fieldSeparator to (ASCII character 31)
+            return stateText & fieldSeparator & (positionMilliseconds as text) & fieldSeparator & trackPersistentID & fieldSeparator & trackName & fieldSeparator & trackArtist & fieldSeparator & trackAlbum & fieldSeparator & (durationMilliseconds as text)
+        else
+            return "NOTRUNNING"
+        end if
+    end tell
+    """
+}
+
+extension Notification.Name {
+    static let notchVinylMusicPermissionDenied = Notification.Name("notchVinylMusicPermissionDenied")
+}

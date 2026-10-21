@@ -1,0 +1,2 @@
+Idle → Armed (hover) → Pulling (8 px) → Grabbed (80 px) ⇄ Scrubbing → Releasing → Idle
+                                      ↑ record centre on the notch edge
