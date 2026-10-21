@@ -78,9 +78,19 @@ SF Symbol을 제거하고 브랜드 마크로 교체합니다.
   - 마크는 아이콘 높이의 약 55%, 위쪽 여백을 조금 더 둔다.
   - 배경은 무광 종이. 강한 광택·베벨·드롭섀도 없음.
   - 러스트(`#B3543D`)는 레이블의 작은 포인트로만.
-- **제작:** 기존 렌더 PNG를 그대로 축소하지 않고, 마크를 벡터 드로잉으로 다시 그려
-  1024 → 512 → 256 → 128 → 64 → 32 → 16px를 생성한다. 16/32px에서는 홈을 생략한다.
-- **패키징:** `Resources/AppIcon.icns` 생성 후 `Contents/Resources`에 복사,
+- **선정 시안:** [`app-icon-cream-v3.png`](design/app-icon-cream-v3.png) (1024×1024,
+  Codex `image_gen` 생성). 상단이 평평하고 아래 모서리만 둥근 노치 하우징,
+  크림 종이 배경, 아래 반원 레코드와 러스트 링 레이블.
+  - 생성 프롬프트와 변형 기록은 [10. 생성 시안](#10-생성-시안) 참고.
+  - 1차 시안(`v2`)은 하우징이 캡슐 형태라 폐기했다.
+- **제작:** 선정 시안을 마스터로 사용한다. 1024 → 512 → 256 → 128 → 64 → 32 → 16px
+  파생본을 만들되, 32px 이하에서는 홈·셰인을 생략한 단순화 버전을 별도로 만든다.
+  래스터를 그대로 축소하면 16px에서 홈이 모아레로 뭉개지기 때문이다.
+- **메뉴 바 심볼과의 관계:** 메뉴 바 심볼(3.1)은 이 래스터를 축소하지 않고
+  벡터로 그린다. 20×11pt 템플릿에서는 AI 래스터보다 코드 드로잉이 선명하고,
+  라이트/다크 반전도 `isTemplate`으로 자동 처리되기 때문이다.
+- **패키징:** 선정 시안에 macOS 슈퍼타원 마스크를 적용해 모서리를 투명하게 만든 뒤
+  `Resources/AppIcon.icns` 생성, `Contents/Resources`에 복사,
   `Info.plist`에 `CFBundleIconFile = AppIcon` 추가. `Scripts/build-app.sh`에서 처리.
 - 참고: 기존 [로고 시안](design/notch-vinyl-cream-transparent-v1.png)은 형태·재질의
   기준으로만 사용한다(비정방형 구도, 큰 여백, 3D 렌더라 아이콘 원본으로는 부적합).
@@ -231,7 +241,7 @@ SF Symbol을 제거하고 브랜드 마크로 교체합니다.
 | 긴 제목을 여러 줄로 표시 | 메뉴 높이가 트랙마다 변해 더 산만함. 1줄 + 마퀴. |
 | 글자를 실제로 회전(스핀) | 가독성 없음. "회전"은 가로 마퀴로 해석. |
 | 헤더에 앨범 아트 표시 | 정보는 풍부하지만 로고 적용 요청과 어긋남. 로고 유지, 아트는 레코드 레이블이 담당. |
-| 기존 렌더 PNG를 앱 아이콘으로 그대로 사용 | 비정방형·큰 여백·3D 렌더라 16/32px에서 뭉개짐. 벡터 재드로잉 채택. |
+| 기존 렌더 PNG를 앱 아이콘으로 그대로 사용 | 비정방형·큰 여백·3D 렌더라 16/32px에서 뭉개짐. 정사각 크림 배경의 새 시안(v3)을 마스터로 채택. |
 
 ---
 
@@ -256,3 +266,42 @@ SF Symbol을 제거하고 브랜드 마크로 교체합니다.
 4. 진행 바 및 예외 상태.
 5. 앱 아이콘 `.icns` 생성·패키징.
 6. 16px 스크린샷, 긴/짧은 제목, 라이트/다크, VoiceOver 검수.
+
+---
+
+## 10. 생성 시안
+
+로고 아트워크는 Codex CLI의 `imagegen` 스킬(내장 `image_gen` 도구)로 생성했다.
+
+| 파일 | 상태 | 비고 |
+| --- | --- | --- |
+| [`app-icon-cream-v3.png`](design/app-icon-cream-v3.png) | **선정** | 1024×1024, 상단 평평·하단 둥근 하우징 |
+| `app-icon-cream-v2.png` | 폐기 | 하우징이 캡슐 형태. 저장소에는 남기지 않음 |
+
+### v3 생성 프롬프트 (요약)
+
+```text
+Use case: logo-brand
+Asset type: macOS app icon (rounded-square mask applied later in code)
+Primary request: warm cream matte paper square with a centered black mark —
+a wide horizontal camera-notch housing with the lower half of a black vinyl
+record emerging beneath it, one connected silhouette. Record center exactly
+on the housing bottom edge; only the lower semicircle visible. Small cream
+paper label with a restrained rust printed ring and a punched spindle hole.
+Style: refined analog product icon, subtle paper grain, delicate grooves.
+Composition: square, dead-center, mark ≈55% of canvas height, generous margins.
+Palette: #EBE0C9 background/label, #000000 housing, #0A0A0B vinyl, #B3543D accent.
+Constraints: no text/letters/wordmark/numbers; no play button, tonearm, laptop,
+notes, extra objects; no rounded tile edge, border, glossy bevel, rainbow
+reflections, grime, heavy drop shadow, or watermark.
+```
+
+v3는 v2를 편집 대상으로 한 단일 변경이었다: 하우징 상단을 수평으로 평평하게,
+상단 모서리를 각지게, 하단 모서리만 10% 반경으로 둥글게, 하우징 높이를 약간 줄임.
+레코드·레이블·색·여백·조명은 그대로 유지했다.
+
+### 후속 작업
+
+- 선정 시안에 macOS 슈퍼타원 마스크를 적용해 모서리를 투명하게 만든다.
+- 32/16px용 단순화 파생본을 만든다(홈·셰인 생략).
+- 메뉴 바 심볼은 이 이미지를 축소하지 않고 `BrandMark` 벡터 드로잉으로 만든다.
