@@ -51,6 +51,9 @@ struct VinylLayout {
 
     /// While the record is held, moving the pointer this far back up snaps it in.
     let mouseDismissDistance: CGFloat = 30
+    /// Extra downward travel beyond the detent that confirms (latches) the open
+    /// state. A horizontal scrub also confirms it.
+    let confirmDistance: CGFloat = 30
 
     let recordRadius: CGFloat = 90
     let labelRadius: CGFloat = 26

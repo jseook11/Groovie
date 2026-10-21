@@ -25,17 +25,19 @@ final class OverlayController {
     private var snapOpenActive = false
     private var snapOpenVelocity: CGFloat = 0
     private var latched = false
+    private var pendingConfirmUntil: TimeInterval?
+    private let confirmWindow: TimeInterval = 1.0
     private let snapOpenStiffness: CGFloat = 320
     private let snapOpenDamping: CGFloat = 26
 
     private let scrollLog = Logger(subsystem: "com.notchvinyl.app", category: "scroll")
+    private let interactionLog = Logger(subsystem: "com.notchvinyl.app", category: "interaction")
     private let scrollPullScale: CGFloat = 0.55
     private let scrollScrubScale: CGFloat = 0.9
     /// Horizontal dead-zone before scroll scrubbing starts. It suppresses the
     /// small sideways jitter produced while scrolling down to open the record.
     private let scrollScrubThreshold: CGFloat = 30
     private let scrollCloseDistance: CGFloat = 40
-    private let scrollIdleTimeout: TimeInterval = 1.6
 
     private var isEnabled = true
     private var hoverInside = false
@@ -67,6 +69,7 @@ final class OverlayController {
         var dismissAccumulated: CGFloat = 0
         var latchedInteraction = false
         var scrubArmed = false
+        var moved = false
     }
 
     private struct ScrollSession {
@@ -87,6 +90,7 @@ final class OverlayController {
         var lastActivity: TimeInterval = 0
         var retract: CGFloat = 0
         var scrubArmed = false
+        var confirmAccumulated: CGFloat = 0
         var wiggle = WiggleDetector()
     }
 
@@ -214,6 +218,7 @@ final class OverlayController {
         snapOpenActive = false
         snapOpenVelocity = 0
         latched = false
+        pendingConfirmUntil = nil
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
@@ -288,6 +293,16 @@ final class OverlayController {
 
     private func handleMouseDown(at point: CGPoint, timestamp: TimeInterval) {
         scrollLog.debug("mouseDown at \(point.x, privacy: .public),\(point.y, privacy: .public) phase=\(String(describing: self.model.phase), privacy: .public)")
+        if pendingConfirmUntil != nil {
+            confirmLatch()
+            if model.canInteract, music.nowPlaying != nil {
+                beginLatchedMouseInteraction(at: point, timestamp: timestamp)
+            } else {
+                closeLatched()
+            }
+            return
+        }
+
         if latched {
             if model.canInteract, music.nowPlaying != nil {
                 beginLatchedMouseInteraction(at: point, timestamp: timestamp)
@@ -375,6 +390,11 @@ final class OverlayController {
         }
 
         if session.grabbed {
+            // Continuing downward after the detent confirms (latches) the open state.
+            if !latched, pullDistance - layout.grabDetent >= layout.confirmDistance {
+                confirmLatch()
+            }
+
             // Magnet put-back: a deliberate upward lift puts the record away.
             let verticalDelta = point.y - session.lastPoint.y
             if verticalDelta > 0.01 {
@@ -394,6 +414,7 @@ final class OverlayController {
 
             if model.phase == .grabbed, abs(result.angleDelta) > 0.01 {
                 model.phase = .scrubbing
+                if !latched { confirmLatch() }
             }
 
             if model.phase == .scrubbing {
@@ -446,6 +467,9 @@ final class OverlayController {
     }
 
     private func handleLatchedMouseDrag(_ session: inout Session, point: CGPoint, timestamp: TimeInterval) {
+        if hypot(point.x - session.start.x, point.y - session.start.y) >= 4 {
+            session.moved = true
+        }
         let vertical = point.y - session.lastPoint.y
         if vertical > 0.01 {
             session.dismissAccumulated += vertical
@@ -532,8 +556,33 @@ final class OverlayController {
         startTicking()
     }
 
+    /// One deliberate confirmation gesture: a further downward pull, a horizontal
+    /// scrub, or a new drag inside the pending window.
+    private func confirmLatch() {
+        guard !latched else { return }
+        latched = true
+        pendingConfirmUntil = nil
+        interactionLog.debug("confirm -> latched")
+        performHaptic(.alignment)
+    }
+
+    /// Released after the magnet snap without confirming. Keep the record out for
+    /// a moment so a second drag can confirm it; otherwise it falls back in.
+    private func enterPendingConfirm() {
+        guard !latched else { return }
+        pendingConfirmUntil = ProcessInfo.processInfo.systemUptime + confirmWindow
+        interactionLog.debug("pending confirm window opened")
+        model.phase = .grabbed
+        model.offsetSeconds = 0
+        showStage()
+        startTicking()
+        NSCursor.openHand.set()
+    }
+
     private func latchRecord() {
         latched = true
+        pendingConfirmUntil = nil
+        interactionLog.debug("record latched open")
         session = nil
         scrollSession = nil
         model.phase = .grabbed
@@ -545,6 +594,8 @@ final class OverlayController {
     }
 
     private func closeLatched() {
+        pendingConfirmUntil = nil
+        interactionLog.debug("close latched")
         latched = false
         session = nil
         scrollSession = nil
@@ -561,6 +612,8 @@ final class OverlayController {
                 if model.phase == .scrubbing {
                     music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
                 }
+                latchRecord()
+            } else if session.moved {
                 latchRecord()
             } else {
                 closeLatched()
@@ -590,7 +643,11 @@ final class OverlayController {
             if model.phase == .scrubbing {
                 music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
             }
-            latchRecord()
+            if latched {
+                latchRecord()
+            } else {
+                enterPendingConfirm()
+            }
             return
         }
 
@@ -601,6 +658,7 @@ final class OverlayController {
     private func beginCollapse() {
         guard model.phase != .releasing else { return }
         latched = false
+        pendingConfirmUntil = nil
         model.phase = .releasing
         model.offsetSeconds = 0
         snapOpenActive = false
@@ -639,8 +697,10 @@ final class OverlayController {
         // seeking or extend the session.
         guard event.momentumPhase.isEmpty else { return }
         guard isEnabled, session == nil else { return }
-        if !model.canInteract && !latched { return }
-        guard scrollSession != nil || latched || model.phase == .idle || model.phase == .armed || model.phase == .releasing else { return }
+        if !model.canInteract && !latched && pendingConfirmUntil == nil { return }
+        guard scrollSession != nil || latched || pendingConfirmUntil != nil
+                || model.phase == .idle || model.phase == .armed || model.phase == .releasing
+        else { return }
 
         let vector = ScrollDirection.physical(
             deltaX: event.scrollingDeltaX,
@@ -662,9 +722,31 @@ final class OverlayController {
         }
 
         if var scroll = scrollSession {
+            let gap = wallClock - scroll.lastActivity
             scroll.lastActivity = wallClock
             scrollSession = scroll
+            // A fresh scroll gesture after a pause confirms (latches) the open
+            // state. The immediate continuation of the opening scroll does not.
+            let closing = vector.pull < -0.5 && abs(vector.pull) >= abs(vector.right) * 1.2
+            if !latched, scroll.grabbed, gap > 0.3, !closing {
+                confirmLatch()
+            }
             processScroll(right: vector.right, pull: vector.pull, timestamp: timestamp, wallClock: wallClock)
+            return
+        }
+
+        // Pending after a mouse release: any new scroll confirms; scrolling up
+        // still closes, and horizontal scroll begins a latched scrub.
+        if pendingConfirmUntil != nil, scrollSession == nil {
+            if vector.pull < -0.5, abs(vector.pull) >= abs(vector.right) * 1.2 {
+                closeLatched()
+                return
+            }
+            guard model.canInteract else { return }
+            confirmLatch()
+            if abs(vector.right) > 0.2 {
+                startLatchedScrollScrub(right: vector.right, timestamp: timestamp, wallClock: wallClock)
+            }
             return
         }
 
@@ -675,26 +757,8 @@ final class OverlayController {
                 closeLatched()
                 return
             }
-            if abs(vector.right) > 0.2, let nowPlaying = music.nowPlaying {
-                var scroll = ScrollSession()
-                scroll.grabbed = true
-                scroll.basePosition = music.estimatedPosition(at: Date())
-                scroll.duration = nowPlaying.duration
-                scroll.wasPlaying = nowPlaying.isPlaying
-                scroll.trackID = nowPlaying.trackID
-                scroll.desiredPosition = scroll.basePosition
-                scroll.angleAtGrab = model.angle
-                scroll.engine.begin(
-                    x: 0,
-                    timestamp: timestamp,
-                    basePosition: scroll.basePosition,
-                    duration: scroll.duration
-                )
-                scroll.lastActivity = wallClock
-                scrollSession = scroll
-                model.phase = .grabbed
-                startTicking()
-                processScroll(right: vector.right, pull: 0, timestamp: timestamp, wallClock: wallClock)
+            if abs(vector.right) > 0.2 {
+                startLatchedScrollScrub(right: vector.right, timestamp: timestamp, wallClock: wallClock)
             }
             return
         }
@@ -771,6 +835,18 @@ final class OverlayController {
             return
         }
 
+        // Grabbed: extra downward travel confirms (latches) the open state.
+        if !latched {
+            if pull > 0.01 {
+                scroll.confirmAccumulated += pull * scrollPullScale
+                if scroll.confirmAccumulated >= layout.confirmDistance {
+                    confirmLatch()
+                }
+            } else if pull < -0.01 {
+                scroll.confirmAccumulated = max(0, scroll.confirmAccumulated - (-pull) * scrollPullScale)
+            }
+        }
+
         // Grabbed: only a deliberately vertical reverse scroll puts the record
         // back. Vertical jitter during a horizontal scrub must not close it.
         if pull > 0.01 {
@@ -787,6 +863,7 @@ final class OverlayController {
         }
 
         if abs(right) > 0.2 {
+            if !latched { confirmLatch() }
             scroll.virtualX += Double(right) * Double(scrollScrubScale)
             let x = scroll.virtualX
 
@@ -838,6 +915,29 @@ final class OverlayController {
         scrollSession = scroll
     }
 
+    private func startLatchedScrollScrub(right: CGFloat, timestamp: TimeInterval, wallClock: TimeInterval) {
+        guard let nowPlaying = music.nowPlaying else { return }
+        var scroll = ScrollSession()
+        scroll.grabbed = true
+        scroll.basePosition = music.estimatedPosition(at: Date())
+        scroll.duration = nowPlaying.duration
+        scroll.wasPlaying = nowPlaying.isPlaying
+        scroll.trackID = nowPlaying.trackID
+        scroll.desiredPosition = scroll.basePosition
+        scroll.angleAtGrab = model.angle
+        scroll.engine.begin(
+            x: 0,
+            timestamp: timestamp,
+            basePosition: scroll.basePosition,
+            duration: scroll.duration
+        )
+        scroll.lastActivity = wallClock
+        scrollSession = scroll
+        model.phase = .grabbed
+        startTicking()
+        processScroll(right: right, pull: 0, timestamp: timestamp, wallClock: wallClock)
+    }
+
     private func finishScrollSession(commit: Bool) {
         guard let scroll = scrollSession else { return }
         scrollSession = nil
@@ -848,6 +948,7 @@ final class OverlayController {
         }
 
         if model.phase.isEngaged {
+            interactionLog.debug("scroll session closed (commit=\(commit, privacy: .public))")
             performHaptic(.alignment)
             beginCollapse()
         }
@@ -939,12 +1040,31 @@ final class OverlayController {
             stepCollapse(dt: dt)
         }
 
-        // A scroll gesture has no mouse-up: inactivity latches the record open.
+        // Pending after a mouse release: one more drag must confirm it within
+        // the window; otherwise the record falls back into the notch.
+        if let deadline = pendingConfirmUntil,
+           !latched,
+           session == nil,
+           scrollSession == nil,
+           model.phase == .grabbed || model.phase == .scrubbing,
+           ProcessInfo.processInfo.systemUptime > deadline
+        {
+            pendingConfirmUntil = nil
+            interactionLog.debug("pending expired -> close")
+            beginCollapse()
+        }
+
+        // Scroll gestures have no mouse-up: inactivity is the release. If the
+        // record was confirmed it stays out; otherwise it falls back in.
         if let scroll = scrollSession,
            model.phase != .releasing,
-           ProcessInfo.processInfo.systemUptime - scroll.lastActivity > scrollIdleTimeout
+           ProcessInfo.processInfo.systemUptime - scroll.lastActivity > confirmWindow
         {
-            latchScrollSession()
+            if latched {
+                latchScrollSession()
+            } else {
+                finishScrollSession(commit: true)
+            }
         }
 
         // If the mouse-up was lost (space switch, app focus, etc.) finish safely.
@@ -997,6 +1117,7 @@ final class OverlayController {
         snapOpenActive = false
         snapOpenVelocity = 0
         latched = false
+        pendingConfirmUntil = nil
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
@@ -1012,6 +1133,8 @@ final class OverlayController {
         if session.latchedInteraction {
             if session.scrubArmed, model.phase == .scrubbing {
                 music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
+                latchRecord()
+            } else if session.moved {
                 latchRecord()
             } else {
                 closeLatched()
