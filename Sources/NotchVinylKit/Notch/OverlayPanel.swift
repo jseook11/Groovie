@@ -66,7 +66,12 @@ final class OverlayContentView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        bounds.contains(point) ? self : nil
+        // The idle panel's top edge sits on the screen's top edge, which is
+        // exactly where the pointer comes to rest when it is pushed all the way
+        // up. `CGRect.contains` is half-open and excludes that line, so a click
+        // made there would fall through to the menu bar. Keep a 1 pt tolerance
+        // so the whole hidden notch strip stays clickable.
+        bounds.insetBy(dx: -1, dy: -1).contains(point) ? self : nil
     }
 
     override func updateTrackingAreas() {
