@@ -49,6 +49,7 @@ struct VinylStageView: View {
                 .position(center)
 
                 hud(center: center)
+                confirmGauge(size: size)
 
                 if layout.hasNotchCap {
                     NotchCapShape()
@@ -60,6 +61,44 @@ struct VinylStageView: View {
             .frame(width: size.width, height: size.height)
             .clipped()
         }
+    }
+
+    /// Semi-transparent "pull further to lock" meter shown below the record while
+    /// it is out but has not been confirmed yet.
+    @ViewBuilder
+    private func confirmGauge(size: CGSize) -> some View {
+        let progress = CGFloat(min(max(model.confirmProgress, 0), 1))
+        let width: CGFloat = 128
+        VStack(spacing: 4) {
+            Text("더 당겨서 고정")
+                .font(.system(size: 8, weight: .medium))
+                .tracking(0.2)
+                .foregroundStyle(.white.opacity(0.40))
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.white.opacity(0.10))
+                Capsule()
+                    .fill(.white.opacity(0.58))
+                    .frame(width: max(0, width * progress))
+            }
+            .frame(width: width, height: 3.5)
+            .overlay(
+                Capsule().strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
+            )
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(
+            Capsule().fill(.black.opacity(0.22))
+        )
+        .opacity(model.showConfirmGauge ? 1 : 0)
+        .animation(.easeOut(duration: 0.18), value: model.showConfirmGauge)
+        .position(
+            x: size.width / 2,
+            y: layout.emergenceInset + layout.recordRadius + 34
+        )
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder

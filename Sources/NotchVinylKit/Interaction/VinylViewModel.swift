@@ -8,6 +8,8 @@ final class VinylViewModel: ObservableObject {
     @Published var exposure: CGFloat = 0
     @Published var angle: Double = 0
     @Published var offsetSeconds: Double = 0
+    @Published var confirmProgress: Double = 0
+    @Published var showConfirmGauge = false
 
     @Published var trackTitle: String = ""
     @Published var trackArtist: String = ""

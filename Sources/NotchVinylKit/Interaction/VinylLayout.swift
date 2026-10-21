@@ -53,7 +53,7 @@ struct VinylLayout {
     let mouseDismissDistance: CGFloat = 30
     /// Extra downward travel beyond the detent that confirms (latches) the open
     /// state. A horizontal scrub also confirms it.
-    let confirmDistance: CGFloat = 30
+    let confirmDistance: CGFloat = 60
 
     let recordRadius: CGFloat = 90
     let labelRadius: CGFloat = 26

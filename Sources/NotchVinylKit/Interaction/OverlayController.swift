@@ -219,6 +219,8 @@ final class OverlayController {
         snapOpenVelocity = 0
         latched = false
         pendingConfirmUntil = nil
+        model.confirmProgress = 0
+        model.showConfirmGauge = false
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
@@ -373,6 +375,8 @@ final class OverlayController {
             model.exposure = exposure
             if pullDistance >= layout.grabDetent {
                 session.grabbed = true
+                model.confirmProgress = 0
+                model.showConfirmGauge = true
                 session.grabExposure = layout.fullExposure
                 session.angleAtGrab = model.angle
                 session.lastPoint = point
@@ -390,10 +394,14 @@ final class OverlayController {
         }
 
         if session.grabbed {
-            // Continuing downward after the detent confirms (latches) the open state.
-            if !latched, pullDistance - layout.grabDetent >= layout.confirmDistance {
+            // Continuing downward after the detent fills the confirm gauge. When
+            // it is full, the open state is confirmed (latched).
+            let extraPull = max(0, pullDistance - layout.grabDetent)
+            model.confirmProgress = min(1, Double(extraPull / layout.confirmDistance))
+            if !latched, extraPull >= layout.confirmDistance {
                 confirmLatch()
             }
+            model.showConfirmGauge = !latched
 
             // Magnet put-back: a deliberate upward lift puts the record away.
             let verticalDelta = point.y - session.lastPoint.y
@@ -562,6 +570,8 @@ final class OverlayController {
         guard !latched else { return }
         latched = true
         pendingConfirmUntil = nil
+        model.confirmProgress = 1
+        model.showConfirmGauge = false
         interactionLog.debug("confirm -> latched")
         performHaptic(.alignment)
     }
@@ -571,6 +581,7 @@ final class OverlayController {
     private func enterPendingConfirm() {
         guard !latched else { return }
         pendingConfirmUntil = ProcessInfo.processInfo.systemUptime + confirmWindow
+        model.showConfirmGauge = true
         interactionLog.debug("pending confirm window opened")
         model.phase = .grabbed
         model.offsetSeconds = 0
@@ -582,6 +593,8 @@ final class OverlayController {
     private func latchRecord() {
         latched = true
         pendingConfirmUntil = nil
+        model.confirmProgress = 0
+        model.showConfirmGauge = false
         interactionLog.debug("record latched open")
         session = nil
         scrollSession = nil
@@ -595,6 +608,8 @@ final class OverlayController {
 
     private func closeLatched() {
         pendingConfirmUntil = nil
+        model.confirmProgress = 0
+        model.showConfirmGauge = false
         interactionLog.debug("close latched")
         latched = false
         session = nil
@@ -659,6 +674,8 @@ final class OverlayController {
         guard model.phase != .releasing else { return }
         latched = false
         pendingConfirmUntil = nil
+        model.confirmProgress = 0
+        model.showConfirmGauge = false
         model.phase = .releasing
         model.offsetSeconds = 0
         snapOpenActive = false
@@ -812,6 +829,8 @@ final class OverlayController {
                         return
                     }
                     scroll.grabbed = true
+                    model.confirmProgress = 0
+                    model.showConfirmGauge = true
                     scroll.grabbedExposure = layout.fullExposure
                     scroll.basePosition = music.estimatedPosition(at: Date())
                     scroll.duration = nowPlaying.duration
@@ -846,6 +865,9 @@ final class OverlayController {
                 scroll.confirmAccumulated = max(0, scroll.confirmAccumulated - (-pull) * scrollPullScale)
             }
         }
+
+        model.confirmProgress = min(1, Double(scroll.confirmAccumulated / layout.confirmDistance))
+        model.showConfirmGauge = !latched
 
         // Grabbed: only a deliberately vertical reverse scroll puts the record
         // back. Vertical jitter during a horizontal scrub must not close it.
@@ -1118,6 +1140,8 @@ final class OverlayController {
         snapOpenVelocity = 0
         latched = false
         pendingConfirmUntil = nil
+        model.confirmProgress = 0
+        model.showConfirmGauge = false
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0

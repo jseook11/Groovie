@@ -19,11 +19,14 @@ Idle → Armed (hover) → Pulling (8 px) → Grabbed (80 px) ⇄ Scrubbing → 
   오른쪽 = 되감기, 왼쪽 = 앞으로 감기. 이동 속도가 빠를수록 같은 거리에서 더 크게 탐색합니다.
 - **Confirm to latch / magnet put-back** — Grab된 레코드는 아직 고정이 아닙니다. 다음 중 하나의
   **confirm 제스처**가 있어야 고정됩니다.
-  - 스냅된 상태에서 **아래로 30px 더 당기기**
+  - 스냅된 상태에서 **아래로 60px 더 당기기**
   - **좌우로 스크럽하기**
   - 놓은 뒤 **1초 안에 다시 끌기**(마우스) / 다시 스크롤하기
 
-  Confirm 후에는 손을 놓아도 나온 채로 고정되고, **클릭 / 위로 끌기 / 위로 스크롤**로 닫습니다.
+  레코드 아래에는 **반투명 confirm 게이지**가 표시됩니다. 추가로 아래로 당기면 게이지가
+  채워지고, 가득 차면 자동으로 confirm됩니다(햅틱). 좌우 스크럽이나 재드래그로 confirm하면
+  게이지는 즉시 사라집니다. Confirm 후에는 손을 놓아도 나온 채로 고정되고,
+  **클릭 / 위로 끌기 / 위로 스크롤**로 닫습니다.
   Confirm 없이 그냥 놓으면 약 1초 동안 대기한 뒤 스프링으로 들어갑니다.
   원래 일시정지 상태였다면 닫은 뒤에도 일시정지합니다.
 - **Two-finger scroll** — 커서가 노치 위에 있을 때 두 손가락 스크롤로도 조작할 수 있습니다.
@@ -83,8 +86,8 @@ Music 읽기 파서, 시간 표시 포맷을 검사합니다.
   탐색은 한 방향으로 약 30px 이상 움직여야 시작됩니다(데드존). 세로로 내리는 동안의
   미세한 수평 흔들림으로는 재생 위치가 바뀌지 않습니다.
 - **위로 스크롤** — 레코드를 노치 안으로 되돌립니다. 되돌린 시점의 위치가 확정됩니다.
-- **Confirm** — 스냅 후 추가로 더 내리거나, 좌우로 스크롤하거나, 1초 안에 다시 스크롤하면 고정됩니다.
-  고정되면 입력이 멈춰도 나온 채로 유지됩니다.
+- **Confirm** — 스냅 후 추가로 더 내리면 아래의 반투명 게이지가 채워지고, 가득 차면 고정됩니다.
+  좌우로 스크롤하거나 1초 안에 다시 스크롤해도 고정됩니다. 고정되면 입력이 멈춰도 유지됩니다.
 - **Confirm 없이 멈추면** — 약 1초 뒤 스프링으로 들어갑니다.
 - 트랙패드의 관성(momentum) 이벤트는 탐색에 사용하지 않습니다.
 
@@ -151,7 +154,7 @@ Scripts/build-app.sh                 SwiftPM 산출물을 .app으로 묶고 ad-h
 - `ScrubEngine.ScrubTuning` — 감도 곡선(`min/maxSensitivity`, `speedAtMaxSensitivity`,
   `sensitivityExponent`), 속도 필터 attack/release, 회전량(`degreesPerPoint`).
 - `VinylLayout` — `grabDistance`(80), `grabDetent`(40 = 중간 자석 지점),
-  `confirmDistance`(30 = 추가 confirm 거리), `mouseDismissDistance`(30),
+  `confirmDistance`(60 = 추가 confirm 거리), `mouseDismissDistance`(30),
   `exposurePerPoint`(1.125), `recordRadius`(90), `playbackDegreesPerSecond`(200 = 33⅓ RPM),
   복귀 스프링 상수.
 - `OverlayController` — 스크롤 감도(`scrollPullScale` 0.55, `scrollScrubScale` 0.9),
@@ -159,6 +162,8 @@ Scripts/build-app.sh                 SwiftPM 산출물을 .app으로 묶고 ad-h
   confirm 대기 시간(`confirmWindow` 1.0초),
   자석 스냅 스프링(`snapOpenStiffness` 320, `snapOpenDamping` 26).
 - 햅틱 — 스크롤 시작(`.levelChange`), 스냅·confirm·위글 취소·닫기(`.alignment`).
+- Confirm 게이지 — 레코드 아래 반투명 캡슐 + 3.5pt 바(`VinylStageView.confirmGauge`),
+  0…1 `confirmProgress`로 채워지고 confirm/닫기 시 페이드아웃.
 - 노치 입력 영역 — 물리 노치 + 좌우/아래 6px 여백(`StageGeometry.idleFrame`).
   레코드가 열려 있는 동안에는 펼쳐진 스테이지 전체가 입력을 받습니다.
 - `WiggleDetector` — 취소 제스처 임계값(`minimumStroke` 8, `window` 1.0초,
