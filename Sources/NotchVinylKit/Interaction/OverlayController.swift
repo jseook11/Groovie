@@ -147,6 +147,15 @@ final class OverlayController {
         syncFromMusic()
     }
 
+    /// Switch the record material and remember the choice for the next launch.
+    func selectSkin(_ id: String) {
+        let skin = VinylSkin.skin(id: id)
+        guard skin.id == id else { return }
+        model.skinID = skin.id
+        VinylSkin.persist(id: skin.id)
+        onStateChange?()
+    }
+
     /// Access for the app delegate's menu state.
     var isPanelVisible: Bool { panel?.isVisible ?? false }
 

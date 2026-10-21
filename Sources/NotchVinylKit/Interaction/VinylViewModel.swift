@@ -19,6 +19,9 @@ final class VinylViewModel: ObservableObject {
     @Published var availability: MusicAvailability = .appNotRunning
     @Published var permissionDenied: Bool = false
     @Published var isEnabled: Bool = true
+    @Published var skinID: String = VinylSkin.launchID
+
+    var skin: VinylSkin { VinylSkin.skin(id: skinID) }
 
     var showStage: Bool { phase.isEngaged }
     var showHoverCue: Bool { phase == .armed && isEnabled }

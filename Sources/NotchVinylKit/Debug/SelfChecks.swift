@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Headless checks for the pure interaction model. Run with `--self-test`.
@@ -214,6 +215,39 @@ public enum SelfChecks {
         expect(TimeOffsetFormatter.string(for: 3.41) == "+3.4s", "positive offset formatting")
         expect(TimeOffsetFormatter.string(for: 0.01) == "0.0s", "zero offset formatting")
         expect(TimeOffsetFormatter.string(for: 63.4) == "+1:03.4", "minute offset formatting")
+
+        // MARK: Skins
+
+        let skinIDs = VinylSkin.all.map(\.id)
+        expect(Set(skinIDs).count == skinIDs.count, "skin ids must be unique")
+        expect(skinIDs.contains(VinylSkin.defaultID), "the default skin must exist")
+        expect(VinylSkin.skin(id: "does-not-exist").id == VinylSkin.defaultID,
+               "unknown skin ids must fall back to the default")
+
+        func luminance(_ color: NSColor) -> CGFloat {
+            guard let rgb = color.usingColorSpace(.sRGB) else { return 0 }
+            return 0.2126 * rgb.redComponent
+                + 0.7152 * rgb.greenComponent
+                + 0.0722 * rgb.blueComponent
+        }
+        func spread(_ color: NSColor) -> CGFloat {
+            guard let rgb = color.usingColorSpace(.sRGB) else { return 0 }
+            return max(rgb.redComponent, rgb.greenComponent, rgb.blueComponent)
+                - min(rgb.redComponent, rgb.greenComponent, rgb.blueComponent)
+        }
+
+        for skin in VinylSkin.all {
+            let centre = luminance(skin.recordCenter)
+            let edge = luminance(skin.recordEdge)
+            expect(centre > edge, "\(skin.id): the record centre must be lighter than its edge")
+            expect(centre > 0.045, "\(skin.id): the record must read against the black notch")
+        }
+
+        let trackSeed = "Miles Davis|Blue in Green"
+        let classicAccent = VinylSkin.classic.labelAccent(for: trackSeed)
+        let monoAccent = VinylSkin.mono.labelAccent(for: trackSeed)
+        expect(spread(monoAccent) < spread(classicAccent) * 0.5,
+               "the mono skin must desaturate the track accent")
 
         // MARK: Report
 

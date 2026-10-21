@@ -62,7 +62,7 @@ struct VinylLayout {
     var confirmScrubDeadzone: CGFloat { 90 }
 
     let recordRadius: CGFloat = 90
-    let labelRadius: CGFloat = 26
+    let labelRadius: CGFloat = 30
 
     /// 33⅓ RPM.
     let playbackDegreesPerSecond: Double = 200

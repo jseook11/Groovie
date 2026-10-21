@@ -152,6 +152,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         demoItem.isEnabled = hasNotch && enabled
         menu.addItem(demoItem)
 
+        let skinItem = NSMenuItem(title: "레코드 스킨", action: nil, keyEquivalent: "")
+        let skinMenu = NSMenu()
+        skinMenu.autoenablesItems = false
+        for skin in VinylSkin.all {
+            let item = NSMenuItem(title: skin.name, action: #selector(selectSkin(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = skin.id
+            item.isEnabled = hasNotch && enabled && controller != nil
+            item.state = controller?.model.skinID == skin.id ? .on : .off
+            skinMenu.addItem(item)
+        }
+        skinItem.submenu = skinMenu
+        skinItem.isEnabled = hasNotch && enabled
+        menu.addItem(skinItem)
+
         menu.addItem(.separator())
 
         let retryItem = NSMenuItem(title: "Music 연결 다시 시도", action: #selector(retryMusic), keyEquivalent: "")
@@ -212,6 +227,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func runDemo() {
         controller?.runDemo()
+    }
+
+    @objc private func selectSkin(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        controller?.selectSkin(id)
+        rebuildMenu()
     }
 
     @objc private func openMusic() {

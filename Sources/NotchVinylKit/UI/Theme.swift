@@ -2,8 +2,6 @@ import AppKit
 import SwiftUI
 
 enum VinylTheme {
-    static let recordBase = Color(red: 0.038, green: 0.038, blue: 0.043)
-    static let recordBaseNS = NSColor(srgbRed: 0.038, green: 0.038, blue: 0.043, alpha: 1)
     static let hardwareBlack = Color.black
 
     static let accentColors: [NSColor] = [

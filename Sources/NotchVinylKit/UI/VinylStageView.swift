@@ -34,16 +34,17 @@ struct VinylStageView: View {
 
             ZStack(alignment: .topLeading) {
                 // The record is rendered as a full circle. The hardware notch (or
-                // the screen's top edge) hides its upper half; near the notch's
-                // rounded bottom corners the disc itself fills the gap, so the
-                // housing and the record read as one continuous black shape.
+                // the screen's top edge) hides its upper half. The housing stays
+                // matte black while the disc keeps a separate glossy tone, so the
+                // two materials read as nested objects rather than one silhouette.
                 VinylDiscView(
                     radius: layout.recordRadius,
                     labelRadius: layout.labelRadius,
                     angle: model.angle,
                     title: model.trackTitle,
                     artist: model.trackArtist,
-                    artwork: model.artwork
+                    artwork: model.artwork,
+                    skin: model.skin
                 )
                 .shadow(color: .black.opacity(0.45), radius: 10, x: 0, y: 5)
                 .position(center)
@@ -56,6 +57,36 @@ struct VinylStageView: View {
                         .fill(VinylTheme.hardwareBlack)
                         .frame(width: layout.notchWidth, height: layout.capHeight)
                         .position(x: size.width / 2, y: layout.capHeight / 2)
+
+                    // A short contact shadow keeps the glossy record from merging
+                    // with the matte cap. It must stay subtle; the record is still
+                    // meant to emerge from the housing.
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black.opacity(0.32), location: 0),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(width: layout.notchWidth * 0.94, height: 9)
+                    .blur(radius: 2)
+                    .position(x: size.width / 2, y: layout.capHeight + 4.5)
+                    .allowsHitTesting(false)
+
+                    // The hardware edge: a hairline that fades at both ends.
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .white.opacity(0.11), location: 0.5),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: max(0, layout.notchWidth - 30), height: 1)
+                    .position(x: size.width / 2, y: layout.capHeight - 0.5)
+                    .allowsHitTesting(false)
                 }
             }
             .frame(width: size.width, height: size.height)
@@ -108,20 +139,20 @@ struct VinylStageView: View {
                 Text(titleLine)
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.15)
-                    .foregroundStyle(.white.opacity(0.34))
+                    .foregroundStyle(.white.opacity(0.46))
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 if model.showOffset {
                     Text(TimeOffsetFormatter.string(for: model.offsetSeconds))
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(.white.opacity(0.92))
                         .contentTransition(.numericText())
                         .transition(.opacity)
                 }
             }
             .frame(width: layout.recordRadius * 1.55)
-            .shadow(color: .black.opacity(0.65), radius: 2, x: 0, y: 1)
+            .shadow(color: .black.opacity(0.72), radius: 2.5, x: 0, y: 1)
             .position(x: center.x, y: center.y + layout.recordRadius * 0.80)
             .animation(.easeOut(duration: 0.14), value: model.showOffset)
         }

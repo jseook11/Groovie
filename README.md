@@ -12,9 +12,15 @@ Idle → Armed (hover) → Pulling (8 px) → Grabbed (80 px) ⇄ Scrubbing → 
 
 - **Pull to Grab (magnet)** — 노치에서 시작한 수직 드래그만 Pull로 인식합니다. 8px에서 당김이 시작되고,
   40px(중간)을 넘는 순간 자석처럼 **레코드가 완전히 튀어나오며 Grab**됩니다. 그 전에 놓으면
-  스프링으로 쏙 들어갑니다. 레코드는 **풀 원으로 렌더링**되고 노치가 상단을 덮으며,
-  노치의 둥근 하단 모서리는 레코드가 채워 하나의 검은 형태로 이어집니다.
-  레코드의 중심은 노치 끝(경계선)에 정확히 놓입니다.
+  스프링으로 쏙 들어갑니다. 레코드는 **풀 원으로 렌더링**되고 노치가 상단을 덮습니다.
+  노치 캡은 무광 검정으로 두고, 레코드에는 살짝 밝은 차콜 바탕·홈·고정 반사광·림라이트를 넣어
+  두 재질이 하나의 검은 덩어리로 뭉개지지 않게 했습니다. 캡 하단에는 은은한 0.6px 엣지 라인과
+  짧은 접촉 그림자가 있습니다. 레코드의 중심은 노치 끝(경계선)에 정확히 놓입니다.
+- **레코드 스킨** — 클래식 블랙(기본), 러스트, 딥 틸, 스모크, 모노 5종.
+  상태 메뉴의 **레코드 스킨**에서 고르면 즉시 반영되고 다음 실행에도 유지됩니다.
+  스킨은 바이닐 바탕·홈·반사광만 바꾸며, 레이블은 항상 트랙을 따릅니다:
+  앨범 아트가 있으면 아트, 없으면 트랙 정보에서 뽑은 액센트 색과 인쇄 디테일.
+  모노 스킨만 트랙 색을 25% 채도로 낮춰 무채색에 가깝게 유지합니다.
 - **Drag to Rotate / Velocity to Seek** — 잡은 뒤 좌우 이동으로 탐색합니다.
   오른쪽 = 되감기, 왼쪽 = 앞으로 감기. 이동 속도가 빠를수록 같은 거리에서 더 크게 탐색합니다.
 - **Confirm to latch / magnet put-back** — Grab된 레코드는 아직 고정이 아닙니다. 다음 중 하나의
@@ -128,11 +134,14 @@ Notch Vinyl은 AppleScript로 Music을 제어합니다. 첫 실행 시
 open build/NotchVinyl.app --args --fake-music
 open build/NotchVinyl.app --args --fake-music --demo
 open build/NotchVinyl.app --args --fake-music --simulate-no-notch
+open build/NotchVinyl.app --args --fake-music --demo --skin=rust
 ```
 
 - `--fake-music` — Music 없이 가상 트랙으로 실제 마우스 드래그를 테스트합니다.
 - `--demo` — 당기기 → 되감기 → 앞으로 감기 → 놓기 시퀀스를 자동 재생합니다.
 - `--simulate-no-notch` — 노치가 있는 Mac에서 노치 없는 레이아웃을 확인합니다.
+- `--skin=<id>` — `classic`, `rust`, `teal`, `smoke`, `mono` 중 하나로 이번 실행의 스킨을
+  고정합니다. 저장된 선택은 바꾸지 않습니다.
 - `--self-test` — 헤드리스 검사를 실행하고 종료합니다.
 
 ## 구조
@@ -148,6 +157,7 @@ Sources/NotchVinylKit/
   Interaction/VinylViewModel.swift   화면에 게시되는 상태
   Music/AppleMusicBridge.swift       AppleScript 실행, seek 병합, 아트워크 읽기
   Music/AppleMusicService.swift      폴링, 상태/가용성, 아트워크 캐시
+  UI/VinylSkin.swift                 레코드 스킨 팔레트, 저장/복원, 트랙 색 처리
   UI/                                레코드 텍스처, SwiftUI 스테이지, HUD
   Debug/                             데모 뮤직, 자기 검사
 Resources/Info.plist                 LSUIElement, 자동화 사용 설명
@@ -177,6 +187,11 @@ Scripts/build-app.sh                 SwiftPM 산출물을 .app으로 묶고 ad-h
   레코드가 열려 있는 동안에는 펼쳐진 스테이지 전체가 입력을 받습니다.
 - `WiggleDetector` — 취소 제스처 임계값(`minimumStroke` 8, `window` 1.0초,
   `requiredReversals` 4).
+- `VinylSkin` — 5종 바이닐 팔레트(`recordCenter`, `recordEdge`, `grooveLight`,
+  `sheen`, `sheenStrength`, `accentSaturation`). 기본값은 `classic`,
+  `UserDefaults` 키 `notchVinyl.skinID`.
+- `RecordTexture` — 홈 밀도(96링), 밴드·런아웃·레이블 인쇄. `VinylDiscView` — 회전하지 않는
+  셰인·스펙큘러·림 강도. `VinylLayout.labelRadius`는 30(레코드 지름의 약 1/3).
 - `VinylLayout.recordCenterY` — `emergenceInset + exposure − recordRadius`.
   Grab 시 `exposure == recordRadius`가 되어 중심이 정확히 경계선에 놓입니다.
 
