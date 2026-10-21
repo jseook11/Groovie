@@ -1051,7 +1051,9 @@ final class OverlayController {
     }
 
     private func settleHover() {
-        let inside = geometry.idleFrame.contains(NSEvent.mouseLocation)
+        // Match the hit test's 1 pt tolerance: pushing the pointer to the top of
+        // the screen parks it exactly on the idle frame's top edge.
+        let inside = geometry.idleFrame.insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation)
         if inside, isEnabled, model.canInteract {
             model.phase = .armed
             NSCursor.openHand.set()
