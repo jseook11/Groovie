@@ -271,9 +271,8 @@ final class OverlayController {
         let interactive = music.availability.isInteractive && (nowPlaying?.isValid ?? false)
         model.canInteract = interactive && isEnabled
 
-        if !model.canInteract, model.phase == .armed {
-            model.phase = .idle
-            NSCursor.arrow.set()
+        if model.phase == .armed {
+            updateHoverCursor()
         }
 
         if model.phase.isEngaged {
@@ -297,7 +296,7 @@ final class OverlayController {
     private func handleHover(_ inside: Bool) {
         hoverInside = inside
         guard session == nil, model.phase == .idle || model.phase == .armed else { return }
-        guard isEnabled, model.canInteract else {
+        guard isEnabled else {
             if model.phase == .armed {
                 model.phase = .idle
             }
@@ -305,10 +304,22 @@ final class OverlayController {
             return
         }
         if inside {
+            // The cue marks where the notch lives, so it must not depend on the
+            // player being ready; without it the strip is invisible on a display
+            // with no hardware notch.
             model.phase = .armed
-            NSCursor.openHand.set()
+            updateHoverCursor()
         } else if model.phase == .armed {
             model.phase = .idle
+            NSCursor.arrow.set()
+        }
+    }
+
+    /// The open hand promises a grab, so only show it when a grab can succeed.
+    private func updateHoverCursor() {
+        if model.canInteract {
+            NSCursor.openHand.set()
+        } else {
             NSCursor.arrow.set()
         }
     }
@@ -1090,9 +1101,9 @@ final class OverlayController {
         // Match the hit test's 1 pt tolerance: pushing the pointer to the top of
         // the screen parks it exactly on the idle frame's top edge.
         let inside = geometry.idleFrame.insetBy(dx: -1, dy: -1).contains(NSEvent.mouseLocation)
-        if inside, isEnabled, model.canInteract {
+        if inside, isEnabled {
             model.phase = .armed
-            NSCursor.openHand.set()
+            updateHoverCursor()
         } else {
             model.phase = .idle
             NSCursor.arrow.set()
