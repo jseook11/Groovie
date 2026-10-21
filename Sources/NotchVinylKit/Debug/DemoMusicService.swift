@@ -14,9 +14,13 @@ final class DemoMusicService: MusicProviding {
     private let duration: Double = 337
 
     init() {
+        // `--long-title` exercises the fixed-width menu header's marquee.
+        let title = ProcessInfo.processInfo.arguments.contains("--long-title")
+            ? "Blue in Green (Remastered 2026 Deluxe Edition)"
+            : "Blue in Green"
         nowPlaying = NowPlaying(
             trackID: "demo-kind-of-blue",
-            title: "Blue in Green",
+            title: title,
             artist: "Miles Davis",
             album: "Kind of Blue",
             duration: duration,

@@ -159,6 +159,15 @@ final class OverlayController {
     /// Access for the app delegate's menu state.
     var isPanelVisible: Bool { panel?.isVisible ?? false }
 
+    /// Fresh playback position and duration for the status menu header. Uses
+    /// the currently active provider, including the demo provider.
+    func playbackSnapshot() -> (position: Double, duration: Double) {
+        (
+            position: music.estimatedPosition(at: Date()),
+            duration: music.nowPlaying?.duration ?? 0
+        )
+    }
+
     // MARK: - Panel
 
     private func installPanel() {

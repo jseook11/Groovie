@@ -1,13 +1,16 @@
 import AppKit
 
 @MainActor
-public final class AppDelegate: NSObject, NSApplicationDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private static var retained: AppDelegate?
 
     private var controller: OverlayController?
     private var music: MusicProviding?
     private var statusItem: NSStatusItem?
     private var menu: NSMenu?
+    private var menuHeader: MenuHeaderView?
+    private var isMenuOpen = false
+    private var needsMenuRebuild = false
     private var enabled = true
     private var hasNotch = false
     private var permissionAlertShown = false
@@ -109,35 +112,46 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Status item
 
     private func setUpStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // The brand mark is 20 x 11 pt; a fixed 24 pt slot keeps the menu bar
+        // from shifting as the mark is tinted or the menu state changes.
+        let item = NSStatusBar.system.statusItem(withLength: 24)
         if let button = item.button {
-            let image = NSImage(systemSymbolName: "opticaldisc", accessibilityDescription: "Notch Vinyl")
-                ?? NSImage(systemSymbolName: "record.circle", accessibilityDescription: "Notch Vinyl")
-            image?.isTemplate = true
-            button.image = image
+            button.image = BrandMark.menuBar
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleProportionallyDown
             button.toolTip = "Notch Vinyl"
+            button.setAccessibilityLabel("Notch Vinyl")
         }
         statusItem = item
         rebuildMenu()
     }
 
     private func rebuildMenu() {
+        // Replacing the status item's menu while it is open can detach the
+        // header view. Defer structural changes until the menu closes; the
+        // header itself is updated in place.
+        if isMenuOpen {
+            updateMenuHeader()
+            needsMenuRebuild = true
+            return
+        }
+        buildMenu()
+    }
+
+    private func buildMenu() {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        menu.delegate = self
 
-        let titleItem = NSMenuItem(title: "Notch Vinyl", action: nil, keyEquivalent: "")
-        titleItem.isEnabled = false
-        menu.addItem(titleItem)
-
-        if !hasNotch {
-            let missing = NSMenuItem(title: "사용 가능한 디스플레이를 찾을 수 없습니다", action: nil, keyEquivalent: "")
-            missing.isEnabled = false
-            menu.addItem(missing)
-        } else {
-            let status = NSMenuItem(title: musicStatusText, action: nil, keyEquivalent: "")
-            status.isEnabled = false
-            menu.addItem(status)
-        }
+        // Each menu gets its own header view. Reusing one view across menu
+        // instances lets AppKit reparent it and can leave the visible menu's
+        // item with a detached view.
+        let header = MenuHeaderView()
+        let headerItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        headerItem.view = header
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
+        menuHeader = header
 
         menu.addItem(.separator())
 
@@ -194,24 +208,64 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         self.menu = menu
         statusItem?.menu = menu
+        updateMenuHeader()
     }
 
-    private var musicStatusText: String {
-        guard let controller else { return "오버레이 비활성" }
+    /// The header owns the song title, artist, and progress. Playback state is
+    /// deliberately not repeated as text; only actionable availability problems
+    /// replace the track rows.
+    private func updateMenuHeader() {
+        guard let menuHeader else { return }
+
+        guard hasNotch else {
+            menuHeader.setStatus("사용 가능한 디스플레이를 찾을 수 없습니다")
+            return
+        }
+        guard let controller else {
+            menuHeader.setStatus("오버레이 비활성")
+            return
+        }
         let model = controller.model
-        guard model.isEnabled else { return "비활성화됨" }
+        guard model.isEnabled else {
+            menuHeader.setStatus("비활성화됨")
+            return
+        }
+
         switch model.availability {
         case .appNotRunning:
-            return "Music이 실행 중이 아닙니다"
+            menuHeader.setStatus("Music이 실행 중이 아닙니다")
         case .noTrack:
-            return "Music에 재생할 트랙이 없습니다"
-        case .paused:
-            return "Music 일시정지 · 스크럽 가능"
-        case .playing:
-            let title = model.trackTitle
-            return title.isEmpty ? "Music 재생 중" : "Music 재생 중 · \(title)"
+            menuHeader.setStatus("재생할 트랙이 없습니다")
         case .permissionDenied:
-            return "자동화 권한이 필요합니다"
+            menuHeader.setStatus("자동화 권한이 필요합니다", warning: true)
+        case .playing, .paused:
+            let snapshot = controller.playbackSnapshot()
+            menuHeader.setContent(
+                title: model.trackTitle,
+                artist: model.trackArtist,
+                position: snapshot.position,
+                duration: snapshot.duration,
+                isPlaying: model.isPlaying
+            )
+        }
+    }
+
+    // MARK: - NSMenuDelegate
+
+    public func menuWillOpen(_ menu: NSMenu) {
+        isMenuOpen = true
+        // Refresh the position right before the menu appears so the progress
+        // line starts from the current playback time.
+        updateMenuHeader()
+        menuHeader?.setActive(true)
+    }
+
+    public func menuDidClose(_ menu: NSMenu) {
+        isMenuOpen = false
+        menuHeader?.setActive(false)
+        if needsMenuRebuild {
+            needsMenuRebuild = false
+            buildMenu()
         }
     }
 

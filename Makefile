@@ -1,4 +1,4 @@
-.PHONY: build app run test demo clean
+.PHONY: build app run test demo icon clean
 
 build:
 	swift build
@@ -15,6 +15,9 @@ test:
 
 demo: app
 	./Scripts/capture-demo.sh
+
+icon:
+	./Scripts/make-app-icon.sh
 
 clean:
 	rm -rf .build build

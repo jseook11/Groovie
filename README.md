@@ -21,6 +21,12 @@ Idle → Armed (hover) → Pulling (8 px) → Grabbed (80 px) ⇄ Scrubbing → 
   스킨은 바이닐 바탕·홈·반사광만 바꾸며, 레이블은 항상 트랙을 따릅니다:
   앨범 아트가 있으면 아트, 없으면 트랙 정보에서 뽑은 액센트 색과 인쇄 디테일.
   모노 스킨만 트랙 색을 25% 채도로 낮춰 무채색에 가깝게 유지합니다.
+- **로고와 상태 메뉴 헤더** — 메뉴 바 아이콘은 노치+반쯤 나온 레코드 마크를
+  코드로 그린 단색 템플릿입니다. 상태 메뉴 상단은 **252pt 고정 폭** 헤더로,
+  왼쪽 로고·곡 제목·아티스트·얇은 진행 바를 보여줍니다. 제목이 폭을 넘으면
+  0.7초 뒤부터 20pt/s로 흐르는 마퀴가 되고, 짧으면 정지합니다. 재생/일시정지
+  문구는 넣지 않으며, Music 미실행·트랙 없음·권한 필요 같은 **행동이 필요한
+  상태만** 헤더에 표시합니다. 앱 아이콘은 `Resources/AppIcon.icns`로 패키징됩니다.
 - **Drag to Rotate / Velocity to Seek** — 잡은 뒤 좌우 이동으로 탐색합니다.
   오른쪽 = 되감기, 왼쪽 = 앞으로 감기. 이동 속도가 빠를수록 같은 거리에서 더 크게 탐색합니다.
 - **Confirm to latch / magnet put-back** — Grab된 레코드는 아직 고정이 아닙니다. 다음 중 하나의
@@ -64,6 +70,7 @@ make app      # build/NotchVinyl.app 생성 (release)
 make run      # 빌드 후 실행
 make test     # 헤드리스 상호작용 모델 검사
 make demo     # 데모를 실행하고 화면을 캡처 (build/demo.png)
+make icon     # 앱 아이콘 시안에서 Resources/AppIcon.icns 재생성
 ```
 
 `make test`는 `--self-test` 모드로 스크럽 감도 곡선, 방향, 경계 클램프, 레이아웃,
@@ -122,7 +129,8 @@ Notch Vinyl은 AppleScript로 Music을 제어합니다. 첫 실행 시
 
 - 거부한 경우: 시스템 설정 → 개인정보 보호 및 보안 → 자동화 → Notch Vinyl → Music을 켜거나,
   상태 메뉴의 “Music 연결 다시 시도”를 사용하세요.
-- 상태 메뉴에 현재 연결 상태(재생 중/일시정지/트랙 없음/실행 중 아님/권한 필요)가 표시됩니다.
+- 상태 메뉴 상단에 곡 제목·아티스트·진행 바가 표시됩니다. 연결 문제가 있으면
+  그 자리에 Music 미실행/트랙 없음/권한 필요 문구가 대신 나옵니다.
 - 앱은 로컬에서 ad-hoc 서명됩니다. 다시 빌드하면 코드 서명이 바뀌어
   macOS가 자동화 권한을 다시 물을 수 있습니다. 개발 중에는 허용을 다시 눌러주세요.
 
@@ -142,6 +150,7 @@ open build/NotchVinyl.app --args --fake-music --demo --skin=rust
 - `--simulate-no-notch` — 노치가 있는 Mac에서 노치 없는 레이아웃을 확인합니다.
 - `--skin=<id>` — `classic`, `rust`, `teal`, `smoke`, `mono` 중 하나로 이번 실행의 스킨을
   고정합니다. 저장된 선택은 바꾸지 않습니다.
+- `--long-title` — 가상 트랙 제목을 길게 만들어 상태 메뉴 헤더의 마퀴를 확인합니다.
 - `--self-test` — 헤드리스 검사를 실행하고 종료합니다.
 
 ## 구조
@@ -158,10 +167,15 @@ Sources/NotchVinylKit/
   Music/AppleMusicBridge.swift       AppleScript 실행, seek 병합, 아트워크 읽기
   Music/AppleMusicService.swift      폴링, 상태/가용성, 아트워크 캐시
   UI/VinylSkin.swift                 레코드 스킨 팔레트, 저장/복원, 트랙 색 처리
+  UI/BrandMark.swift                 메뉴 바용 노치+레코드 템플릿 마크
+  UI/MenuHeaderView.swift            고정 폭 메뉴 헤더, 마퀴·진행 바·예외 상태
   UI/                                레코드 텍스처, SwiftUI 스테이지, HUD
   Debug/                             데모 뮤직, 자기 검사
-Resources/Info.plist                 LSUIElement, 자동화 사용 설명
+Resources/Info.plist                 LSUIElement, 자동화 사용 설명, 앱 아이콘
+Resources/AppIcon.icns               빌드에 포함되는 macOS 앱 아이콘
+docs/design/app-icon-cream-v3.png    앱 아이콘 마스터 시안
 Scripts/build-app.sh                 SwiftPM 산출물을 .app으로 묶고 ad-hoc 서명
+Scripts/make-app-icon.sh             슈퍼타원 마스크를 적용해 .icns 생성
 ```
 
 ## 튜닝 지점
@@ -194,6 +208,13 @@ Scripts/build-app.sh                 SwiftPM 산출물을 .app으로 묶고 ad-h
   셰인·스펙큘러·림 강도. `VinylLayout.labelRadius`는 30(레코드 지름의 약 1/3).
 - `VinylLayout.recordCenterY` — `emergenceInset + exposure − recordRadius`.
   Grab 시 `exposure == recordRadius`가 되어 중심이 정확히 경계선에 놓입니다.
+- `MenuHeaderView` — 고정 폭 252pt, 높이 56pt, 제목 텍스트 폭 188pt.
+  마퀴 속도 20pt/s, 시작 대기 0.7초, 반복 간격 28pt. 진행 바는 2pt,
+  메뉴가 열려 있는 동안 1초 간격으로 로컬 보간합니다.
+- `BrandMark` — 20×11pt 광학 박스. 레코드 지름 `0.85 × 11 / 0.72`,
+  노치 `1.35D × 0.22D`, 스핀들 구멍은 최소 1.1pt로 광학 보정.
+- 앱 아이콘 — `docs/design/app-icon-cream-v3.png` → 슈퍼타원 마스크 →
+  `Resources/AppIcon.icns`. 32px 이하는 마크를 크롭·확대한 파생본을 씁니다.
 
 ## 알려진 제한
 

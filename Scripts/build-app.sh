@@ -14,6 +14,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN_DIR/NotchVinyl" "$APP/Contents/MacOS/NotchVinyl"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
+    cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+fi
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # Ad-hoc signature: stable enough for local use and Automation permission prompts.

@@ -8,6 +8,8 @@
     <string>Notch Vinyl</string>
     <key>CFBundleExecutable</key>
     <string>NotchVinyl</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.groovie.app</string>
     <key>CFBundleInfoDictionaryVersion</key>
