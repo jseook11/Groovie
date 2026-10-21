@@ -150,6 +150,11 @@ public enum SelfChecks {
         expect(meter.accelerationFactor(forSpeed: 200) < 1.2, "slow pulls stay near 1x")
         expect(meter.accelerationFactor(forSpeed: 1800) > 3.0, "fast pulls approach 3.2x")
 
+        var prefilled = ConfirmAccumulator()
+        prefilled.begin(extra: 120, timestamp: 0, distance: 240)
+        expect(prefilled.progress == 0,
+               "the confirm gauge must start empty at the snap, not from the opening pull")
+
         // MARK: Layout
 
         let layout = VinylLayout(notchWidth: 179, capHeight: 32, emergenceInset: 32)
@@ -173,6 +178,11 @@ public enum SelfChecks {
                "the magnetic detent must sit around halfway")
         expect(layout.recordCenterY(exposure: 0) < layout.recordCenterY(exposure: layout.fullExposure),
                "the record must move down as it is pulled out")
+        expect(layout.confirmDistance == 240, "the pointer confirm distance should stay generous")
+        expect(layout.scrollConfirmDistance == layout.confirmDistance * 2,
+               "scroll confirm should require twice the pointer travel")
+        expect(layout.confirmScrubDeadzone == 90,
+               "the confirm phase should use a 3x wider horizontal dead-zone")
 
         let flat = VinylLayout(notchWidth: 179, capHeight: 0, emergenceInset: 0)
         expect(approx(flat.recordCenterY(exposure: flat.fullExposure), 0),

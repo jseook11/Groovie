@@ -23,7 +23,7 @@ struct ConfirmAccumulator {
 
     mutating func begin(extra: CGFloat, timestamp: TimeInterval, distance: CGFloat) {
         self.distance = max(1, distance)
-        accumulated = max(0, extra)
+        accumulated = 0
         speed = 0
         lastExtra = extra
         lastTimestamp = timestamp

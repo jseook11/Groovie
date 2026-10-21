@@ -52,8 +52,14 @@ struct VinylLayout {
     /// While the record is held, moving the pointer this far back up snaps it in.
     let mouseDismissDistance: CGFloat = 30
     /// Extra downward travel beyond the detent that confirms (latches) the open
-    /// state. A horizontal scrub also confirms it.
+    /// state. Velocity assistance makes a fast pull fill it sooner.
     let confirmDistance: CGFloat = 240
+    /// Scroll deltas cover more physical travel than pointer deltas; the scroll
+    /// confirm meter is therefore twice as long.
+    var scrollConfirmDistance: CGFloat { confirmDistance * 2 }
+    /// While confirming, horizontal movement needs 3x the usual dead-zone so
+    /// vertical pulling never accidentally scrubs.
+    var confirmScrubDeadzone: CGFloat { 90 }
 
     let recordRadius: CGFloat = 90
     let labelRadius: CGFloat = 26

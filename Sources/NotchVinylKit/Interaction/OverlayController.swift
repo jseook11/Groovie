@@ -27,6 +27,8 @@ final class OverlayController {
     private var latched = false
     private var pendingConfirmUntil: TimeInterval?
     private let confirmWindow: TimeInterval = 1.0
+    private let scrollConfirmWindow: TimeInterval = 1.4
+    private let scrollReconfirmGap: TimeInterval = 0.8
     private let snapOpenStiffness: CGFloat = 320
     private let snapOpenDamping: CGFloat = 26
 
@@ -377,6 +379,7 @@ final class OverlayController {
             model.exposure = exposure
             if pullDistance >= layout.grabDetent {
                 session.grabbed = true
+                session.scrubArmed = false
                 let extraAtGrab = max(0, pullDistance - layout.grabDetent)
                 session.confirm.begin(
                     extra: extraAtGrab,
@@ -424,6 +427,23 @@ final class OverlayController {
                 return
             }
 
+            if !session.scrubArmed {
+                let deadzone = latched ? CGFloat(4) : layout.confirmScrubDeadzone
+                guard abs(point.x - session.start.x) >= deadzone else {
+                    session.lastPoint = point
+                    self.session = session
+                    return
+                }
+                session.scrubArmed = true
+                session.angleAtGrab = model.angle
+                session.engine.begin(
+                    x: point.x,
+                    timestamp: timestamp,
+                    basePosition: session.basePosition,
+                    duration: session.duration
+                )
+            }
+
             let result = session.engine.update(x: point.x, timestamp: timestamp)
             session.desiredPosition = result.position
             model.angle = session.angleAtGrab + result.angleDelta
@@ -431,7 +451,6 @@ final class OverlayController {
 
             if model.phase == .grabbed, abs(result.angleDelta) > 0.01 {
                 model.phase = .scrubbing
-                if !latched { confirmLatch() }
             }
 
             if model.phase == .scrubbing {
@@ -754,7 +773,9 @@ final class OverlayController {
             // A fresh scroll gesture after a pause confirms (latches) the open
             // state. The immediate continuation of the opening scroll does not.
             let closing = vector.pull < -0.5 && abs(vector.pull) >= abs(vector.right) * 1.2
-            if !latched, scroll.grabbed, gap > 0.3, !closing {
+            if !latched, scroll.grabbed, gap > scrollReconfirmGap,
+               vector.pull > 0.5, !closing
+            {
                 confirmLatch()
             }
             processScroll(right: vector.right, pull: vector.pull, timestamp: timestamp, wallClock: wallClock)
@@ -842,7 +863,7 @@ final class OverlayController {
                     scroll.confirm.begin(
                         extra: 0,
                         timestamp: timestamp,
-                        distance: layout.confirmDistance
+                        distance: layout.scrollConfirmDistance
                     )
                     model.confirmProgress = 0
                     model.showConfirmGauge = true
@@ -900,14 +921,15 @@ final class OverlayController {
         }
 
         if abs(right) > 0.2 {
-            if !latched { confirmLatch() }
             scroll.virtualX += Double(right) * Double(scrollScrubScale)
             let x = scroll.virtualX
 
-            // Start scrubbing only after a deliberate horizontal movement. The
-            // pre-threshold travel is discarded so the seek never jumps.
+            // Start scrubbing only after a deliberate horizontal movement. While
+            // confirming, the dead-zone is 3x wider so a vertical pull cannot
+            // accidentally scrub. Horizontal movement never confirms on its own.
             if !scroll.scrubArmed {
-                if abs(x) >= Double(scrollScrubThreshold) {
+                let deadzone = latched ? scrollScrubThreshold : layout.confirmScrubDeadzone
+                if abs(x) >= Double(deadzone) {
                     scroll.scrubArmed = true
                     scroll.virtualX = 0
                     scroll.angleAtGrab = model.angle
@@ -1095,7 +1117,7 @@ final class OverlayController {
         // record was confirmed it stays out; otherwise it falls back in.
         if let scroll = scrollSession,
            model.phase != .releasing,
-           ProcessInfo.processInfo.systemUptime - scroll.lastActivity > confirmWindow
+           ProcessInfo.processInfo.systemUptime - scroll.lastActivity > scrollConfirmWindow
         {
             if latched {
                 latchScrollSession()
