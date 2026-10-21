@@ -40,6 +40,10 @@ final class OverlayController {
     /// small sideways jitter produced while scrolling down to open the record.
     private let scrollScrubThreshold: CGFloat = 30
     private let scrollCloseDistance: CGFloat = 40
+    /// A final seek within this many seconds of the last live seek is skipped:
+    /// the player is already there and re-issuing it would rewind after the
+    /// release. Matches the live-seek granularity.
+    private nonisolated static let seekCommitEpsilon: Double = 0.012
 
     private var isEnabled = true
     private var hoverInside = false
@@ -73,6 +77,15 @@ final class OverlayController {
         var scrubArmed = false
         var moved = false
         var confirm = ConfirmAccumulator()
+
+        /// Position to commit on release, or nil when the last live seek
+        /// already landed there and only the play/pause policy is left.
+        var finishSeekPosition: Double? {
+            guard lastSeekPosition >= 0 else { return desiredPosition }
+            return abs(desiredPosition - lastSeekPosition) > OverlayController.seekCommitEpsilon
+                ? desiredPosition
+                : nil
+        }
     }
 
     private struct ScrollSession {
@@ -96,6 +109,16 @@ final class OverlayController {
         var confirmTravel: CGFloat = 0
         var confirm = ConfirmAccumulator()
         var wiggle = WiggleDetector()
+
+        /// Position to commit when the gesture ends, or nil when the last live
+        /// seek already landed there. The scroll session outlives the gesture
+        /// for the confirm/collapse policy, but the seek must not wait for it.
+        var finishSeekPosition: Double? {
+            guard lastSeekPosition >= 0 else { return desiredPosition }
+            return abs(desiredPosition - lastSeekPosition) > OverlayController.seekCommitEpsilon
+                ? desiredPosition
+                : nil
+        }
     }
 
     init(geometry: StageGeometry, music: MusicProviding) {
@@ -558,7 +581,7 @@ final class OverlayController {
         }
         if session.dismissAccumulated >= layout.mouseDismissDistance {
             if session.scrubArmed, model.phase == .scrubbing {
-                music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
+                music.finishScrub(position: session.finishSeekPosition, wasPlaying: session.wasPlaying)
             }
             closeLatched()
             return
@@ -612,7 +635,7 @@ final class OverlayController {
         if let scroll = scrollSession {
             scrollSession = nil
             if scroll.didScrub {
-                music.finishScrub(position: scroll.desiredPosition, wasPlaying: scroll.wasPlaying)
+                music.finishScrub(position: scroll.finishSeekPosition, wasPlaying: scroll.wasPlaying)
             }
         }
         var session = Session(start: point, lastPoint: point, lastTimestamp: timestamp)
@@ -697,7 +720,7 @@ final class OverlayController {
             self.session = nil
             if session.scrubArmed {
                 if model.phase == .scrubbing {
-                    music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
+                    music.finishScrub(position: session.finishSeekPosition, wasPlaying: session.wasPlaying)
                 }
                 latchRecord()
             } else if session.moved {
@@ -728,7 +751,7 @@ final class OverlayController {
 
         if session.grabbed {
             if model.phase == .scrubbing {
-                music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
+                music.finishScrub(position: session.finishSeekPosition, wasPlaying: session.wasPlaying)
             }
             if latched {
                 latchRecord()
@@ -782,6 +805,16 @@ final class OverlayController {
     // MARK: - Two-finger scroll control
 
     private func handleScroll(_ event: NSEvent) {
+        // The fingers lifted (or the gesture was cancelled): commit the scrub
+        // now. The session outlives the gesture for the confirm/collapse
+        // policy, but waiting for the inactivity timer before seeking would
+        // rewind playback to the scrub target after it has already moved on.
+        if isEnabled, session == nil,
+           event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .began
+        {
+            commitScrollScrub()
+            return
+        }
         // Momentum events continue after the fingers lift; they must not keep
         // seeking or extend the session.
         guard event.momentumPhase.isEmpty else { return }
@@ -1044,12 +1077,22 @@ final class OverlayController {
         processScroll(right: right, pull: 0, timestamp: timestamp, wallClock: wallClock)
     }
 
+    /// Commit the final seek at the end of a scroll gesture instead of letting
+    /// the inactivity timer do it. Clearing `didScrub` keeps the later
+    /// collapse/latch from seeking the same position a second time.
+    private func commitScrollScrub() {
+        guard var scroll = scrollSession, scroll.grabbed, scroll.didScrub else { return }
+        scroll.didScrub = false
+        scrollSession = scroll
+        music.finishScrub(position: scroll.finishSeekPosition, wasPlaying: scroll.wasPlaying)
+    }
+
     private func finishScrollSession(commit: Bool) {
         guard let scroll = scrollSession else { return }
         scrollSession = nil
 
         if scroll.grabbed, scroll.didScrub {
-            let target = commit ? scroll.desiredPosition : scroll.basePosition
+            let target = commit ? scroll.finishSeekPosition : scroll.basePosition
             music.finishScrub(position: target, wasPlaying: scroll.wasPlaying)
         }
 
@@ -1068,7 +1111,7 @@ final class OverlayController {
         }
         scrollSession = nil
         if scroll.didScrub {
-            music.finishScrub(position: scroll.desiredPosition, wasPlaying: scroll.wasPlaying)
+            music.finishScrub(position: scroll.finishSeekPosition, wasPlaying: scroll.wasPlaying)
         }
         latchRecord()
     }
@@ -1091,7 +1134,7 @@ final class OverlayController {
     private func finishMagneticDismiss(_ session: Session) {
         self.session = nil
         if model.phase == .scrubbing {
-            music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
+            music.finishScrub(position: session.finishSeekPosition, wasPlaying: session.wasPlaying)
         }
         performHaptic(.alignment)
         beginCollapse()
@@ -1242,7 +1285,7 @@ final class OverlayController {
         self.session = nil
         if session.latchedInteraction {
             if session.scrubArmed, model.phase == .scrubbing {
-                music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
+                music.finishScrub(position: session.finishSeekPosition, wasPlaying: session.wasPlaying)
                 latchRecord()
             } else if session.moved {
                 latchRecord()
@@ -1252,7 +1295,7 @@ final class OverlayController {
             return
         }
         if session.grabbed, model.phase == .scrubbing {
-            music.finishScrub(position: session.desiredPosition, wasPlaying: session.wasPlaying)
+            music.finishScrub(position: session.finishSeekPosition, wasPlaying: session.wasPlaying)
         }
         if session.pulled {
             if session.grabbed {

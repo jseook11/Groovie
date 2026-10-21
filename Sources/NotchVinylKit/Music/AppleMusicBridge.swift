@@ -36,6 +36,10 @@ final class AppleMusicBridge {
     private var readScriptFailed = false
 
     private var seekInFlight = false
+    /// Written by callers, read on `queue`. The lock is what actually makes
+    /// coalescing work: the newest target replaces any older ones before the
+    /// queued pump blocks run.
+    private let pendingLock = NSLock()
     private var pendingSeek: Double?
     private var pendingFinish: (position: Double, wasPlaying: Bool, completion: (() -> Void)?)?
 
@@ -105,25 +109,47 @@ final class AppleMusicBridge {
 
     /// Live scrubbing. Coalesced: only the newest target survives.
     func setPosition(_ seconds: Double) {
+        let target = max(0, seconds)
+        pendingLock.lock()
+        pendingSeek = target
+        pendingLock.unlock()
         queue.async {
-            self.pendingSeek = max(0, seconds)
             self.pumpSeeks()
         }
     }
 
     /// Final seek followed by the play/pause policy. Runs after any live seeks.
     func finish(position: Double, wasPlaying: Bool, completion: (() -> Void)? = nil) {
+        pendingLock.lock()
+        pendingSeek = nil
+        pendingFinish = (position, wasPlaying, completion)
+        pendingLock.unlock()
         queue.async {
-            self.pendingSeek = nil
-            self.pendingFinish = (position, wasPlaying, completion)
             self.pumpSeeks()
             self.pumpFinish()
         }
     }
 
+    /// Restore play/pause without touching the position. Used when the live
+    /// seeks already landed on the final target.
+    func setPlaybackState(_ playing: Bool, completion: (() -> Void)? = nil) {
+        queue.async {
+            self.runPlaybackScript(play: playing) {
+                if let completion {
+                    DispatchQueue.main.async { completion() }
+                }
+            }
+        }
+    }
+
     private func pumpSeeks() {
-        guard !seekInFlight, let target = pendingSeek else { return }
+        pendingLock.lock()
+        guard !seekInFlight, let target = pendingSeek else {
+            pendingLock.unlock()
+            return
+        }
         pendingSeek = nil
+        pendingLock.unlock()
         seekInFlight = true
         runPositionScript(target) {
             self.seekInFlight = false
@@ -133,8 +159,13 @@ final class AppleMusicBridge {
     }
 
     private func pumpFinish() {
-        guard let finish = pendingFinish, !seekInFlight, pendingSeek == nil else { return }
+        pendingLock.lock()
+        guard let finish = pendingFinish, !seekInFlight, pendingSeek == nil else {
+            pendingLock.unlock()
+            return
+        }
         pendingFinish = nil
+        pendingLock.unlock()
         runPositionScript(finish.position) {
             self.runPlaybackScript(play: finish.wasPlaying) {
                 if let completion = finish.completion {

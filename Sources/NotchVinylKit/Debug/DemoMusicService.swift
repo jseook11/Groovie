@@ -47,11 +47,16 @@ final class DemoMusicService: MusicProviding {
         nowPlaying?.sampledAt = Date()
     }
 
-    func finishScrub(position seconds: Double, wasPlaying: Bool) {
-        position = min(max(seconds, 0), duration - 0.15)
-        nowPlaying?.position = position
-        nowPlaying?.sampledAt = Date()
-        nowPlaying?.isPlaying = wasPlaying
+    func finishScrub(position seconds: Double?, wasPlaying: Bool) {
+        if let seconds {
+            position = min(max(seconds, 0), duration - 0.15)
+            nowPlaying?.position = position
+            nowPlaying?.sampledAt = Date()
+        }
+        if nowPlaying?.isPlaying != wasPlaying {
+            nowPlaying?.isPlaying = wasPlaying
+            nowPlaying?.sampledAt = Date()
+        }
         onUpdate?()
     }
 }
