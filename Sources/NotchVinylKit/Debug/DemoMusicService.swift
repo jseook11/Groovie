@@ -41,18 +41,10 @@ final class DemoMusicService: MusicProviding {
         return min(duration, now.position + date.timeIntervalSince(now.sampledAt))
     }
 
-    func seekLive(to seconds: Double) {
+    func finishScrub(position seconds: Double, wasPlaying: Bool) {
         position = min(max(seconds, 0), duration - 0.15)
         nowPlaying?.position = position
         nowPlaying?.sampledAt = Date()
-    }
-
-    func finishScrub(position seconds: Double?, wasPlaying: Bool) {
-        if let seconds {
-            position = min(max(seconds, 0), duration - 0.15)
-            nowPlaying?.position = position
-            nowPlaying?.sampledAt = Date()
-        }
         if nowPlaying?.isPlaying != wasPlaying {
             nowPlaying?.isPlaying = wasPlaying
             nowPlaying?.sampledAt = Date()

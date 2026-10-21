@@ -46,14 +46,11 @@ protocol MusicProviding: AnyObject {
     /// it first when it is not running.
     func presentPlayer()
     func estimatedPosition(at date: Date) -> Double
-    /// Called continuously while the record is being spun and the player is running.
-    func seekLive(to seconds: Double)
-    /// Called once when the record is released. `position` is the final target,
-    /// or nil when the last live seek already put the player there and only the
-    /// play/pause policy needs restoring. Re-seeking to the current position
-    /// makes the release look like the scrub was applied a second time.
-    /// `wasPlaying` is the state at grab time.
-    func finishScrub(position: Double?, wasPlaying: Bool)
+    /// Called once when the record is released. `position` is the target the
+    /// scrub ended on and `wasPlaying` is the state at grab time. This is the
+    /// only seek in a scrub: issuing one per drag update made Music restart the
+    /// track dozens of times a second for no audible benefit.
+    func finishScrub(position: Double, wasPlaying: Bool)
     func refresh()
 }
 
@@ -63,11 +60,5 @@ extension MusicProviding {
         guard now.isPlaying else { return now.position }
         let elapsed = date.timeIntervalSince(now.sampledAt)
         return min(now.duration, now.position + max(0, elapsed))
-    }
-
-    func finishScrub(position: Double?, wasPlaying: Bool) {
-        if let position {
-            seekLive(to: position)
-        }
     }
 }

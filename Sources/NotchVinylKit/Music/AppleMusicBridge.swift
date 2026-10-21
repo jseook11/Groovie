@@ -27,7 +27,7 @@ enum AppleMusicBridgeError: Error, Equatable {
     }
 }
 
-/// All AppleScript traffic is funnelled through one serial queue. Seeks are
+/// All AppleScript traffic is funnelled through one serial queue. Finishes are
 /// coalesced so a slow AppleEvent can never build up a backlog.
 final class AppleMusicBridge {
     private let queue = DispatchQueue(label: "com.notchvinyl.applemusic", qos: .userInitiated)
@@ -35,13 +35,12 @@ final class AppleMusicBridge {
     private var readScript: NSAppleScript?
     private var readScriptFailed = false
 
-    private var seekInFlight = false
     /// Written by callers, read on `queue`. The lock is what actually makes
     /// coalescing work: the newest target replaces any older ones before the
     /// queued pump blocks run.
     private let pendingLock = NSLock()
-    private var pendingSeek: Double?
     private var pendingFinish: (position: Double, wasPlaying: Bool, completion: (() -> Void)?)?
+    private var finishInFlight = false
 
     private static let delimiter = "\u{1F}"
 
@@ -107,70 +106,33 @@ final class AppleMusicBridge {
 
     // MARK: - Seeking
 
-    /// Live scrubbing. Coalesced: only the newest target survives.
-    func setPosition(_ seconds: Double) {
-        let target = max(0, seconds)
-        pendingLock.lock()
-        pendingSeek = target
-        pendingLock.unlock()
-        queue.async {
-            self.pumpSeeks()
-        }
-    }
-
-    /// Final seek followed by the play/pause policy. Runs after any live seeks.
+    /// Seek to the position the scrub ended on, then restore the play/pause
+    /// state from grab time. Coalesced: only the newest target survives.
     func finish(position: Double, wasPlaying: Bool, completion: (() -> Void)? = nil) {
         pendingLock.lock()
-        pendingSeek = nil
         pendingFinish = (position, wasPlaying, completion)
         pendingLock.unlock()
         queue.async {
-            self.pumpSeeks()
-            self.pumpFinish()
-        }
-    }
-
-    /// Restore play/pause without touching the position. Used when the live
-    /// seeks already landed on the final target.
-    func setPlaybackState(_ playing: Bool, completion: (() -> Void)? = nil) {
-        queue.async {
-            self.runPlaybackScript(play: playing) {
-                if let completion {
-                    DispatchQueue.main.async { completion() }
-                }
-            }
-        }
-    }
-
-    private func pumpSeeks() {
-        pendingLock.lock()
-        guard !seekInFlight, let target = pendingSeek else {
-            pendingLock.unlock()
-            return
-        }
-        pendingSeek = nil
-        pendingLock.unlock()
-        seekInFlight = true
-        runPositionScript(target) {
-            self.seekInFlight = false
-            self.pumpSeeks()
             self.pumpFinish()
         }
     }
 
     private func pumpFinish() {
         pendingLock.lock()
-        guard let finish = pendingFinish, !seekInFlight, pendingSeek == nil else {
+        guard !finishInFlight, let finish = pendingFinish else {
             pendingLock.unlock()
             return
         }
         pendingFinish = nil
+        finishInFlight = true
         pendingLock.unlock()
         runPositionScript(finish.position) {
             self.runPlaybackScript(play: finish.wasPlaying) {
+                self.finishInFlight = false
                 if let completion = finish.completion {
                     DispatchQueue.main.async { completion() }
                 }
+                self.pumpFinish()
             }
         }
     }

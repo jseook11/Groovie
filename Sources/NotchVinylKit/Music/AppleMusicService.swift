@@ -299,39 +299,17 @@ final class AppleMusicService: MusicProviding {
 
     // MARK: - Seeking
 
-    func seekLive(to seconds: Double) {
-        guard availability.isInteractive else { return }
-        bridge.setPosition(seconds)
+    func finishScrub(position: Double, wasPlaying: Bool) {
         if var now = nowPlaying {
-            now.position = min(max(seconds, 0), now.duration)
+            now.position = min(max(position, 0), now.duration)
             now.sampledAt = Date()
-            nowPlaying = now
-        }
-    }
-
-    func finishScrub(position: Double?, wasPlaying: Bool) {
-        if var now = nowPlaying {
-            if let position {
-                now.position = min(max(position, 0), now.duration)
-                now.sampledAt = Date()
-            }
             if now.isPlaying != wasPlaying {
                 now.isPlaying = wasPlaying
-                now.sampledAt = Date()
             }
             nowPlaying = now
         }
-        if let position {
-            bridge.finish(position: position, wasPlaying: wasPlaying) { [weak self] in
-                self?.pollNow()
-            }
-        } else {
-            // The live seek already landed on the final position. Re-issuing it
-            // after the player has advanced would rewind the track, which reads
-            // as the scrub being applied twice.
-            bridge.setPlaybackState(wasPlaying) { [weak self] in
-                self?.pollNow()
-            }
+        bridge.finish(position: position, wasPlaying: wasPlaying) { [weak self] in
+            self?.pollNow()
         }
     }
 
