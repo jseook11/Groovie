@@ -32,6 +32,7 @@ final class DemoMusicService: MusicProviding {
 
     func start() {}
     func stop() {}
+    func presentPlayer() {}
     func refresh() {}
 
     func estimatedPosition(at date: Date) -> Double {

@@ -340,6 +340,10 @@ final class OverlayController {
             finishCollapse()
         }
 
+        if isEnabled, !model.canInteract, (model.phase == .idle || model.phase == .armed) {
+            presentPlayerForUnavailableMusic()
+        }
+
         guard isEnabled,
               model.canInteract,
               model.phase == .idle || model.phase == .armed,
@@ -497,6 +501,17 @@ final class OverlayController {
 
         session.lastPoint = point
         self.session = session
+    }
+
+    /// With no track the gesture cannot do anything. Put Music in front so the
+    /// user can start one instead of leaving the overlay silently inert.
+    private func presentPlayerForUnavailableMusic() {
+        switch model.availability {
+        case .appNotRunning, .noTrack:
+            music.presentPlayer()
+        case .playing, .paused, .permissionDenied:
+            break
+        }
     }
 
     /// After a magnetic put-back the mouse button may still be down. Let the
@@ -760,7 +775,10 @@ final class OverlayController {
         // seeking or extend the session.
         guard event.momentumPhase.isEmpty else { return }
         guard isEnabled, session == nil else { return }
-        if !model.canInteract && !latched && pendingConfirmUntil == nil { return }
+        if !model.canInteract && !latched && pendingConfirmUntil == nil {
+            presentPlayerForUnavailableMusic()
+            return
+        }
         guard scrollSession != nil || latched || pendingConfirmUntil != nil
                 || model.phase == .idle || model.phase == .armed || model.phase == .releasing
         else { return }

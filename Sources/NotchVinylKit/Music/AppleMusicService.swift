@@ -18,6 +18,10 @@ final class AppleMusicService: MusicProviding {
     private var started = false
     private var readInFlight = false
     private var permissionDenied = false
+    private var launchInFlight = false
+    /// One-shot: when the first read after starting (or reconnecting) finds no
+    /// track, bring Music forward so the user can pick something to play.
+    private var presentWhenNoTrack = false
 
     private var runningObservers: [NSObjectProtocol] = []
     private var permissionObserver: NSObjectProtocol?
@@ -45,6 +49,11 @@ final class AppleMusicService: MusicProviding {
             Task { @MainActor in self?.handlePermissionDenied() }
         }
         startPolling()
+        // A Music controller has nothing to drive while Music is closed, and the
+        // overlay would sit inert with no explanation. Open the player instead so
+        // the record works as soon as the app is available.
+        presentWhenNoTrack = true
+        launchMusicIfNeeded()
         pollNow()
     }
 
@@ -69,6 +78,8 @@ final class AppleMusicService: MusicProviding {
             return
         }
         startPolling()
+        presentWhenNoTrack = true
+        launchMusicIfNeeded()
         pollNow()
     }
 
@@ -114,6 +125,53 @@ final class AppleMusicService: MusicProviding {
         NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.Music" }
     }
 
+    private func launchMusicIfNeeded() {
+        guard !isMusicRunning, !launchInFlight else { return }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") else {
+            return
+        }
+        launchInFlight = true
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.launchInFlight = false
+                // The workspace launch observer also polls, but Music can take a
+                // moment to answer AppleScript. This second read covers the case
+                // where the first one arrives too early.
+                self.pollNow()
+            }
+        }
+    }
+
+    /// Bring Music forward, launching it when it is closed. The overlay has
+    /// nothing to scrub without a track, so the player is where the user needs
+    /// to be to start one.
+    func presentPlayer() {
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").first {
+            app.activate(options: [])
+        } else {
+            launchMusicIfNeeded()
+        }
+    }
+
+    private func presentForNoTrackIfNeeded() {
+        guard presentWhenNoTrack else { return }
+        presentWhenNoTrack = false
+        presentPlayer()
+    }
+
+    private func applyNoTrack() {
+        let changed = availability != .noTrack
+        availability = .noTrack
+        nowPlaying = nil
+        artwork = nil
+        if changed {
+            logAvailabilityIfNeeded()
+            onUpdate?()
+        }
+        presentForNoTrackIfNeeded()
+    }
+
     // MARK: - Polling
 
     func pollNow() {
@@ -149,22 +207,12 @@ final class AppleMusicService: MusicProviding {
             applyNotRunning()
 
         case .success(.noTrack):
-            let availabilityChanged = availability != .noTrack
-            availability = .noTrack
-            nowPlaying = nil
-            artwork = nil
-            if availabilityChanged {
-                logAvailabilityIfNeeded()
-                onUpdate?()
-            }
+            applyNoTrack()
 
         case .success(.track(let state, let positionMs, let persistentID, let title, let artist, let album, let durationMs)):
             let duration = Double(durationMs) / 1000
             guard duration > 0.5 else {
-                let changed = availability != .noTrack
-                availability = .noTrack
-                nowPlaying = nil
-                if changed { onUpdate?() }
+                applyNoTrack()
                 return
             }
 
@@ -187,6 +235,13 @@ final class AppleMusicService: MusicProviding {
 
             nowPlaying = snapshot
             availability = isPlaying ? .playing : (state == "paused" ? .paused : .noTrack)
+            if availability == .noTrack {
+                // A stopped player still reports the selected track, but there is
+                // nothing to scrub until playback starts.
+                presentForNoTrackIfNeeded()
+            } else {
+                presentWhenNoTrack = false
+            }
 
             if previousTrack != trackID {
                 updateArtwork(for: trackID)

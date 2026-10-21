@@ -124,8 +124,10 @@ Music 읽기 파서, 시간 표시 포맷을 검사합니다.
 
 ## Music 권한
 
-Notch Vinyl은 AppleScript로 Music을 제어합니다. 첫 실행 시
-“Notch Vinyl wants to control Music” 자동화 권한 요청이 뜨면 **허용**해야 합니다.
+Notch Vinyl은 AppleScript로 Music을 제어합니다. 앱을 시작할 때 Music이 실행 중이
+아니면 Music을 자동으로 엽니다. 실행 중이지만 재생할 트랙이 없으면 Music을 앞으로
+가져와 곡을 고를 수 있게 합니다. 첫 실행 시 “Notch Vinyl wants to control Music”
+자동화 권한 요청이 뜨면 **허용**해야 합니다.
 
 - 거부한 경우: 시스템 설정 → 개인정보 보호 및 보안 → 자동화 → Notch Vinyl → Music을 켜거나,
   상태 메뉴의 “Music 연결 다시 시도”를 사용하세요.

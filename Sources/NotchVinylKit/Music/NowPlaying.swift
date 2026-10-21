@@ -42,6 +42,9 @@ protocol MusicProviding: AnyObject {
 
     func start()
     func stop()
+    /// Bring the player to the front so the user can start playback, launching
+    /// it first when it is not running.
+    func presentPlayer()
     func estimatedPosition(at date: Date) -> Double
     /// Called continuously while the record is being spun and the player is running.
     func seekLive(to seconds: Double)
