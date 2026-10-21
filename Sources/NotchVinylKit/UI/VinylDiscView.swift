@@ -5,6 +5,8 @@ struct VinylDiscView: View {
     let radius: CGFloat
     let labelRadius: CGFloat
     let angle: Double
+    let isSpinning: Bool
+    let degreesPerSecond: Double
     let title: String
     let artist: String
     let artwork: NSImage?
@@ -23,11 +25,14 @@ struct VinylDiscView: View {
         ZStack {
             Group {
                 if let texture {
-                    Image(nsImage: texture)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: size, height: size)
-                        .rotationEffect(.degrees(angle))
+                    RotatingDiscView(
+                        image: texture,
+                        size: size,
+                        angle: angle,
+                        isSpinning: isSpinning,
+                        degreesPerSecond: degreesPerSecond
+                    )
+                    .frame(width: size, height: size)
                 } else {
                     Circle()
                         .fill(Color(nsColor: skin.recordCenter))

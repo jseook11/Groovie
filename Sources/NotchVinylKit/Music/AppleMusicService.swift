@@ -110,9 +110,12 @@ final class AppleMusicService: MusicProviding {
 
     private func startPolling() {
         guard started, pollTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.8, target: self, selector: #selector(pollTimerFired), userInfo: nil, repeats: true)
+        // The overlay estimates the playing position locally, so polling only
+        // has to notice track/play-state changes. Every AppleScript read costs
+        // real CPU, and the previous 0.8 s cadence was the app's idle floor.
+        let timer = Timer(timeInterval: 1.5, target: self, selector: #selector(pollTimerFired), userInfo: nil, repeats: true)
         // Tolerance keeps the poll from competing with animation frames.
-        timer.tolerance = 0.2
+        timer.tolerance = 0.3
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
     }
@@ -122,7 +125,9 @@ final class AppleMusicService: MusicProviding {
     }
 
     private var isMusicRunning: Bool {
-        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.Music" }
+        // `runningApplications` materialises every app and asks LaunchServices
+        // for static information; the targeted lookup only resolves one bundle.
+        !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty
     }
 
     private func launchMusicIfNeeded() {

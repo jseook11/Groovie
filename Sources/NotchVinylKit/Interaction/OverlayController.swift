@@ -16,6 +16,11 @@ final class OverlayController {
     private var contentView: OverlayContentView?
     private var tickTimer: Timer?
     private var lastTick: CFTimeInterval = CACurrentMediaTime()
+    /// Playback rotation is handed to Core Animation: the model stores the
+    /// angle the spin started from and when, instead of changing `model.angle`
+    /// every frame and forcing SwiftUI to redraw the whole stage.
+    private var spinBaseAngle: Double = 0
+    private var spinBaseTime: CFTimeInterval = 0
 
     private var session: Session?
     private var scrollSession: ScrollSession?
@@ -233,6 +238,9 @@ final class OverlayController {
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
+        model.isSpinning = false
+        spinBaseAngle = 0
+        spinBaseTime = CACurrentMediaTime()
 
         if isEnabled {
             contentView?.window?.invalidateCursorRects(for: content)
@@ -269,6 +277,7 @@ final class OverlayController {
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
+        model.isSpinning = false
         hideStage()
         NSCursor.arrow.set()
     }
@@ -280,6 +289,7 @@ final class OverlayController {
         model.trackTitle = nowPlaying?.title ?? ""
         model.trackArtist = nowPlaying?.artist ?? ""
         model.isPlaying = nowPlaying?.isPlaying ?? false
+        syncSpin()
         model.artwork = music.artwork
         model.availability = music.availability
         model.permissionDenied = music.availability == .permissionDenied
@@ -426,6 +436,7 @@ final class OverlayController {
             model.phase = .pulling
             model.exposure = layout.exposure(forPullDistance: pullDistance)
             showStage()
+            syncSpin()
             NSCursor.closedHand.set()
         }
 
@@ -445,7 +456,7 @@ final class OverlayController {
                 model.confirmProgress = session.confirm.progress
                 model.showConfirmGauge = true
                 session.grabExposure = layout.fullExposure
-                session.angleAtGrab = model.angle
+                session.angleAtGrab = spinAngle(at: CACurrentMediaTime())
                 session.lastPoint = point
                 session.engine.begin(
                     x: point.x,
@@ -491,7 +502,7 @@ final class OverlayController {
                     return
                 }
                 session.scrubArmed = true
-                session.angleAtGrab = model.angle
+                session.angleAtGrab = freezeSpin()
                 session.engine.begin(
                     x: point.x,
                     timestamp: timestamp,
@@ -590,7 +601,7 @@ final class OverlayController {
         if !session.scrubArmed {
             if abs(point.x - session.start.x) >= 3 {
                 session.scrubArmed = true
-                session.angleAtGrab = model.angle
+                session.angleAtGrab = freezeSpin()
                 session.engine.begin(
                     x: point.x,
                     timestamp: timestamp,
@@ -647,7 +658,7 @@ final class OverlayController {
         session.wasPlaying = now.isPlaying
         session.grabbedTrackID = now.trackID
         session.grabExposure = layout.fullExposure
-        session.angleAtGrab = model.angle
+        session.angleAtGrab = spinAngle(at: CACurrentMediaTime())
         session.desiredPosition = session.basePosition
         session.engine.begin(
             x: point.x,
@@ -681,6 +692,7 @@ final class OverlayController {
         model.phase = .grabbed
         model.offsetSeconds = 0
         showStage()
+        syncSpin()
         startTicking()
         NSCursor.openHand.set()
     }
@@ -697,6 +709,7 @@ final class OverlayController {
         model.offsetSeconds = 0
         model.exposure = max(model.exposure, layout.fullExposure - 6)
         showStage()
+        syncSpin()
         startTicking()
         NSCursor.openHand.set()
     }
@@ -744,6 +757,7 @@ final class OverlayController {
 
         if session.aborted || !session.pulled {
             model.phase = .idle
+            syncSpin()
             stopTicking()
             settleHover()
             return
@@ -777,6 +791,7 @@ final class OverlayController {
         snapOpenVelocity = 0
         releaseVelocity = 0
         releaseElapsed = 0
+        syncSpin()
         startTicking()
         NSCursor.arrow.set()
     }
@@ -909,6 +924,7 @@ final class OverlayController {
         model.phase = .pulling
         model.exposure = 0
         showStage()
+        syncSpin()
         startTicking()
         NSCursor.closedHand.set()
         performHaptic(.levelChange)
@@ -953,7 +969,7 @@ final class OverlayController {
                     scroll.wasPlaying = nowPlaying.isPlaying
                     scroll.trackID = nowPlaying.trackID
                     scroll.desiredPosition = scroll.basePosition
-                    scroll.angleAtGrab = model.angle
+                    scroll.angleAtGrab = spinAngle(at: CACurrentMediaTime())
                     scroll.engine.begin(
                         x: 0,
                         timestamp: timestamp,
@@ -961,6 +977,7 @@ final class OverlayController {
                         duration: scroll.duration
                     )
                     model.phase = .grabbed
+                    syncSpin()
                     snapOpenActive = true
                     snapOpenVelocity = 0
                     performHaptic(.alignment)
@@ -1012,7 +1029,7 @@ final class OverlayController {
                 if abs(x) >= Double(deadzone) {
                     scroll.scrubArmed = true
                     scroll.virtualX = 0
-                    scroll.angleAtGrab = model.angle
+                    scroll.angleAtGrab = freezeSpin()
                     scroll.engine.begin(
                         x: 0,
                         timestamp: timestamp,
@@ -1063,7 +1080,7 @@ final class OverlayController {
         scroll.wasPlaying = nowPlaying.isPlaying
         scroll.trackID = nowPlaying.trackID
         scroll.desiredPosition = scroll.basePosition
-        scroll.angleAtGrab = model.angle
+        scroll.angleAtGrab = spinAngle(at: CACurrentMediaTime())
         scroll.engine.begin(
             x: 0,
             timestamp: timestamp,
@@ -1073,6 +1090,7 @@ final class OverlayController {
         scroll.lastActivity = wallClock
         scrollSession = scroll
         model.phase = .grabbed
+        syncSpin()
         startTicking()
         processScroll(right: right, pull: 0, timestamp: timestamp, wallClock: wallClock)
     }
@@ -1153,6 +1171,56 @@ final class OverlayController {
         }
     }
 
+    // MARK: - Playback rotation
+
+    /// Phases where the record is free to spin. While scrubbing the pointer
+    /// owns the angle, and when the stage is closed nothing is visible.
+    private var phaseAllowsSpin: Bool {
+        switch model.phase {
+        case .pulling, .grabbed, .releasing: return true
+        case .idle, .armed, .scrubbing: return false
+        }
+    }
+
+    /// The logical angle at `time`. The view runs the same rotation on Core
+    /// Animation, so this is only needed when the pointer takes over.
+    private func spinAngle(at time: CFTimeInterval) -> Double {
+        guard model.isSpinning else { return model.angle }
+        let elapsed = time - spinBaseTime
+        return (spinBaseAngle + layout.playbackDegreesPerSecond * elapsed)
+            .truncatingRemainder(dividingBy: 360)
+    }
+
+    /// True once a horizontal stroke has taken over the angle, even if the
+    /// phase has not flipped to `.scrubbing` yet.
+    private var pointerOwnsAngle: Bool {
+        (session?.scrubArmed ?? false) || (scrollSession?.scrubArmed ?? false)
+    }
+
+    /// Start or stop the playback spin to match the current phase and player.
+    private func syncSpin() {
+        let shouldSpin = model.isPlaying && phaseAllowsSpin && !pointerOwnsAngle
+        guard shouldSpin != model.isSpinning else { return }
+        if shouldSpin {
+            spinBaseAngle = model.angle
+            spinBaseTime = CACurrentMediaTime()
+            model.isSpinning = true
+        } else {
+            model.angle = spinAngle(at: CACurrentMediaTime())
+            model.isSpinning = false
+        }
+    }
+
+    /// Hand the angle from the animation to the pointer, returning where the
+    /// disc actually was so a scrub continues from it without a jump.
+    @discardableResult
+    private func freezeSpin() -> Double {
+        let angle = spinAngle(at: CACurrentMediaTime())
+        model.angle = angle
+        model.isSpinning = false
+        return angle
+    }
+
     // MARK: - Display tick
 
     private func startTicking() {
@@ -1173,15 +1241,8 @@ final class OverlayController {
         let dt = min(max(now - lastTick, 0), 0.05)
         lastTick = now
 
-        switch model.phase {
-        case .pulling, .grabbed, .releasing:
-            if model.isPlaying {
-                model.angle = (model.angle + layout.playbackDegreesPerSecond * dt)
-                    .truncatingRemainder(dividingBy: 360)
-            }
-        case .scrubbing, .idle, .armed:
-            break
-        }
+        // Playback rotation runs on Core Animation (see RotatingDiscView), so
+        // this timer only drives short springs and timeouts.
 
         if snapOpenActive, model.phase == .grabbed || model.phase == .scrubbing {
             stepSnapOpen(dt: dt)
@@ -1221,6 +1282,18 @@ final class OverlayController {
         // If the mouse-up was lost (space switch, app focus, etc.) finish safely.
         if !isDemoActive, session != nil, model.phase != .releasing, NSEvent.pressedMouseButtons == 0 {
             finishLostDrag()
+        }
+
+        // A latched record has nothing left to animate or wait for: playback
+        // rotation lives in Core Animation. Let the app sleep until the next
+        // gesture instead of waking at 60 Hz forever.
+        if model.phase == .grabbed,
+           session == nil,
+           scrollSession == nil,
+           pendingConfirmUntil == nil,
+           !snapOpenActive
+        {
+            stopTicking()
         }
     }
 
@@ -1274,6 +1347,7 @@ final class OverlayController {
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
+        syncSpin()
         hideStage()
         panel?.orderFrontRegardless()
         contentView?.updateTrackingAreas()

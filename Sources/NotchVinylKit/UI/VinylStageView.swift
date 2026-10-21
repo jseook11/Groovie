@@ -41,12 +41,13 @@ struct VinylStageView: View {
                     radius: layout.recordRadius,
                     labelRadius: layout.labelRadius,
                     angle: model.angle,
+                    isSpinning: model.isSpinning,
+                    degreesPerSecond: layout.playbackDegreesPerSecond,
                     title: model.trackTitle,
                     artist: model.trackArtist,
                     artwork: model.artwork,
                     skin: model.skin
                 )
-                .shadow(color: .black.opacity(0.45), radius: 10, x: 0, y: 5)
                 .position(center)
 
                 hud(center: center)
