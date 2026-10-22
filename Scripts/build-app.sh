@@ -17,6 +17,24 @@ cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
     cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
+
+# SwiftPM resource bundle: Bundle.module resolves this from Contents/Resources.
+shopt -s nullglob
+for bundle in "$BIN_DIR"/*.bundle; do
+    cp -R "$bundle" "$APP/Contents/Resources/"
+done
+shopt -u nullglob
+
+# Ship language files as loose data as well, so a translation can be tested by
+# dropping a JSON file into the built app without rebuilding.
+LOCALIZATION_DIR="$ROOT/Sources/GroovieKit/Resources/Localization"
+if [ -d "$LOCALIZATION_DIR" ]; then
+    mkdir -p "$APP/Contents/Resources/Localization"
+    cp "$LOCALIZATION_DIR"/*.json "$APP/Contents/Resources/Localization/"
+    swift "$ROOT/Scripts/generate-info-plist-strings.swift" \
+        "$LOCALIZATION_DIR" "$APP/Contents/Resources"
+fi
+
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # Ad-hoc signature: stable enough for local use and Automation permission prompts.

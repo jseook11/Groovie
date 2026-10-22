@@ -139,6 +139,22 @@ Groovie는 AppleScript로 Music을 제어합니다. 앱을 시작할 때 Music�
 
 > Music 앱만 지원합니다. Spotify의 AppleScript는 재생 위치 seek를 지원하지 않습니다.
 
+## 언어
+
+UI는 시스템 언어를 따릅니다. 영어·한국어가 기본 포함되어 있고, 언어별 문자열은
+`Sources/GroovieKit/Resources/Localization/<code>.json` 파일 하나로 정의됩니다.
+파일을 추가하면 코드 수정 없이 언어가 자동으로 발견됩니다.
+
+```sh
+swift Scripts/new-language.swift ja "日本語"
+make l10n-check
+make app
+open build/Groovie.app --args --lang=ja
+```
+
+번역 규칙과 패키징 방식은 [docs/localization/README.md](docs/localization/README.md),
+키별 문맥은 [docs/localization/keys.md](docs/localization/keys.md)를 참고하세요.
+
 ## 개발용 모드
 
 ```sh
@@ -154,6 +170,8 @@ open build/Groovie.app --args --fake-music --demo --skin=rust
 - `--skin=<id>` — `classic`, `rust`, `teal`, `smoke`, `mono` 중 하나로 이번 실행의 스킨을
   고정합니다. 저장된 선택은 바꾸지 않습니다.
 - `--long-title` — 가상 트랙 제목을 길게 만들어 상태 메뉴 헤더의 마퀴를 확인합니다.
+- `--lang=<code>` — 이번 실행의 UI 언어를 `en`, `ko` 등으로 고정합니다. 저장된
+  선택은 바꾸지 않습니다.
 - `--self-test` — 헤드리스 검사를 실행하고 종료합니다.
 
 ## 구조
@@ -173,11 +191,19 @@ Sources/GroovieKit/
   UI/BrandMark.swift                 메뉴 바용 노치+레코드 템플릿 마크
   UI/MenuHeaderView.swift            고정 폭 메뉴 헤더, 마퀴·진행 바·예외 상태
   UI/                                레코드 텍스처, SwiftUI 스테이지, HUD
+  Localization/L10n.swift            언어 선택, fallback, 문자열 조회
+  Localization/LocalizationCatalog.swift 언어 파일 발견/파싱, fallback 체인
+  Localization/LocalizationKey.swift 타입 안전 문자열 키
+  Resources/Localization/            en.json, ko.json 언어 파일
   Debug/                             데모 뮤직, 자기 검사
 Resources/Info.plist                 LSUIElement, 자동화 사용 설명, 앱 아이콘
 Resources/AppIcon.icns               빌드에 포함되는 macOS 앱 아이콘
 docs/design/app-icon-cream-v3.png    앱 아이콘 마스터 시안
+docs/localization/                   번역 가이드, JSON 스키마, 키 문맥
 Scripts/build-app.sh                 SwiftPM 산출물을 .app으로 묶고 ad-hoc 서명
+Scripts/check-localizations.swift    언어 파일 키/placeholder 검증
+Scripts/generate-info-plist-strings.swift InfoPlist.strings 생성
+Scripts/new-language.swift           새 언어 파일 스캐폴딩
 Scripts/make-app-icon.sh             슈퍼타원 마스크를 적용해 .icns 생성
 ```
 

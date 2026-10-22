@@ -102,7 +102,7 @@ struct VinylStageView: View {
         let progress = CGFloat(min(max(model.confirmProgress, 0), 1))
         let width: CGFloat = 128
         VStack(spacing: 4) {
-            Text("더 당겨서 고정")
+            Text(verbatim: L10n.t(.overlayPullToLock))
                 .font(.system(size: 8, weight: .medium))
                 .tracking(0.2)
                 .foregroundStyle(.white.opacity(0.40))

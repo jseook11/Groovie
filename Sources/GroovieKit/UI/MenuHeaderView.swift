@@ -68,7 +68,7 @@ final class MenuHeaderView: NSView {
         duration: Double,
         isPlaying: Bool
     ) {
-        let text = title.isEmpty ? "재생 중인 곡 없음" : title
+        let text = title.isEmpty ? L10n.t(.headerNoTrack) : title
         let secondary = title.isEmpty
         isStatusMode = false
 
@@ -115,7 +115,7 @@ final class MenuHeaderView: NSView {
         basePosition = 0
         trackDuration = 0
         isPlaying = false
-        setAccessibilityLabel("Groovie, \(text)")
+        setAccessibilityLabel(L10n.t(.a11yHeaderStatus, text))
         layoutTitle(reset: true)
         stopTimers()
     }
@@ -171,7 +171,7 @@ final class MenuHeaderView: NSView {
 
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel("Groovie")
+        setAccessibilityLabel(L10n.t(.a11yApp))
         for child in [logoView, titleClip, titleLabel, titleEcho, artistLabel, progressTrack, progressFill, warningDot] {
             child.setAccessibilityElement(false)
         }
@@ -313,7 +313,9 @@ final class MenuHeaderView: NSView {
     }
 
     private func accessibilityText(title: String, artist: String) -> String {
-        artist.isEmpty ? "Groovie, \(title)" : "Groovie, \(title), \(artist)"
+        artist.isEmpty
+            ? L10n.t(.a11yHeaderTitle, title)
+            : L10n.t(.a11yHeaderTitleArtist, title, artist)
     }
 
     override func viewDidChangeEffectiveAppearance() {

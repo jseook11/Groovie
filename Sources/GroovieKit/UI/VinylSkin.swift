@@ -4,7 +4,7 @@ import AppKit
 /// still follows the track — artwork first, then a colour derived from the track.
 struct VinylSkin: Identifiable, Equatable {
     let id: String
-    let name: String
+    let nameKey: LocalizationKey
     let recordCenter: NSColor
     let recordEdge: NSColor
     let grooveLight: NSColor
@@ -19,7 +19,7 @@ struct VinylSkin: Identifiable, Equatable {
 
     static let classic = VinylSkin(
         id: "classic",
-        name: "클래식 블랙",
+        nameKey: .skinClassic,
         recordCenter: NSColor(srgbRed: 0.102, green: 0.110, blue: 0.133, alpha: 1),
         recordEdge: NSColor(srgbRed: 0.051, green: 0.055, blue: 0.067, alpha: 1),
         grooveLight: .white,
@@ -31,7 +31,7 @@ struct VinylSkin: Identifiable, Equatable {
 
     static let rust = VinylSkin(
         id: "rust",
-        name: "러스트",
+        nameKey: .skinRust,
         recordCenter: NSColor(srgbRed: 0.200, green: 0.106, blue: 0.082, alpha: 1),
         recordEdge: NSColor(srgbRed: 0.102, green: 0.051, blue: 0.039, alpha: 1),
         grooveLight: NSColor(srgbRed: 1.000, green: 0.870, blue: 0.790, alpha: 1),
@@ -43,7 +43,7 @@ struct VinylSkin: Identifiable, Equatable {
 
     static let teal = VinylSkin(
         id: "teal",
-        name: "딥 틸",
+        nameKey: .skinTeal,
         recordCenter: NSColor(srgbRed: 0.063, green: 0.165, blue: 0.165, alpha: 1),
         recordEdge: NSColor(srgbRed: 0.031, green: 0.086, blue: 0.086, alpha: 1),
         grooveLight: NSColor(srgbRed: 0.780, green: 0.950, blue: 0.930, alpha: 1),
@@ -55,7 +55,7 @@ struct VinylSkin: Identifiable, Equatable {
 
     static let smoke = VinylSkin(
         id: "smoke",
-        name: "스모크",
+        nameKey: .skinSmoke,
         recordCenter: NSColor(srgbRed: 0.157, green: 0.169, blue: 0.192, alpha: 1),
         recordEdge: NSColor(srgbRed: 0.071, green: 0.078, blue: 0.094, alpha: 1),
         grooveLight: NSColor(srgbRed: 0.880, green: 0.920, blue: 1.000, alpha: 1),
@@ -67,7 +67,7 @@ struct VinylSkin: Identifiable, Equatable {
 
     static let mono = VinylSkin(
         id: "mono",
-        name: "모노",
+        nameKey: .skinMono,
         recordCenter: NSColor(srgbRed: 0.106, green: 0.114, blue: 0.129, alpha: 1),
         recordEdge: NSColor(srgbRed: 0.047, green: 0.051, blue: 0.059, alpha: 1),
         grooveLight: .white,

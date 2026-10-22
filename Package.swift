@@ -11,6 +11,7 @@ let package = Package(
         .target(
             name: "GroovieKit",
             path: "Sources/GroovieKit",
+            resources: [.copy("Resources/Localization")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(

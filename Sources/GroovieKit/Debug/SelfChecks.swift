@@ -249,6 +249,91 @@ public enum SelfChecks {
         expect(spread(monoAccent) < spread(classicAccent) * 0.5,
                "the mono skin must desaturate the track accent")
 
+        // MARK: Localization
+
+        func placeholders(_ value: String) -> [String] {
+            guard let regex = try? NSRegularExpression(pattern: "%(?:[0-9]+\\$)?[@d]") else {
+                return []
+            }
+            let range = NSRange(value.startIndex..., in: value)
+            return regex.matches(in: value, range: range)
+                .compactMap { Range($0.range, in: value).map { String(value[$0]) } }
+                .sorted()
+        }
+
+        let english = LocalizationLoader.load(explicit: "en")
+        let korean = LocalizationLoader.load(explicit: "ko")
+        expect(english.selectedCode == "en", "en must resolve to itself")
+        expect(korean.selectedCode == "ko", "ko must resolve to itself")
+        expect(english.languages["en"]?.complete == true, "en must be marked complete")
+        expect(korean.languages["ko"]?.complete == true, "ko must be marked complete")
+
+        let englishStrings = english.languages["en"]?.strings ?? [:]
+        let koreanStrings = korean.languages["ko"]?.strings ?? [:]
+        for key in LocalizationKey.allCases {
+            expect(englishStrings[key.rawValue] != nil,
+                   "en is missing \(key.rawValue)")
+            expect(koreanStrings[key.rawValue] != nil,
+                   "ko is missing \(key.rawValue)")
+            expect(placeholders(englishStrings[key.rawValue] ?? "")
+                   == placeholders(koreanStrings[key.rawValue] ?? ""),
+                   "\(key.rawValue): placeholders must match between en and ko")
+        }
+        expect(Set(englishStrings.keys) == Set(koreanStrings.keys),
+               "en and ko must define the same keys")
+        expect(Set(englishStrings.keys) == Set(LocalizationKey.allCases.map(\.rawValue)),
+               "en must define exactly the keys declared by LocalizationKey")
+
+        // A partial language must fall back per key, and an unknown language
+        // must fall back to English rather than showing raw keys.
+        let partialEnglish = LocalizationLanguage(
+            code: "en",
+            name: "English",
+            fallback: nil,
+            complete: true,
+            strings: ["a": "A", "b": "B %1$@", "c": "C"]
+        )
+        let partialJapanese = LocalizationLanguage(
+            code: "ja",
+            name: "日本語",
+            fallback: "en",
+            complete: false,
+            strings: ["a": "あ"]
+        )
+        let partial = LocalizationCatalog(
+            languages: ["en": partialEnglish, "ja": partialJapanese],
+            preferred: ["ja-JP"]
+        )
+        expect(partial.selectedCode == "ja", "ja-JP must match the ja file")
+        expect(partial.string(for: "a") == "あ", "a translated key must win")
+        expect(partial.string(for: "b") == "B %1$@", "a missing key must fall back to English")
+
+        let unknown = LocalizationCatalog(
+            languages: ["en": partialEnglish, "ja": partialJapanese],
+            preferred: ["de-DE", "fr"]
+        )
+        expect(unknown.selectedCode == "en", "an unavailable language must fall back to English")
+        expect(unknown.string(for: "missing") == nil, "a key absent everywhere must be reported as missing")
+
+        let format = englishStrings["a11y.headerTitleArtist"] ?? ""
+        let formatted = String(
+            format: format,
+            locale: Locale(identifier: "en"),
+            arguments: ["Song", "Artist"]
+        )
+        expect(formatted == "Groovie, Song, Artist",
+               "positional placeholders must format with the supplied arguments")
+
+        expect(L10n.availableLanguages.map(\.code).contains("en"),
+               "the bundled catalog must expose en")
+        expect(!L10n.t(.menuQuit).isEmpty,
+               "L10n must resolve a bundled key")
+        for argument in ProcessInfo.processInfo.arguments where argument.hasPrefix("--lang=") {
+            let requested = String(argument.dropFirst("--lang=".count))
+            expect(L10n.currentLanguage == requested,
+                   "--lang=\(requested) must select that language")
+        }
+
         // MARK: Report
 
         if failures.isEmpty {

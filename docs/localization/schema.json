@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jseook11/groovie/docs/localization/schema.json",
+  "title": "Groovie language file",
+  "description": "One file per language. Add a language by adding <code>.json; no Swift changes are required.",
+  "type": "object",
+  "required": ["language", "name", "strings"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$",
+      "description": "BCP 47 language tag. Must match the file name."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Language name in that language, e.g. 日本語."
+    },
+    "fallback": {
+      "type": "string",
+      "description": "Language used for missing keys. Normally en."
+    },
+    "complete": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once every en key is translated. make l10n-check treats a complete language strictly."
+    },
+    "strings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

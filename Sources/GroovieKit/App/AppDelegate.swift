@@ -119,8 +119,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             button.image = BrandMark.menuBar
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyDown
-            button.toolTip = "Groovie"
-            button.setAccessibilityLabel("Groovie")
+            button.toolTip = L10n.t(.a11yApp)
+            button.setAccessibilityLabel(L10n.t(.a11yApp))
         }
         statusItem = item
         rebuildMenu()
@@ -155,22 +155,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         menu.addItem(.separator())
 
-        let enableItem = NSMenuItem(title: "활성화", action: #selector(toggleEnabled), keyEquivalent: "")
+        let enableItem = NSMenuItem(title: L10n.t(.menuEnable), action: #selector(toggleEnabled), keyEquivalent: "")
         enableItem.target = self
         enableItem.isEnabled = hasNotch
         enableItem.state = enabled ? .on : .off
         menu.addItem(enableItem)
 
-        let demoItem = NSMenuItem(title: "데모 재생", action: #selector(runDemo), keyEquivalent: "")
+        let demoItem = NSMenuItem(title: L10n.t(.menuDemo), action: #selector(runDemo), keyEquivalent: "")
         demoItem.target = self
         demoItem.isEnabled = hasNotch && enabled
         menu.addItem(demoItem)
 
-        let skinItem = NSMenuItem(title: "레코드 스킨", action: nil, keyEquivalent: "")
+        let skinItem = NSMenuItem(title: L10n.t(.menuSkin), action: nil, keyEquivalent: "")
         let skinMenu = NSMenu()
         skinMenu.autoenablesItems = false
         for skin in VinylSkin.all {
-            let item = NSMenuItem(title: skin.name, action: #selector(selectSkin(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: L10n.t(skin.nameKey), action: #selector(selectSkin(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = skin.id
             item.isEnabled = hasNotch && enabled && controller != nil
@@ -183,17 +183,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         menu.addItem(.separator())
 
-        let retryItem = NSMenuItem(title: "Music 연결 다시 시도", action: #selector(retryMusic), keyEquivalent: "")
+        let retryItem = NSMenuItem(title: L10n.t(.menuRetryMusic), action: #selector(retryMusic), keyEquivalent: "")
         retryItem.target = self
         retryItem.isEnabled = hasNotch && enabled
         menu.addItem(retryItem)
 
-        let musicItem = NSMenuItem(title: "Music 열기", action: #selector(openMusic), keyEquivalent: "")
+        let musicItem = NSMenuItem(title: L10n.t(.menuOpenMusic), action: #selector(openMusic), keyEquivalent: "")
         musicItem.target = self
         menu.addItem(musicItem)
 
         let automationItem = NSMenuItem(
-            title: "자동화 권한 설정…",
+            title: L10n.t(.menuAutomationSettings),
             action: #selector(openAutomationSettings),
             keyEquivalent: ""
         )
@@ -202,7 +202,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Groovie 종료", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.t(.menuQuit), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -218,26 +218,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         guard let menuHeader else { return }
 
         guard hasNotch else {
-            menuHeader.setStatus("사용 가능한 디스플레이를 찾을 수 없습니다")
+            menuHeader.setStatus(L10n.t(.statusNoDisplay))
             return
         }
         guard let controller else {
-            menuHeader.setStatus("오버레이 비활성")
+            menuHeader.setStatus(L10n.t(.statusOverlayInactive))
             return
         }
         let model = controller.model
         guard model.isEnabled else {
-            menuHeader.setStatus("비활성화됨")
+            menuHeader.setStatus(L10n.t(.statusDisabled))
             return
         }
 
         switch model.availability {
         case .appNotRunning:
-            menuHeader.setStatus("Music이 실행 중이 아닙니다")
+            menuHeader.setStatus(L10n.t(.statusMusicNotRunning))
         case .noTrack:
-            menuHeader.setStatus("재생할 트랙이 없습니다")
+            menuHeader.setStatus(L10n.t(.statusNoTrack))
         case .permissionDenied:
-            menuHeader.setStatus("자동화 권한이 필요합니다", warning: true)
+            menuHeader.setStatus(L10n.t(.statusPermissionRequired), warning: true)
         case .playing, .paused:
             let snapshot = controller.playbackSnapshot()
             menuHeader.setContent(
@@ -309,13 +309,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Groovie가 Music을 제어할 수 없습니다"
-        alert.informativeText = """
-        시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 \
-        Groovie가 Music을 제어하도록 허용해 주세요.
-        """
-        alert.addButton(withTitle: "설정 열기")
-        alert.addButton(withTitle: "나중에")
+        alert.messageText = L10n.t(.alertPermissionTitle)
+        alert.informativeText = L10n.t(.alertPermissionBody)
+        alert.addButton(withTitle: L10n.t(.alertOpenSettings))
+        alert.addButton(withTitle: L10n.t(.alertLater))
 
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn {
