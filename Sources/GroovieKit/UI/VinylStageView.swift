@@ -50,6 +50,7 @@ struct VinylStageView: View {
                 )
                 .position(center)
 
+                hoverOverlay(center: center)
                 hud(center: center)
                 confirmGauge(size: size)
 
@@ -93,6 +94,43 @@ struct VinylStageView: View {
             .frame(width: size.width, height: size.height)
             .clipped()
         }
+    }
+
+    /// Hover feedback on the pinned record. The vinyl ring outside the label
+    /// dims while it is the put-away target, and the label catches a soft light
+    /// while it is the play/pause target. Both are clipped by the stage and the
+    /// notch cap, so only the visible half reacts.
+    @ViewBuilder
+    private func hoverOverlay(center: CGPoint) -> some View {
+        Circle()
+            .strokeBorder(
+                .black.opacity(0.16),
+                lineWidth: layout.recordRadius - layout.labelRadius
+            )
+            .frame(width: layout.recordRadius * 2, height: layout.recordRadius * 2)
+            .position(center)
+            .opacity(model.recordHover == .vinyl ? 1 : 0)
+            .animation(.easeOut(duration: 0.16), value: model.recordHover)
+            .allowsHitTesting(false)
+
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        .white.opacity(0.16),
+                        .white.opacity(0.06),
+                        .clear,
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: layout.labelHitRadius
+                )
+            )
+            .frame(width: layout.labelHitRadius * 2, height: layout.labelHitRadius * 2)
+            .position(center)
+            .opacity(model.recordHover == .label ? 1 : 0)
+            .animation(.easeOut(duration: 0.16), value: model.recordHover)
+            .allowsHitTesting(false)
     }
 
     /// Semi-transparent "pull further to lock" meter shown below the record while

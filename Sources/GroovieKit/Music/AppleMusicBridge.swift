@@ -175,6 +175,35 @@ final class AppleMusicBridge {
         completion()
     }
 
+    /// `playpause` is atomic in Music, so it cannot race a state read between
+    /// deciding which command to send and sending it.
+    func togglePlayback(completion: ((Bool) -> Void)? = nil) {
+        queue.async {
+            let source = """
+            tell application "Music"
+                if it is running then
+                    playpause
+                end if
+            end tell
+            """
+            let script = NSAppleScript(source: source)
+            var errorInfo: NSDictionary?
+            script?.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                let error = Self.bridgeError(from: errorInfo)
+                if case .permissionDenied = error {
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(name: .groovieMusicPermissionDenied, object: nil)
+                    }
+                }
+            }
+            if let completion {
+                let succeeded = script != nil && errorInfo == nil
+                DispatchQueue.main.async { completion(succeeded) }
+            }
+        }
+    }
+
     // MARK: - Artwork
 
     func readArtwork(completion: @escaping (Data?) -> Void) {

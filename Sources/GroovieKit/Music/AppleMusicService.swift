@@ -31,6 +31,13 @@ final class AppleMusicService: MusicProviding {
     private var artworkRequestInFlight = false
     private var lastLoggedAvailability: MusicAvailability?
 
+    /// A click on the record flips the UI immediately. Reads that were already
+    /// in flight when the command was sent can still report the old state, so
+    /// hold the requested state until Music agrees or this window expires.
+    private var pendingPlaybackState: Bool?
+    private var pendingPlaybackDeadline: Date?
+    private let pendingPlaybackWindow: TimeInterval = 2.0
+
     // MARK: - Lifecycle
 
     func start() {
@@ -170,6 +177,7 @@ final class AppleMusicService: MusicProviding {
         availability = .noTrack
         nowPlaying = nil
         artwork = nil
+        clearPendingPlayback()
         if changed {
             logAvailabilityIfNeeded()
             onUpdate?()
@@ -222,7 +230,8 @@ final class AppleMusicService: MusicProviding {
             }
 
             let trackID = persistentID.isEmpty ? "\(title)|\(artist)" : persistentID
-            let isPlaying = state == "playing"
+            let resolved = resolvedPlaybackState(reportedPlaying: state == "playing")
+            let isPlaying = resolved.playing
             let snapshot = NowPlaying(
                 trackID: trackID,
                 title: title,
@@ -239,7 +248,13 @@ final class AppleMusicService: MusicProviding {
             let previousAvailability = availability
 
             nowPlaying = snapshot
-            availability = isPlaying ? .playing : (state == "paused" ? .paused : .noTrack)
+            if isPlaying {
+                availability = .playing
+            } else if state == "paused" || resolved.held {
+                availability = .paused
+            } else {
+                availability = .noTrack
+            }
             if availability == .noTrack {
                 // A stopped player still reports the selected track, but there is
                 // nothing to scrub until playback starts.
@@ -262,11 +277,34 @@ final class AppleMusicService: MusicProviding {
         }
     }
 
+    /// Resolve Music's reported play state against a click that has not been
+    /// confirmed yet. The requested state wins until a read agrees with it or
+    /// the window expires, so a stale in-flight read cannot flip the record
+    /// back for a moment.
+    private func resolvedPlaybackState(reportedPlaying: Bool) -> (playing: Bool, held: Bool) {
+        guard let pending = pendingPlaybackState else { return (reportedPlaying, false) }
+        guard let deadline = pendingPlaybackDeadline, Date() < deadline else {
+            clearPendingPlayback()
+            return (reportedPlaying, false)
+        }
+        if reportedPlaying == pending {
+            clearPendingPlayback()
+            return (reportedPlaying, false)
+        }
+        return (pending, true)
+    }
+
+    private func clearPendingPlayback() {
+        pendingPlaybackState = nil
+        pendingPlaybackDeadline = nil
+    }
+
     private func applyNotRunning() {
         guard availability != .appNotRunning || nowPlaying != nil else { return }
         availability = .appNotRunning
         nowPlaying = nil
         artwork = nil
+        clearPendingPlayback()
         logAvailabilityIfNeeded()
         onUpdate?()
     }
@@ -291,6 +329,7 @@ final class AppleMusicService: MusicProviding {
         availability = .permissionDenied
         nowPlaying = nil
         artwork = nil
+        clearPendingPlayback()
         pollTimer?.invalidate()
         pollTimer = nil
         logAvailabilityIfNeeded()
@@ -310,6 +349,27 @@ final class AppleMusicService: MusicProviding {
         }
         bridge.finish(position: position, wasPlaying: wasPlaying) { [weak self] in
             self?.pollNow()
+        }
+    }
+
+    func togglePlayback() {
+        guard var now = nowPlaying else { return }
+        // Reflect the new state immediately so the record starts or stops
+        // spinning without waiting for the AppleScript round trip.
+        now.position = estimatedPosition(at: Date())
+        now.sampledAt = Date()
+        now.isPlaying.toggle()
+        nowPlaying = now
+        availability = now.isPlaying ? .playing : .paused
+        pendingPlaybackState = now.isPlaying
+        pendingPlaybackDeadline = Date().addingTimeInterval(pendingPlaybackWindow)
+        onUpdate?()
+        bridge.togglePlayback { [weak self] success in
+            guard let self else { return }
+            if !success {
+                self.clearPendingPlayback()
+            }
+            self.pollNow()
         }
     }
 

@@ -1,5 +1,14 @@
 import CoreGraphics
 
+/// Which part of the pinned record the pointer is over.
+enum RecordHover: Equatable {
+    case none
+    /// The vinyl outside the label: a click puts the record away.
+    case vinyl
+    /// The centre label: a click toggles playback.
+    case label
+}
+
 enum VinylPhase: Equatable {
     case idle
     case armed
@@ -63,6 +72,11 @@ struct VinylLayout {
 
     let recordRadius: CGFloat = 90
     let labelRadius: CGFloat = 30
+    /// The label is the play/pause target once the record is pinned. Only its
+    /// lower half is visible below the notch, so the hit target reaches a little
+    /// into the vinyl instead of stopping exactly at the printed edge.
+    let labelHitSlop: CGFloat = 12
+    var labelHitRadius: CGFloat { labelRadius + labelHitSlop }
 
     /// 33⅓ RPM.
     let playbackDegreesPerSecond: Double = 200
@@ -110,6 +124,20 @@ struct VinylLayout {
 
     func recordCenter(in size: CGSize, exposure: CGFloat) -> CGPoint {
         CGPoint(x: size.width / 2, y: recordCenterY(exposure: exposure))
+    }
+
+    /// Whether a point in top-left content coordinates lands on the label.
+    func isOnLabel(_ point: CGPoint, exposure: CGFloat) -> Bool {
+        hoverRegion(at: point, exposure: exposure) == .label
+    }
+
+    /// Classify a point for hover feedback and the click target it represents.
+    func hoverRegion(at point: CGPoint, exposure: CGFloat) -> RecordHover {
+        let center = CGPoint(x: windowWidth / 2, y: recordCenterY(exposure: exposure))
+        let distance = hypot(point.x - center.x, point.y - center.y)
+        if distance <= labelHitRadius { return .label }
+        if distance <= recordRadius { return .vinyl }
+        return .none
     }
 
     var hasNotchCap: Bool { capHeight > 0.5 }

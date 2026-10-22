@@ -51,6 +51,9 @@ protocol MusicProviding: AnyObject {
     /// only seek in a scrub: issuing one per drag update made Music restart the
     /// track dozens of times a second for no audible benefit.
     func finishScrub(position: Double, wasPlaying: Bool)
+    /// Flip between playing and paused without moving the position. Used by a
+    /// click on the record's centre label.
+    func togglePlayback()
     func refresh()
 }
 

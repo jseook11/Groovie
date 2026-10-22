@@ -25,7 +25,7 @@ final class OverlayPanel: NSPanel {
         isMovableByWindowBackground = false
         animationBehavior = .none
         becomesKeyOnlyIfNeeded = true
-        acceptsMouseMovedEvents = false
+        acceptsMouseMovedEvents = true
         ignoresMouseEvents = false
         // Keep the panel out of Mission Control's window list and app switching.
         isExcludedFromWindowsMenu = true
@@ -44,6 +44,7 @@ final class OverlayContentView: NSView {
     var onMouseDraggedTo: ((CGPoint, TimeInterval) -> Void)?
     var onMouseUpAt: ((CGPoint, TimeInterval) -> Void)?
     var onScrollWheel: ((NSEvent) -> Void)?
+    var onMouseMoved: (() -> Void)?
 
     private var tracking: NSTrackingArea?
 
@@ -79,7 +80,7 @@ final class OverlayContentView: NSView {
         if let tracking { removeTrackingArea(tracking) }
         let area = NSTrackingArea(
             rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -93,6 +94,10 @@ final class OverlayContentView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         onHoverChanged?(false)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onMouseMoved?()
     }
 
     override func mouseDown(with event: NSEvent) {

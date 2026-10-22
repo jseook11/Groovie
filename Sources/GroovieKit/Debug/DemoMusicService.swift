@@ -51,4 +51,15 @@ final class DemoMusicService: MusicProviding {
         }
         onUpdate?()
     }
+
+    func togglePlayback() {
+        guard var now = nowPlaying else { return }
+        position = min(max(estimatedPosition(at: Date()), 0), duration)
+        now.position = position
+        now.isPlaying.toggle()
+        now.sampledAt = Date()
+        nowPlaying = now
+        availability = now.isPlaying ? .playing : .paused
+        onUpdate?()
+    }
 }

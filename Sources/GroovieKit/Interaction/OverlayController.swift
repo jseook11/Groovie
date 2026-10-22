@@ -52,6 +52,8 @@ final class OverlayController {
     private var demoTask: Task<Void, Never>?
     private var isDemoActive = false
     private var announcedPermissionDenied = false
+    /// Global and local mouse-move monitors while the record is pinned.
+    private var hoverMonitors: [Any] = []
 
     private struct Session {
         var start: CGPoint
@@ -73,6 +75,9 @@ final class OverlayController {
         var wiggle = WiggleDetector()
         var dismissAccumulated: CGFloat = 0
         var latchedInteraction = false
+        /// The press started on the record's centre label, so a click without
+        /// movement toggles playback instead of putting the record away.
+        var centerTap = false
         var scrubArmed = false
         var moved = false
         var confirm = ConfirmAccumulator()
@@ -200,6 +205,9 @@ final class OverlayController {
         content.onScrollWheel = { [weak self] event in
             self?.handleScroll(event)
         }
+        content.onMouseMoved = { [weak self] in
+            self?.refreshRecordHover()
+        }
 
         let panel = OverlayPanel(frame: geometry.idleFrame)
         panel.contentView = content
@@ -212,6 +220,7 @@ final class OverlayController {
         model.exposure = 0
         model.offsetSeconds = 0
         model.isSpinning = false
+        model.recordHover = .none
         spinBaseAngle = 0
         spinBaseTime = CACurrentMediaTime()
 
@@ -237,6 +246,7 @@ final class OverlayController {
 
     private func vanishImmediately() {
         stopTicking()
+        stopHoverTracking()
         session = nil
         scrollSession = nil
         releaseElapsed = 0
@@ -301,6 +311,11 @@ final class OverlayController {
 
     private func handleHover(_ inside: Bool) {
         hoverInside = inside
+        if !inside {
+            clearRecordHover()
+        } else if latched {
+            refreshRecordHover()
+        }
         guard session == nil, model.phase == .idle || model.phase == .armed else { return }
         guard isEnabled else {
             if model.phase == .armed {
@@ -337,7 +352,7 @@ final class OverlayController {
         if pendingConfirmUntil != nil {
             confirmLatch()
             if model.canInteract, music.nowPlaying != nil {
-                beginLatchedMouseInteraction(at: point, timestamp: timestamp)
+                beginLatchedMouseInteraction(at: point, timestamp: timestamp, allowCenterTap: false)
             } else {
                 closeLatched()
             }
@@ -346,7 +361,7 @@ final class OverlayController {
 
         if latched {
             if model.canInteract, music.nowPlaying != nil {
-                beginLatchedMouseInteraction(at: point, timestamp: timestamp)
+                beginLatchedMouseInteraction(at: point, timestamp: timestamp, allowCenterTap: true)
             } else {
                 closeLatched()
             }
@@ -596,8 +611,13 @@ final class OverlayController {
     }
 
     /// The record stays out after a grab. A new drag scrubs; a plain click or an
-    /// upward drag puts it away.
-    private func beginLatchedMouseInteraction(at point: CGPoint, timestamp: TimeInterval) {
+    /// upward drag puts it away, except on the centre label, where a click
+    /// flips playback.
+    private func beginLatchedMouseInteraction(
+        at point: CGPoint,
+        timestamp: TimeInterval,
+        allowCenterTap: Bool
+    ) {
         guard isEnabled, model.canInteract, let now = music.nowPlaying else { return }
         if let scroll = scrollSession {
             scrollSession = nil
@@ -609,6 +629,8 @@ final class OverlayController {
         session.pulled = true
         session.grabbed = true
         session.latchedInteraction = true
+        session.centerTap = allowCenterTap && isOnLabel(at: point)
+        clearRecordHover()
         session.basePosition = music.estimatedPosition(at: Date())
         session.duration = now.duration
         session.wasPlaying = now.isPlaying
@@ -624,6 +646,88 @@ final class OverlayController {
         )
         self.session = session
         startTicking()
+    }
+
+    /// A click on the centre label flips playback but keeps the record out, so
+    /// a pinned record doubles as a play/pause button.
+    private func togglePlaybackFromLabel() {
+        guard let now = music.nowPlaying else { return }
+        interactionLog.debug("label click -> toggle playback")
+        // The click is the instruction. Stop or start the record immediately
+        // instead of waiting for the player's state read to come back.
+        model.isPlaying = !now.isPlaying
+        syncSpin()
+        music.togglePlayback()
+        performHaptic(.alignment)
+    }
+
+    /// Convert an AppKit screen point into the top-left content space the
+    /// layout works in. The panel is borderless and its content fills it, so
+    /// window and content coordinates share the same size.
+    private func contentPoint(forScreenPoint point: CGPoint) -> CGPoint? {
+        guard let panel else { return nil }
+        let inWindow = panel.convertPoint(fromScreen: point)
+        let height = contentView?.bounds.height ?? panel.frame.height
+        return CGPoint(x: inWindow.x, y: height - inWindow.y)
+    }
+
+    private func isOnLabel(at screenPoint: CGPoint) -> Bool {
+        guard let point = contentPoint(forScreenPoint: screenPoint) else { return false }
+        return layout.isOnLabel(point, exposure: model.exposure)
+    }
+
+    // MARK: - Hover feedback
+
+    /// Hover feedback only matters while the record is pinned. A global monitor
+    /// catches moves the non-activating panel does not receive as window
+    /// events; the local one covers the moves it does.
+    private func startHoverTracking() {
+        guard hoverMonitors.isEmpty else { return }
+        let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshRecordHover() }
+        }
+        let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
+            MainActor.assumeIsolated { self?.refreshRecordHover() }
+            return event
+        }
+        if let global { hoverMonitors.append(global) }
+        if let local { hoverMonitors.append(local) }
+        refreshRecordHover()
+    }
+
+    private func stopHoverTracking() {
+        for monitor in hoverMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        hoverMonitors.removeAll()
+        clearRecordHover()
+    }
+
+    private func refreshRecordHover() {
+        guard latched, session == nil, scrollSession == nil, let panel,
+              panel.frame.contains(NSEvent.mouseLocation),
+              let point = contentPoint(forScreenPoint: NSEvent.mouseLocation)
+        else {
+            clearRecordHover()
+            return
+        }
+
+        let region = layout.hoverRegion(at: point, exposure: model.exposure)
+        guard region != model.recordHover else { return }
+        model.recordHover = region
+        switch region {
+        case .label:
+            NSCursor.pointingHand.set()
+        case .vinyl:
+            NSCursor.openHand.set()
+        case .none:
+            NSCursor.arrow.set()
+        }
+    }
+
+    private func clearRecordHover() {
+        guard model.recordHover != .none else { return }
+        model.recordHover = .none
     }
 
     /// One deliberate confirmation gesture: a further downward pull, a horizontal
@@ -668,6 +772,7 @@ final class OverlayController {
         syncSpin()
         startTicking()
         NSCursor.openHand.set()
+        startHoverTracking()
     }
 
     private func closeLatched() {
@@ -694,6 +799,8 @@ final class OverlayController {
                 latchRecord()
             } else if session.moved {
                 latchRecord()
+            } else if session.centerTap {
+                togglePlaybackFromLabel()
             } else {
                 closeLatched()
             }
@@ -737,6 +844,7 @@ final class OverlayController {
 
     private func beginCollapse() {
         guard model.phase != .releasing else { return }
+        stopHoverTracking()
         latched = false
         pendingConfirmUntil = nil
         model.confirmProgress = 0
@@ -1282,6 +1390,7 @@ final class OverlayController {
 
     private func finishCollapse() {
         stopTicking()
+        stopHoverTracking()
         session = nil
         scrollSession = nil
         snapOpenActive = false
@@ -1309,6 +1418,8 @@ final class OverlayController {
                 latchRecord()
             } else if session.moved {
                 latchRecord()
+            } else if session.centerTap {
+                togglePlaybackFromLabel()
             } else {
                 closeLatched()
             }

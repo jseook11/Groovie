@@ -189,6 +189,37 @@ public enum SelfChecks {
         expect(approx(flat.recordCenterY(exposure: flat.fullExposure), 0),
                "on a display without a notch the centre must sit on the screen's top edge")
 
+        // The pinned record doubles as a play/pause button, but only on the
+        // centre label; the rest of the vinyl keeps its click-to-close action.
+        let stageSize = CGSize(width: layout.windowWidth, height: layout.windowHeight)
+        let labelCenter = layout.recordCenter(in: stageSize, exposure: layout.fullExposure)
+        expect(layout.isOnLabel(labelCenter, exposure: layout.fullExposure),
+               "the record centre must be the play/pause target")
+        expect(layout.isOnLabel(
+            CGPoint(x: labelCenter.x + layout.labelHitRadius - 1, y: labelCenter.y),
+            exposure: layout.fullExposure
+        ), "the label hit target must include its slop")
+        expect(!layout.isOnLabel(
+            CGPoint(x: labelCenter.x + layout.labelHitRadius + 2, y: labelCenter.y),
+            exposure: layout.fullExposure
+        ), "a point beyond the label target must not toggle playback")
+        expect(!layout.isOnLabel(
+            CGPoint(x: labelCenter.x, y: labelCenter.y + layout.recordRadius * 0.8),
+            exposure: layout.fullExposure
+        ), "clicking the outer vinyl must still put the record away")
+        expect(layout.labelHitRadius < layout.recordRadius,
+               "the label target must stay inside the record")
+        expect(layout.hoverRegion(at: labelCenter, exposure: layout.fullExposure) == .label,
+               "the label must be the play/pause hover region")
+        expect(layout.hoverRegion(
+            at: CGPoint(x: labelCenter.x, y: labelCenter.y + layout.labelHitRadius + 8),
+            exposure: layout.fullExposure
+        ) == .vinyl, "the vinyl ring must be the put-away hover region")
+        expect(layout.hoverRegion(
+            at: CGPoint(x: labelCenter.x, y: labelCenter.y + layout.recordRadius + 4),
+            exposure: layout.fullExposure
+        ) == .none, "a point outside the record must not react")
+
         // MARK: Music read parsing
 
         let delimiter = "\u{1F}"
