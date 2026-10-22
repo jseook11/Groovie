@@ -170,6 +170,10 @@ For a full walkthrough of every gesture, threshold, and edge case, see the
 | Play / pause | Click the label (pinned) or the notch (closed) | Click the label or the notch |
 | Next / previous track | — | Swipe right / left |
 | Put it back | Click the vinyl, or drag up | Scroll up |
+| Copy to the desktop | ⌥-drag a fully opened record | ⌥-drag |
+| Package the album | ⌥-click a fully opened record | ⌥-click |
+| Move a desktop copy | ⌥-drag it | ⌥-drag |
+| Remove a desktop copy | Drag its centre into the top notch area | Same |
 | Cancel a seek | Shake four times in one second | — |
 
 With the record closed, the notch strip still has its own controls:
@@ -210,6 +214,14 @@ confirm.
 Once pinned, click the label to toggle playback, swipe the label horizontally to change tracks,
 and click the vinyl, drag up, or scroll up to close. Without a confirm gesture, the record waits
 briefly after release and then springs back.
+
+### Desktop copies
+
+Once the record is fully out, hold ⌥ and drag it to leave a static copy on the desktop.
+⌥-click without dragging packages the album as a cover instead. Desktop copies are decorative:
+they never play, scrub, or skip. Hold ⌥ to move one, and drop its centre on the top notch area
+to remove it. The status menu can clear them all. Copies survive a relaunch and stay on the
+display where they were placed.
 
 ### Trackpad
 

@@ -46,6 +46,31 @@ uses the 260/24 pair above.
 | Idle margin | 6 pt | Extra horizontal and downward hit area around the strip. |
 | Stage size | 300 × 190 pt | Expanded overlay; the width grows to fit a wider physical notch. |
 
+## Desktop records
+
+`Desktop/DesktopRecord.swift` (geometry), `Desktop/DesktopRecordController.swift`, and
+`Desktop/DesktopArtworkRenderer.swift`.
+
+| Constant | Default | Effect |
+| --- | ---: | --- |
+| `discDiameter` | 180 pt | Bare record copy. |
+| `coverSide` | 200 pt | Album cover side. |
+| `sleevePeek` | 70 pt | Inner-sleeve strip visible beside the cover. |
+| `shadowPadding` | 18 pt | Transparent margin baked into every rendered image. |
+| `cascadeStep` | 24 pt | Offset between packaged-album slots. |
+| `cascadeCount` | 5 | Slots before the cascade wraps. |
+| `maxRecords` | 100 | Safety cap for desktop items. |
+| Fade-in | 0.18 s | One-time appearance animation; nothing runs afterwards. |
+| Option poll | 20 Hz | Only while the pointer is near an item; no timer at rest. |
+
+Desktop windows use `CGWindowLevelForKey(.desktopIconWindow)`, below normal application
+windows. During a drag the item is temporarily raised to `statusBar + 2`; the delete halo is
+`statusBar + 1`, and the copy ghost is `statusBar + 3`. Items opt into `.canJoinAllSpaces` so
+they appear on every Space.
+
+State lives in `~/Library/Application Support/Groovie/desktop-records.json`, with artwork in
+`artwork/<uuid>.png` next to it.
+
 ## Scroll
 
 Scroll input has no button-release event, so the policy is time-based. Values live in
