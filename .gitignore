@@ -4,3 +4,17 @@ build/
 *.xcodeproj
 
 .claude/
+
+# Local credentials and signing material
+.env
+.env.*
+*.p8
+*.p12
+*.pem
+*.key
+*.cer
+*.csr
+*.mobileprovision
+*.provisionprofile
+xcuserdata/
+DerivedData/
