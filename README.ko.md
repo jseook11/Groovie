@@ -306,6 +306,7 @@ docs/design/                            앱 아이콘 마스터 시안
 docs/localization/                     번역 가이드, JSON 스키마, 키 문맥
 docs/ux-guide.md                       전체 인터랙션 가이드
 docs/tuning.md                         상수·기본값·구현 메모
+docs/desktop-records.md                설계 노트: 바탕화면 장식 레코드 (미구현)
 docs/record-crate.md                   설계 노트: 레코드 상자 / 플레이리스트 (미구현)
 docs/record-break.md                   채택하지 않은 대안: 레코드 떼어내기
 Scripts/                                앱 번들링, 아이콘 생성, 로컬라이제이션 검사

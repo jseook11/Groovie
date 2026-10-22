@@ -302,6 +302,7 @@ docs/design/                            app-icon master art
 docs/localization/                     translation guide, JSON schema, key context
 docs/ux-guide.md                       full interaction guide (Korean)
 docs/tuning.md                         constants, defaults, and implementation notes
+docs/desktop-records.md                design note: decorative desktop records (unbuilt)
 docs/record-crate.md                   design note: record crate / playlists (unbuilt)
 docs/record-break.md                   rejected alternative: breaking the record
 Scripts/                                app bundling, icon generation, localization checks
