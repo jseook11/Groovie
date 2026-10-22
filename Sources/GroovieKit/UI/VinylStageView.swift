@@ -97,18 +97,29 @@ struct VinylStageView: View {
     }
 
     /// Hover feedback on the pinned record. Only the centre label reacts: it
-    /// dims while it is the play/pause target. The vinyl itself stays still so
-    /// the disc does not flicker as the pointer crosses it. The effect is
-    /// clipped by the stage and the notch cap, so only the visible half reacts.
+    /// dims while it is the play/pause target, and a faint transport glyph
+    /// previews what a click will do. The vinyl itself stays still so the disc
+    /// does not flicker as the pointer crosses it. The effect is clipped by the
+    /// stage and the notch cap, so only the visible half reacts.
     @ViewBuilder
     private func hoverOverlay(center: CGPoint) -> some View {
-        Circle()
-            .fill(.black.opacity(0.24))
-            .frame(width: layout.labelRadius * 2, height: layout.labelRadius * 2)
-            .position(center)
-            .opacity(model.recordHover == .label ? 1 : 0)
-            .animation(.easeOut(duration: 0.16), value: model.recordHover)
-            .allowsHitTesting(false)
+        ZStack {
+            Circle()
+                .fill(.black.opacity(0.38))
+
+            // The label's centre sits on the notch edge, so the glyph is
+            // nudged into the half that stays visible below it.
+            Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.white.opacity(0.72))
+                .shadow(color: .black.opacity(0.5), radius: 1.5, y: 0.5)
+                .offset(x: model.isPlaying ? 0 : 0.6, y: layout.labelRadius * 0.40)
+        }
+        .frame(width: layout.labelRadius * 2, height: layout.labelRadius * 2)
+        .position(center)
+        .opacity(model.recordHover == .label ? 1 : 0)
+        .animation(.easeOut(duration: 0.16), value: model.recordHover)
+        .allowsHitTesting(false)
     }
 
     /// Semi-transparent "pull further to lock" meter shown below the record while
