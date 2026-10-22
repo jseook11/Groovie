@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" role="img" aria-labelledby="title desc">
+  <title id="title">The Groovie gesture map</title>
+  <desc id="desc">Four steps: hover the notch, pull down to grab the record, spin it sideways to seek, and pull once more to pin it.</desc>
+
+  <rect x="0.5" y="0.5" width="999" height="299" rx="24" fill="#F2E9D8" stroke="#E0D2B8"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <!-- 1. Hover -->
+    <g transform="translate(0,0)">
+      <rect x="55" y="44" width="140" height="52" rx="10" fill="#0B0B0C"/>
+      <rect x="105" y="98" width="40" height="2" rx="1" fill="#B3543D"/>
+      <path d="M168 112 L168 134 L174 128 L179 139 L184 136 L179 126 L187 126 Z" fill="#3A342B"/>
+      <text x="125" y="235" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">1 · Hover</text>
+      <text x="125" y="257" text-anchor="middle" font-size="12" fill="#7A6F5E">a faint strip marks the notch</text>
+    </g>
+
+    <!-- 2. Pull to grab -->
+    <g transform="translate(250,0)">
+      <circle cx="125" cy="94" r="50" fill="#151517"/>
+      <circle cx="125" cy="94" r="50" fill="none" stroke="#2E2E33" stroke-width="1.5"/>
+      <circle cx="125" cy="94" r="17" fill="#EBE0C9"/>
+      <circle cx="125" cy="94" r="17" fill="none" stroke="#B3543D" stroke-width="1.5"/>
+      <circle cx="125" cy="94" r="2" fill="#0B0B0C"/>
+      <rect x="55" y="42" width="140" height="52" rx="10" fill="#0B0B0C"/>
+      <rect x="55" y="42" width="140" height="52" rx="10" fill="none" stroke="#1F1F22"/>
+      <path d="M125 158 L125 184" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M118 177 L125 185 L132 177" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="125" y="235" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">2 · Pull</text>
+      <text x="125" y="257" text-anchor="middle" font-size="12" fill="#7A6F5E">it snaps out halfway down</text>
+    </g>
+
+    <!-- 3. Spin to seek -->
+    <g transform="translate(500,0)">
+      <circle cx="125" cy="94" r="50" fill="#151517"/>
+      <circle cx="125" cy="94" r="50" fill="none" stroke="#2E2E33" stroke-width="1.5"/>
+      <circle cx="125" cy="94" r="17" fill="#EBE0C9"/>
+      <circle cx="125" cy="94" r="17" fill="none" stroke="#B3543D" stroke-width="1.5"/>
+      <circle cx="125" cy="94" r="2" fill="#0B0B0C"/>
+      <rect x="55" y="42" width="140" height="52" rx="10" fill="#0B0B0C"/>
+      <rect x="55" y="42" width="140" height="52" rx="10" fill="none" stroke="#1F1F22"/>
+      <path d="M68 128 L182 128" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M77 120 L68 128 L77 136" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M173 120 L182 128 L173 136" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="125" y="235" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">3 · Spin</text>
+      <text x="125" y="257" text-anchor="middle" font-size="12" fill="#7A6F5E">right rewinds · left fast-forwards</text>
+    </g>
+
+    <!-- 4. Pin -->
+    <g transform="translate(750,0)">
+      <circle cx="125" cy="94" r="50" fill="#151517"/>
+      <circle cx="125" cy="94" r="50" fill="none" stroke="#2E2E33" stroke-width="1.5"/>
+      <circle cx="125" cy="94" r="17" fill="#EBE0C9"/>
+      <circle cx="125" cy="94" r="17" fill="none" stroke="#B3543D" stroke-width="1.5"/>
+      <circle cx="125" cy="94" r="2" fill="#0B0B0C"/>
+      <rect x="55" y="42" width="140" height="52" rx="10" fill="#0B0B0C"/>
+      <rect x="55" y="42" width="140" height="52" rx="10" fill="none" stroke="#1F1F22"/>
+      <rect x="85" y="160" width="80" height="6" rx="3" fill="#DCCDB2"/>
+      <rect x="85" y="160" width="80" height="6" rx="3" fill="#B3543D"/>
+      <text x="125" y="235" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">4 · Pin</text>
+      <text x="125" y="257" text-anchor="middle" font-size="12" fill="#7A6F5E">click the label to play or pause</text>
+    </g>
+
+    <line x1="250" y1="60" x2="250" y2="200" stroke="#E0D2B8"/>
+    <line x1="500" y1="60" x2="500" y2="200" stroke="#E0D2B8"/>
+    <line x1="750" y1="60" x2="750" y2="200" stroke="#E0D2B8"/>
+  </g>
+</svg>

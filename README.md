@@ -1,189 +1,312 @@
-# Groovie
+<p align="right"><a href="README.ko.md">한국어</a> · English</p>
 
-MacBook 노치 안에 LP판이 들어 있다는 설정으로 만든 음악 스크럽 인터페이스입니다.
-노치에서 레코드를 아래로 당겨 꺼내고, 잡은 채 좌우로 돌려 재생 위치를 탐색한 뒤,
-놓으면 레코드가 노치로 돌아갑니다. 별도의 슬라이더나 버튼 없이 레코드 하나만 조작합니다.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.jpg">
+    <img src="docs/assets/hero.jpg" alt="The lower half of a vinyl record emerging from the black camera housing at the top of a MacBook" width="880">
+  </picture>
+</p>
 
-```
-Idle → Armed (hover) → Pulling (8 px) → Grabbed (80 px) ⇄ Scrubbing → Releasing → Idle
-```
+<h1 align="center">Groovie</h1>
 
-## 현재 구현
+<p align="center"><em>A turntable hidden in the MacBook notch.</em></p>
 
-- **Pull to Grab (magnet)** — 노치에서 시작한 수직 드래그만 Pull로 인식합니다. 8px에서 당김이 시작되고,
-  40px(중간)을 넘는 순간 자석처럼 **레코드가 완전히 튀어나오며 Grab**됩니다. 그 전에 놓으면
-  스프링으로 쏙 들어갑니다. 레코드는 **풀 원으로 렌더링**되고 노치가 상단을 덮습니다.
-  노치 캡은 무광 검정으로 두고, 레코드에는 살짝 밝은 차콜 바탕·홈·고정 반사광·림라이트를 넣어
-  두 재질이 하나의 검은 덩어리로 뭉개지지 않게 했습니다. 캡 하단에는 은은한 0.6px 엣지 라인과
-  짧은 접촉 그림자가 있습니다. 레코드의 중심은 노치 끝(경계선)에 정확히 놓입니다.
-- **레코드 스킨** — 클래식 블랙(기본), 러스트, 딥 틸, 스모크, 모노 5종.
-  상태 메뉴의 **레코드 스킨**에서 고르면 즉시 반영되고 다음 실행에도 유지됩니다.
-  스킨은 바이닐 바탕·홈·반사광만 바꾸며, 레이블은 항상 트랙을 따릅니다:
-  앨범 아트가 있으면 아트, 없으면 트랙 정보에서 뽑은 액센트 색과 인쇄 디테일.
-  모노 스킨만 트랙 색을 25% 채도로 낮춰 무채색에 가깝게 유지합니다.
-- **로고와 상태 메뉴 헤더** — 메뉴 바 아이콘은 노치+반쯤 나온 레코드 마크를
-  코드로 그린 단색 템플릿입니다. 상태 메뉴 상단은 **252pt 고정 폭** 헤더로,
-  왼쪽 로고·곡 제목·아티스트·얇은 진행 바를 보여줍니다. 제목이 폭을 넘으면
-  0.7초 뒤부터 20pt/s로 흐르는 마퀴가 되고, 짧으면 정지합니다. 재생/일시정지
-  문구는 넣지 않으며, Music 미실행·트랙 없음·권한 필요 같은 **행동이 필요한
-  상태만** 헤더에 표시합니다. 앱 아이콘은 `Resources/AppIcon.icns`로 패키징됩니다.
-- **Drag to Rotate / Velocity to Seek** — 잡은 뒤 좌우 이동으로 탐색합니다.
-  오른쪽 = 되감기, 왼쪽 = 앞으로 감기. 이동 속도가 빠를수록 같은 거리에서 더 크게 탐색합니다.
-- **중앙 레이블 클릭 = 재생/일시정지** — 고정된 레코드의 중앙(앨범 아트 레이블)을 클릭하면
-  재생/일시정지가 토글되고 레코드는 나온 채로 유지됩니다. 레코드 회전과 상태는 클릭 즉시
-  반영되고(낙관적 업데이트), Music의 확인 응답이 늦게 도착해도 잠깐 되돌아가지 않습니다.
-  레이블은 중심이 노치 경계에 있어 아래쪽 반원만 보이므로, 히트 영역은 레이블 반경 30pt보다
-  12pt 넉넉한 42pt로 잡았습니다. 레이블 바깥의 바이닐을 클릭하면 기존처럼 레코드가 닫힙니다.
-  **호버 피드백** — 중앙 레이블 위에서는 레이블이 조금 더 어두워지고, 그 위로 현재 상태에 따라
-  일시정지(❚❚) 또는 재생(▶) 기호가 연하게 나타나 클릭 결과를 미리 보여줍니다. 포인팅 커서도
-  함께 표시됩니다. 바깥 바이닐은 호버해도 시각적으로 반응하지 않아, 포인터가 판을 지나갈 때
-  화면이 흔들리지 않습니다. 효과는 노치 캡에 가려진 위쪽 절반에는 보이지 않습니다.
-- **노치에서 바로 / 곡 넘기기** — 레코드를 꺼내지 않고도 노치 영역을 **한 번 클릭**하면
-  재생/일시정지, **가로 두 손가락 스와이프**로 곡을 넘길 수 있습니다.
-  오른쪽 = 다음 곡, 왼쪽 = 이전 곡. 고정된 레코드에서도 **중앙 레이블 위**에서 시작한
-  스와이프만 곡을 넘기며, 바이닐 위에서는 기존처럼 탐색합니다.
-  오작동을 막기 위해 **90pt 이상 이동 + 세로 대비 1.5배 이상 가로 우세**여야 하고,
-  한 제스처당 한 번만 넘깁니다. 세로 스크롤이 우세하면 기존 열기/닫기/confirm으로 유지됩니다.
-- **Confirm to latch / magnet put-back** — Grab된 레코드는 아직 고정이 아닙니다. 다음 중 하나의
-  **confirm 제스처**가 있어야 고정됩니다.
-  - 스냅된 상태에서 **아래로 240px 더 당기기**(빠르게 당기면 가속도가 붙어 더 짧게 완료)
-  - 놓은 뒤 **1초 안에 다시 끌기**(마우스) / 잠시(0.8초) 멈춘 뒤 다시 **아래로** 스크롤하기
+<p align="center">
+  <a href="#requirements"><img src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white&style=flat-square" alt="macOS 14 or later"></a>
+  <a href="#requirements"><img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white&style=flat-square" alt="Swift 6.0"></a>
+  <a href="#apple-music"><img src="https://img.shields.io/badge/Apple%20Music-driven-FA2D48?logo=applemusic&logoColor=white&style=flat-square" alt="Apple Music"></a>
+  <a href="#how-it-works"><img src="https://img.shields.io/badge/dependencies-none-3DA639?style=flat-square" alt="No dependencies"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4C78A8?style=flat-square" alt="MIT License"></a>
+</p>
 
-  레코드 아래에는 **반투명 confirm 게이지**가 표시됩니다. 게이지는 스냅되는 순간 **0에서 시작**하고,
-  추가로 아래로 당기면 채워지며 가득 차면 자동으로 confirm됩니다(햅틱). 빠르게 당길수록 속도 계수
-  (최대 3.2×)가 붙어 240px보다 짧은 이동으로도 찰 수 있습니다. **Confirm 중에는 가로 데드존이
-  3배(30→90px)로 넓어져, 세로로 당기는 동안 좌우 흔들림으로 탐색되지 않습니다. 가로 이동은
-  confirm 사유가 되지 않습니다.** Confirm 후에는 손을 놓아도 나온 채로 고정되고,
-  **클릭 / 위로 끌기 / 위로 스크롤**로 닫습니다.
-  Confirm 없이 그냥 놓으면 약 1초 동안 대기한 뒤 스프링으로 들어갑니다.
-  원래 일시정지 상태였다면 닫은 뒤에도 일시정지합니다.
-- **Two-finger scroll** — 커서가 노치 위에 있을 때 두 손가락 스크롤로도 조작할 수 있습니다.
-  아래로 스크롤하면 중간 지점에서 자석처럼 완전히 나오고(햅틱), 레코드가 나온 뒤 바이닐 위의
-  좌우 스크롤은 탐색, 위로 스크롤은 닫기입니다. 노치가 닫힌 상태나 고정된 레코드의 중앙
-  레이블 위에서 가로로 스와이프하면 곡이 바뀝니다. 추가로 더 내려 게이지를 채우거나, 잠시
-  멈춘 뒤 다시 아래로 스크롤하면 confirm되어 고정됩니다. 가로 스크롤은 confirm 사유가 아닙니다.
-  Confirm 없이 멈추면 약 1.4초 뒤 들어갑니다.
-- **Wiggle to cancel** — 잡은 상태에서 좌우로 빠르게 흔들면(1초 안에 4회 방향 전환)
-  이번 탐색을 취소하고 잡기 직전의 재생 위치로 되돌립니다. 레코드가 고정된 상태라면
-  취소 후에도 나온 채로 유지됩니다.
-- **Return to Playback** — 스크럽이 끝나면 수동 회전에서 33⅓ RPM 자동 회전으로 이어집니다.
-- **노치 없는 디스플레이** — 카메라 하우징이 없으면 화면 상단 중앙을 동일한 경계선으로 사용합니다.
-  레코드 중심이 화면 상단 끝에 오고, 아래쪽 반원이 보입니다(내부적으로는 풀 원 렌더링).
-- **Apple Music 연동** — `Music.app`의 현재 트랙, 재생 상태, 재생 위치, 앨범 아트를 읽고
-  0.1초 수준으로 seek합니다. 앨범 아트가 없으면 트랙 정보로 종이 레이블을 그립니다.
-- **데모** — Music이 없어도 상태 메뉴의 “데모 재생”으로 전체 인터랙션을 볼 수 있습니다.
+<p align="center">
+  <a href="#why">Why</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#requirements">Requirements</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#development">Development</a> ·
+  <a href="#tuning">Tuning</a> ·
+  <a href="#known-limitations">Limitations</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
-## 요구 사항
+---
 
-- macOS 14 이상 (macOS 26에서 개발/검증)
-- Swift 6.3 Command Line Tools (Xcode 프로젝트 없이 SwiftPM으로 빌드)
-- Music.app (실제 음악 연동 시)
+Groovie turns the MacBook camera notch into a small turntable for Apple Music. The record lives
+inside the notch. Pull it down and it snaps out with a magnetic detent. Grab it and turn it
+sideways to seek — slowly for precision, quickly to jump. Pull once more and it stays out, ready
+for play/pause and track changes. Let go and it drops back into the notch.
 
-## 빌드와 실행
+Everything is one physical object. There is no slider, no popover, and no window to arrange:
+just a record that behaves like a record.
 
-```sh
-make app      # build/Groovie.app 생성 (release)
-make run      # 빌드 후 실행
-make test     # 헤드리스 상호작용 모델 검사
-make demo     # 데모를 실행하고 화면을 캡처 (build/demo.png)
-make icon     # 앱 아이콘 시안에서 Resources/AppIcon.icns 재생성
-```
+## Why
 
-`make test`는 `--self-test` 모드로 스크럽 감도 곡선, 방향, 경계 클램프, 레이아웃,
-Music 읽기 파서, 시간 표시 포맷을 검사합니다.
+The notch is always black, always top-centre, and always above whatever you are doing. That makes
+it the one piece of screen real estate where a skeuomorphic object can live without competing with
+the desktop. Groovie treats the notch as a record sleeve and the record as the control.
 
-## 사용법
+Only the lower half of the record is ever visible. That is a deliberate constraint: the silhouette
+reads as *a record pulled halfway out of a sleeve*, it stays inside the notch column, and it gives
+the interaction an obvious resting place.
 
-1. Music에서 곡을 재생하거나 일시정지합니다. (트랙이 로드되어 있어야 합니다.)
-2. 노치 위로 커서를 올리면 노치 아래에 1px 정도의 미세한 표시가 나타납니다.
-   이 표시는 Music 실행 여부나 트랙 유무와 관계없이 항상 나옵니다.
-3. 레코드를 꺼내지 않고도 노치 영역에서 바로 조작할 수 있습니다.
-   **한 번 클릭** = 재생/일시정지, **가로 두 손가락 스와이프** = 오른쪽 다음 곡 / 왼쪽 이전 곡.
-4. 노치 안에서 **아래로** 끌어당깁니다. 중간(40px)을 넘으면 레코드가 자석처럼 완전히 나오고,
-   중심이 노치 끝에 옵니다. 그 전에 놓으면 다시 쏙 들어갑니다.
-5. 잡은 채로 **오른쪽으로 밀면 되감기**, **왼쪽으로 밀면 앞으로 감기**입니다.
-   천천히 움직이면 정밀하게, 빠르게 움직이면 크게 탐색합니다.
-6. Confirm 제스처(아래로 더 당기기 / 놓은 뒤 1초 안에 다시 끌기)를 하면
-   해당 위치부터 재생되고 레코드가 **고정**됩니다. 고정 후에는 **중앙 레이블 클릭으로
-   재생/일시정지**, 레이블 바깥 클릭이나 위로 끌어 닫습니다.
-   (스크롤 모드에서는 위로 스크롤) Confirm 없이 놓으면 마우스는 1초, 스크롤은 1.4초 뒤
-   다시 들어갑니다.
-   원래 일시정지 상태였다면 일시정지가 유지됩니다.
+## Features
 
-시작 위치가 트랙의 0초이거나 끝에 닿으면 그 이상 탐색하지 않고 레코드도 더 돌지 않습니다.
-최초 이동이 수평이거나 위쪽이면 Pull로 인식하지 않습니다.
+### The record
 
-### 두 손가락 스크롤
+- **Pull to grab.** A vertical drag that starts in the notch begins pulling at 8 pt. At 40 pt the
+  magnet takes over and the record snaps fully out with a light haptic. Release before the detent
+  and it springs back.
+- **Drag to rotate.** Hold the record and move sideways to turn it. Right rewinds, left
+  fast-forwards, and faster gestures seek farther per point. The ends of the track clamp, so the
+  record stops turning at 0:00 and at the end of the song.
+- **Pin it.** While grabbed, pull 240 pt farther — or grab again within a second — and the record
+  stays out. A translucent gauge under the record fills as you pull; velocity makes it fill up to
+  3.2× faster. While pinning, the horizontal dead zone widens to 90 pt so a vertical pull never
+  turns into an accidental seek.
+- **Put it back.** Click the vinyl, drag up, or scroll up. The record springs into the notch and
+  playback resumes at the chosen position. If it was paused before, it stays paused.
+- **Wiggle to cancel.** Shake the record — four direction changes of 8 pt or more within one
+  second — to abandon the seek and return to where you grabbed it.
+- **Return to 33⅓.** When the scrub ends, manual rotation eases back into playback at 33⅓ RPM
+  (200°/s).
 
-노치 위에 커서를 둔 채 두 손가락으로 스크롤합니다.
+### Playback
 
-- **아래로 스크롤** — 레코드가 나옵니다. 중간 지점에서 자석처럼 완전히 펴지고(햅틱) 노치 끝에 섭니다.
-- **좌우 스크롤** — 오른쪽은 되감기, 왼쪽은 앞으로 감기. 속도에 따라 감도가 달라집니다.
-  탐색은 한 방향으로 약 30px 이상 움직여야 시작됩니다(데드존). 세로로 내리는 동안의
-  미세한 수평 흔들림으로는 재생 위치가 바뀌지 않습니다.
-  단, **노치가 닫힌 상태**이거나 **고정된 레코드의 중앙 레이블 위**에서는 좌우 스와이프가
-  곡 넘기기가 됩니다(아래 항목).
-- **가로 스와이프 = 곡 넘기기** — 오른쪽은 다음 곡, 왼쪽은 이전 곡입니다.
-  90pt 이상 움직이고 세로 이동보다 1.5배 이상 가로여야 하며, 한 제스처당 한 번만 넘깁니다.
-  제스처 시작 시 축이 고정되므로, 세로로 시작한 스크롤이 도중에 곡을 넘기지 않습니다.
-  고정된 레코드에서는 **중앙 레이블 위에서 시작한 스와이프만** 곡을 넘기고, 바이닐 위에서는
-  기존처럼 탐색합니다. 탐색하려면 포인터를 레이블 바깥으로 옮기세요.
-- **노치 클릭** — 레코드를 꺼내지 않고 닫힌 노치 영역을 한 번 클릭하면 재생/일시정지합니다.
-  Music이 없거나 트랙이 없을 때는 기존처럼 Music을 앞으로 가져옵니다.
-- **위로 스크롤** — 레코드를 노치 안으로 되돌립니다. 되돌린 시점의 위치가 확정됩니다.
-- **Confirm** — 스냅 후 추가로 더 내리면 아래의 반투명 게이지가 채워지고, 가득 차면 고정됩니다.
-  스크롤은 480(포인터의 2배)을 채워야 하며, 빠르게 내리면 가속도가 붙어 더 짧게 완료됩니다.
-  잠시(0.8초 이상) 멈췄다가 다시 **아래로** 스크롤해도 고정됩니다. 가로 스크롤은 confirm 사유가
-  아니며, confirm 중에는 가로 데드존이 90px로 넓어집니다. 고정되면 입력이 멈춰도 유지됩니다.
-- **Confirm 없이 멈추면** — 약 1.4초 뒤 스프링으로 들어갑니다.
-- 트랙패드의 관성(momentum) 이벤트는 탐색에 사용하지 않습니다.
+- **Click the label.** Once pinned, clicking the centre label toggles play/pause and the record
+  stays out. The record's rotation and the UI update immediately; a short hold keeps a stale Apple
+  Music poll from flipping the state back.
+- **Hover hint.** On a pinned record, hovering the label darkens it, reveals a faint ❚❚ or ▶
+  glyph, and changes the cursor to a pointing hand. The vinyl itself never reacts, so moving the
+  pointer across the record does not make the screen flicker. The label's visible half is small,
+  so the hit target is 42 pt — a 30 pt label plus 12 pt of slop.
+- **Skip tracks.** A horizontal two-finger swipe over the notch, or over a pinned record's label,
+  goes to the next or previous track. On the pinned record, a swipe that starts on the vinyl still
+  scrubs.
+- **Click the notch.** With the record closed, a single click over the notch toggles play/pause.
+  With no track loaded, it brings Music forward instead.
 
-### 탐색 취소 (Wiggle)
+### The notch
 
-레코드를 잡고 좌우로 빠르게 흔들면 — 1초 안에 8px 이상의 방향 전환이 4번 이상 —
-이번 탐색 전체를 취소하고, 잡았던 순간의 재생 위치로 되돌립니다.
-살짝 흔들리거나 정밀 탐색 중의 작은 방향 전환으로는 취소되지 않습니다.
-취소 시 가벼운 햅틱이 울리고 레코드가 노치로 들어갑니다.
+- **Out of the way.** The overlay is a borderless, non-activating panel one level above the status
+  bar. It never steals focus or activates the app, and there is no Dock icon.
+- **Works without a notch.** On displays without a camera housing, the top-centre 179 pt strip
+  behaves exactly the same way.
+- **Status menu.** A fixed 252 pt header with the logo, track, artist, and progress. Long titles
+  scroll after 0.7 s; short ones stay still. Only actionable states — Music closed, no track,
+  permission needed — are surfaced there.
+- **Five skins.** Classic black, rust, deep teal, smoke, and mono. The label always follows the
+  track: album art when available, otherwise a paper label generated from the track's palette.
+- **English and Korean UI**, discovered from JSON files at runtime.
 
-### 노치 없는 디스플레이
+### Apple Music
 
-카메라 하우징이 없는 화면에서는 화면 상단 중앙 179pt 영역이 상호작용 영역이 됩니다.
-레코드는 화면 상단 끝에서 나오며, 노치가 있을 때와 똑같이 중심이 경계선에 놓입니다.
-디스플레이가 여러 개면 내장 노치 디스플레이를 우선 사용합니다.
+- Reads the current track, play state, position, duration, and artwork through AppleScript.
+- Seeks with a ~100 ms target.
+- Opens Music when it is not running, and brings it forward when there is no track to play.
+- Explains permission problems instead of failing silently.
 
-## Music 권한
+## Requirements
 
-Groovie는 AppleScript로 Music을 제어합니다. 앱을 시작할 때 Music이 실행 중이
-아니면 Music을 자동으로 엽니다. 실행 중이지만 재생할 트랙이 없으면 Music을 앞으로
-가져와 곡을 고를 수 있게 합니다. 첫 실행 시 “Groovie wants to control Music”
-자동화 권한 요청이 뜨면 **허용**해야 합니다.
+- macOS 14 Sonoma or later (developed and tested on macOS 26)
+- Swift 6.0+ toolchain — Command Line Tools are enough; there is no Xcode project
+- Apple Music for real playback; the built-in demo mode works without it
 
-- 거부한 경우: 시스템 설정 → 개인정보 보호 및 보안 → 자동화 → Groovie → Music을 켜거나,
-  상태 메뉴의 “Music 연결 다시 시도”를 사용하세요.
-- 상태 메뉴 상단에 곡 제목·아티스트·진행 바가 표시됩니다. 연결 문제가 있으면
-  그 자리에 Music 미실행/트랙 없음/권한 필요 문구가 대신 나옵니다.
-- 앱은 로컬에서 ad-hoc 서명됩니다. 다시 빌드하면 코드 서명이 바뀌어
-  macOS가 자동화 권한을 다시 물을 수 있습니다. 개발 중에는 허용을 다시 눌러주세요.
-
-> Music 앱만 지원합니다. Spotify의 AppleScript는 재생 위치 seek를 지원하지 않습니다.
-
-## 언어
-
-UI는 시스템 언어를 따릅니다. 영어·한국어가 기본 포함되어 있고, 언어별 문자열은
-`Sources/GroovieKit/Resources/Localization/<code>.json` 파일 하나로 정의됩니다.
-파일을 추가하면 코드 수정 없이 언어가 자동으로 발견됩니다.
+## Install
 
 ```sh
-swift Scripts/new-language.swift ja "日本語"
-make l10n-check
+git clone https://github.com/jseook11/Groovie.git
+cd Groovie
 make app
-open build/Groovie.app --args --lang=ja
+open build/Groovie.app
 ```
 
-번역 규칙과 패키징 방식은 [docs/localization/README.md](docs/localization/README.md),
-키별 문맥은 [docs/localization/keys.md](docs/localization/keys.md)를 참고하세요.
+Move `build/Groovie.app` to `/Applications` to keep it around, and add it to
+**System Settings → General → Login Items** if you want it at login.
 
-## 개발용 모드
+There is no installer and no notarized binary yet. The app is ad-hoc signed locally, which is
+enough for development and for the Music automation prompt.
+
+### First launch
+
+1. Groovie appears in the menu bar. It has no Dock icon and no main window.
+2. The first Music command triggers **“Groovie wants to control Music”**. Choose **Allow**.
+3. If access was denied, enable it in **System Settings → Privacy & Security → Automation →
+   Groovie → Music**, or use **Reconnect Music** in the status menu.
+
+## Usage
+
+<p align="center">
+  <img src="docs/assets/gestures.svg" alt="Gesture map: hover the notch, pull down to grab, spin sideways to seek, pull once more to pin" width="1000">
+</p>
+
+| You want to… | Mouse | Trackpad |
+| --- | --- | --- |
+| Wake the notch | Move the pointer over it | Move the pointer over it |
+| Pull the record out | Drag down | Scroll down |
+| Seek | Drag left / right while holding | Scroll left / right over the vinyl |
+| Pin it out | Pull 240 pt farther, or grab again within 1 s | Keep scrolling down, or pause 0.8 s and scroll down again |
+| Play / pause | Click the label (pinned) or the notch (closed) | Click the label or the notch |
+| Next / previous track | — | Swipe right / left |
+| Put it back | Click the vinyl, or drag up | Scroll up |
+| Cancel a seek | Shake four times in one second | — |
+
+### Pull and grab
+
+The record is rendered as a full circle; the notch cap covers its upper half so only the lower
+semicircle is visible, with its centre exactly on the notch's bottom edge.
+
+A pull is only recognised when the first movement is vertical and downward. It starts at 8 pt,
+and at 40 pt the record snaps fully out. Releasing before the detent lets it spring back. Once
+grabbed, the record follows the pointer, and an upward movement of 30 pt snaps it back in.
+
+### Seek
+
+Grab the record and move sideways. Moving right rewinds; moving left fast-forwards. Slow movement
+is precise, fast movement covers more ground: the `ScrubEngine` maps pointer speed onto a
+sensitivity curve instead of using a fixed rate. Movement past the start or end of the track is
+clamped, and the record stops turning there too.
+
+Until the record is pinned, a sideways drag must clear 90 pt before it starts scrubbing, so the
+sideways wobble of a pin pull is ignored. On a pinned record the threshold drops to 4 pt for the
+mouse and 30 pt for scroll.
+
+### Pin and put back
+
+A grabbed record is not pinned yet. It stays out when one of these confirm gestures happens:
+
+- pull another 240 pt beyond the detent — a fast pull fills the gauge faster, up to 3.2×;
+- release, then grab again within one second;
+- with a trackpad, keep scrolling down, or stop for 0.8 s and scroll down again (480 pt of
+  virtual travel, also velocity-assisted).
+
+A translucent gauge under the record starts at zero when the record snaps out and fills as you
+confirm. While confirming, horizontal movement needs 90 pt before it scrubs, so the sideways
+wobble of a vertical pull is ignored.
+
+Once pinned, click the label to toggle playback, swipe the label horizontally to change tracks,
+and click the vinyl, drag up, or scroll up to close. Without a confirm gesture, the record waits
+about a second after release (1.4 s for scroll) and then springs back.
+
+### Trackpad
+
+Scroll input has no button-release event, so the scroll policy is time-based rather than
+release-based:
+
+- **Down** pulls the record out; the halfway point snaps it open.
+- **Left / right over the vinyl** scrubs, with the same speed-sensitive mapping as dragging.
+- **Left / right over the notch or a pinned label** changes tracks. A skip needs 90 pt of
+  horizontal travel and 1.5× horizontal dominance over vertical travel; once the gesture locks to
+  an axis it cannot change its mind. A gesture can skip only once, because an unintended skip is
+  worse than a missed one.
+- **Up** puts the record back.
+- **No input for 1.4 s** after opening puts the record back, unless it has been confirmed.
+- Momentum events are ignored, so a flick does not keep scrubbing after your fingers leave the
+  trackpad.
+
+### Cancel a seek
+
+While holding the record, shake it left and right — at least four direction changes of 8 pt or
+more within one second. The seek is discarded, the position returns to where you grabbed it, and
+a light haptic confirms the cancel. Small jitter or a single change of direction during precise
+scrubbing does not trigger it. If the record was pinned, it stays pinned.
+
+### Displays without a notch
+
+On an external display, the top-centre 179 pt strip becomes the interaction area. The record
+emerges from the top edge of the screen and its centre sits on that boundary, exactly as it does
+inside a physical notch. When several displays are connected, the built-in notched display is
+preferred.
+
+## How it works
+
+The interaction is a small state machine with two inputs — pointer drags and two-finger scroll —
+that feed the same model:
+
+```
+idle ── hover ──► armed ── pull 8 pt ──► pulling ── detent 40 pt ──► grabbed
+  ▲                                                                   │
+  │                                                    drag ↔ ──► scrubbing
+  │                                                                   │
+  │                                        +240 pt or re-grab < 1 s   │
+  │                                                                   ▼
+  └────────────── click / drag up / scroll up ──────────────────── pinned
+```
+
+Some implementation details that make the physical metaphor work:
+
+- **A panel that does not activate.** `OverlayPanel` is a borderless `NSPanel` with
+  `.nonactivatingPanel`, sitting at `.statusBar + 1`. Clicking the record does not bring Groovie
+  forward or change the frontmost app.
+- **Input below the views.** The SwiftUI hosting view returns `nil` from `hitTest`; a transparent
+  `NSView` receives every mouse event. This keeps gesture handling away from SwiftUI's layout and
+  animation.
+- **Two coordinate systems.** Screen events arrive with a bottom-left origin; the stage is laid out
+  top-left. `contentPoint(forScreenPoint:)` converts before any hit-testing happens.
+- **Hover without a key window.** Global and local `mouseMoved` monitors are combined with the
+  panel's tracking area, so the label can react even though the panel never becomes key.
+- **A serial bridge to Music.** Every AppleScript command goes through one queue. The position is
+  estimated locally between 1.5 s polls, and a requested play state is held for up to 2 s until
+  Music agrees, so a stale read cannot flip the record back.
+- **One axis per scroll gesture.** `ScrollAxisLock` decides between horizontal and vertical after
+  0.5 pt of travel and keeps that decision until the gesture ends. It is a pure value type, which
+  makes the tricky part of track skipping straightforward to test.
+
+### Project layout
+
+```
+Sources/GroovieKit/
+  App/AppDelegate.swift                 menu-bar app, status menu, permissions
+  Notch/NotchGeometry.swift             notch/no-notch detection, window frames
+  Notch/OverlayPanel.swift              non-activating overlay panel and input view
+  Interaction/VinylLayout.swift         state types, pull/exposure curve, geometry
+  Interaction/ScrubEngine.swift         velocity-sensitive scrub math and clamping
+  Interaction/ScrollAxisLock.swift      horizontal/vertical axis locking for scroll
+  Interaction/ConfirmAccumulator.swift  pin gauge and velocity assistance
+  Interaction/WiggleDetector.swift      shake-to-cancel detection
+  Interaction/OverlayController.swift   gesture state machine, windows, springs
+  Interaction/VinylViewModel.swift      state published to the UI
+  Music/AppleMusicBridge.swift          AppleScript execution, seek merging, artwork
+  Music/AppleMusicService.swift         polling, availability, artwork cache
+  UI/VinylSkin.swift                    record palettes, persistence, track colors
+  UI/RecordTexture.swift                grooves, bands, runout, label print
+  UI/VinylStageView.swift               SwiftUI stage, hover hint, confirm gauge
+  UI/BrandMark.swift                    notch + record menu-bar template mark
+  UI/MenuHeaderView.swift               fixed-width header, marquee, progress
+  Localization/                         language discovery and typed string keys
+  Resources/Localization/               en.json, ko.json
+  Debug/                                demo player and self-checks
+Resources/Info.plist                    LSUIElement, automation description, icon
+Resources/AppIcon.icns                  packaged macOS app icon
+docs/assets/                            README images and gesture map
+docs/design/                            app-icon master art
+docs/localization/                     translation guide, JSON schema, key context
+docs/record-crate.md                   design note: record crate / playlists (unbuilt)
+docs/record-break.md                   rejected alternative: breaking the record
+Scripts/                                app bundling, icon generation, localization checks
+```
+
+No third-party packages. The app is a SwiftPM executable plus a library target, bundled into an
+`.app` by `Scripts/build-app.sh`.
+
+## Development
+
+```sh
+make app        # build build/Groovie.app (release)
+make run        # build and launch
+make test       # headless interaction checks
+make demo       # run the demo sequence and capture build/demo.png
+make icon       # regenerate Resources/AppIcon.icns
+make l10n-check # validate the language files
+```
+
+`make test` builds the app and runs it with `--self-test`, then checks that every language file
+has the same keys and placeholders. There is no XCTest target: the interaction rules are pure
+values and are checked directly, which keeps the tests fast and independent of the window server.
+
+### Development flags
 
 ```sh
 open build/Groovie.app --args --fake-music
@@ -192,101 +315,91 @@ open build/Groovie.app --args --fake-music --simulate-no-notch
 open build/Groovie.app --args --fake-music --demo --skin=rust
 ```
 
-- `--fake-music` — Music 없이 가상 트랙으로 실제 마우스 드래그를 테스트합니다.
-- `--demo` — 당기기 → 되감기 → 앞으로 감기 → 놓기 시퀀스를 자동 재생합니다.
-- `--simulate-no-notch` — 노치가 있는 Mac에서 노치 없는 레이아웃을 확인합니다.
-- `--skin=<id>` — `classic`, `rust`, `teal`, `smoke`, `mono` 중 하나로 이번 실행의 스킨을
-  고정합니다. 저장된 선택은 바꾸지 않습니다.
-- `--long-title` — 가상 트랙 제목을 길게 만들어 상태 메뉴 헤더의 마퀴를 확인합니다.
-- `--lang=<code>` — 이번 실행의 UI 언어를 `en`, `ko` 등으로 고정합니다. 저장된
-  선택은 바꾸지 않습니다.
-- `--self-test` — 헤드리스 검사를 실행하고 종료합니다.
+| Flag | What it does |
+| --- | --- |
+| `--fake-music` | Uses a demo player with three tracks instead of Music. |
+| `--demo` | Plays a pull → rewind → fast-forward → release sequence automatically. |
+| `--simulate-no-notch` | Shows the no-notch layout on a notched Mac. |
+| `--skin=<id>` | Pins one of `classic`, `rust`, `teal`, `smoke`, `mono` for this run. |
+| `--long-title` | Makes the demo title long enough to exercise the menu-header marquee. |
+| `--lang=<code>` | Pins the UI language for this run, e.g. `en` or `ko`. |
+| `--self-test` | Runs the headless checks and exits. |
 
-## 구조
+### Localization
 
-```
-Sources/GroovieKit/
-  App/AppDelegate.swift              메뉴 바 앱, 상태 메뉴, 권한 안내
-  Notch/NotchGeometry.swift          노치/비노치 화면 감지, 창 프레임
-  Notch/OverlayPanel.swift           비활성(non-activating) 오버레이 패널과 입력 뷰
-  Interaction/VinylLayout.swift      상태 정의, 당김→노출 곡선, 레코드 배치
-  Interaction/ScrubEngine.swift      속도 기반 스크럽 수식과 클램프 (순수 로직)
-  Interaction/ScrollAxisLock.swift   두 손가락 스크롤의 축 고정 (순수 로직)
-  Interaction/OverlayController.swift 제스처 상태 머신, 창 전환, 복귀 스프링
-  Interaction/VinylViewModel.swift   화면에 게시되는 상태
-  Music/AppleMusicBridge.swift       AppleScript 실행, seek 병합, 아트워크 읽기
-  Music/AppleMusicService.swift      폴링, 상태/가용성, 아트워크 캐시
-  UI/VinylSkin.swift                 레코드 스킨 팔레트, 저장/복원, 트랙 색 처리
-  UI/BrandMark.swift                 메뉴 바용 노치+레코드 템플릿 마크
-  UI/MenuHeaderView.swift            고정 폭 메뉴 헤더, 마퀴·진행 바·예외 상태
-  UI/                                레코드 텍스처, SwiftUI 스테이지, HUD
-  Localization/L10n.swift            언어 선택, fallback, 문자열 조회
-  Localization/LocalizationCatalog.swift 언어 파일 발견/파싱, fallback 체인
-  Localization/LocalizationKey.swift 타입 안전 문자열 키
-  Resources/Localization/            en.json, ko.json 언어 파일
-  Debug/                             데모 뮤직, 자기 검사
-Resources/Info.plist                 LSUIElement, 자동화 사용 설명, 앱 아이콘
-Resources/AppIcon.icns               빌드에 포함되는 macOS 앱 아이콘
-docs/design/app-icon-cream-v3.png    앱 아이콘 마스터 시안
-docs/localization/                   번역 가이드, JSON 스키마, 키 문맥
-docs/record-crate.md                 (설계 노트) 레코드 복제·상자(플레이리스트), 미구현
-docs/record-break.md                 (대안) 레코드 떼어내기·파손, 채택 안 함
-Scripts/build-app.sh                 SwiftPM 산출물을 .app으로 묶고 ad-hoc 서명
-Scripts/check-localizations.swift    언어 파일 키/placeholder 검증
-Scripts/generate-info-plist-strings.swift InfoPlist.strings 생성
-Scripts/new-language.swift           새 언어 파일 스캐폴딩
-Scripts/make-app-icon.sh             슈퍼타원 마스크를 적용해 .icns 생성
+The UI follows the system language. English and Korean ship by default, and each language is a
+single JSON file in `Sources/GroovieKit/Resources/Localization/`. Adding a file is enough to make
+a language discoverable.
+
+```sh
+swift Scripts/new-language.swift ja "日本語"
+make l10n-check
+make app
+open build/Groovie.app --args --lang=ja
 ```
 
-## 튜닝 지점
+See [docs/localization/README.md](docs/localization/README.md) for the translation rules and
+[docs/localization/keys.md](docs/localization/keys.md) for the context of each key. Both are
+currently written in Korean.
 
-- `ScrubEngine.ScrubTuning` — 감도 곡선(`min/maxSensitivity`, `speedAtMaxSensitivity`,
-  `sensitivityExponent`), 속도 필터 attack/release, 회전량(`degreesPerPoint`).
-- `VinylLayout` — `grabDistance`(80), `grabDetent`(40 = 중간 자석 지점),
-  `confirmDistance`(240 = 포인터 confirm 거리, 가속도 최대 3.2×)
-  `scrollConfirmDistance`(480), `confirmScrubDeadzone`(90 = confirm 중 가로 데드존), `mouseDismissDistance`(30),
-  `scrollSkipDistance`(90 = 곡 넘기기 가로 임계값), `clickSlop`(4 = 클릭으로 인정하는 이동량),
-  `exposurePerPoint`(1.125), `recordRadius`(90), `playbackDegreesPerSecond`(200 = 33⅓ RPM),
-  복귀 스프링 상수.
-- `ScrollAxisLock` — 스크롤 제스처의 축 고정. `horizontalDominance`(1.5 = 가로 우세 배율),
-  `decisionThreshold`(0.5 = 축을 결정하는 최소 이동). 한 번 정해진 축은 제스처가 끝날 때까지
-  바뀌지 않습니다.
-- `OverlayController` — 스크롤 감도(`scrollPullScale` 0.55, `scrollScrubScale` 0.9),
-  좌우 시작 데드존(`scrollScrubThreshold` 30), 닫기 임계값(`scrollCloseDistance` 40),
-  confirm 대기 시간(`confirmWindow` 1.0초),
-  자석 스냅 스프링(`snapOpenStiffness` 320, `snapOpenDamping` 26).
-- 햅틱 — 스크롤 시작(`.levelChange`), 스냅·confirm·위글 취소·닫기(`.alignment`).
-- Confirm 게이지 — 레코드 아래 반투명 캡슐 + 3.5pt 바(`VinylStageView.confirmGauge`),
-  0…1 `confirmProgress`로 채워지고 confirm/닫기 시 페이드아웃.
-- Confirm 가속 — `ConfirmAccumulator` (포인터 240pt / 스크롤 480pt, 속도 1800pt/s에서 최대 3.2×,
-  attack 45ms / release 120ms, 위로 움직이면 게이지 감소, 스냅 순간 게이지는 0에서 시작).
-- 스크롤 confirm — 재스크롤 인식 간격 0.8초, 무입력 래치/복귀 판정 1.4초.
-- 노치 입력 영역 — 물리 노치 + 좌우/아래 6px 여백(`StageGeometry.idleFrame`).
-  레코드가 열려 있는 동안에는 펼쳐진 스테이지 전체가 입력을 받습니다.
-- `WiggleDetector` — 취소 제스처 임계값(`minimumStroke` 8, `window` 1.0초,
-  `requiredReversals` 4).
-- `VinylSkin` — 5종 바이닐 팔레트(`recordCenter`, `recordEdge`, `grooveLight`,
-  `sheen`, `sheenStrength`, `accentSaturation`). 기본값은 `classic`,
-  `UserDefaults` 키 `groovie.skinID`.
-- `RecordTexture` — 홈 밀도(96링), 밴드·런아웃·레이블 인쇄. `VinylDiscView` — 회전하지 않는
-  셰인·스펙큘러·림 강도. `VinylLayout.labelRadius`는 30(레코드 지름의 약 1/3),
-  `labelHitSlop`은 12(재생/일시정지 히트 영역 = 반경 42).
-- `VinylLayout.recordCenterY` — `emergenceInset + exposure − recordRadius`.
-  Grab 시 `exposure == recordRadius`가 되어 중심이 정확히 경계선에 놓입니다.
-- `MenuHeaderView` — 고정 폭 252pt, 높이 56pt, 제목 텍스트 폭 188pt.
-  마퀴 속도 20pt/s, 시작 대기 0.7초, 반복 간격 28pt. 진행 바는 2pt,
-  메뉴가 열려 있는 동안 1초 간격으로 로컬 보간합니다.
-- `BrandMark` — 20×11pt 광학 박스. 레코드 지름 `0.85 × 11 / 0.72`,
-  노치 `1.35D × 0.22D`, 스핀들 구멍은 최소 1.1pt로 광학 보정.
-- 앱 아이콘 — `docs/design/app-icon-cream-v3.png` → 슈퍼타원 마스크 →
-  `Resources/AppIcon.icns`. 32px 이하는 마크를 크롭·확대한 파생본을 씁니다.
+## Tuning
 
-## 알려진 제한
+Most of the feel lives in a handful of constants.
 
-- 두 손가락 스크롤은 Hold & Drag와 다른 정책을 사용합니다. 스크롤 입력에는 명시적인
-  놓기 이벤트가 없으므로, confirm이 없으면 1.4초 무입력 후 레코드가 들어가고,
-  confirm이 있으면 고정됩니다. 닫는 것은 위로 스크롤 또는 클릭/위로 끌기입니다.
-- 실제 Music의 seek 정밀도는 100ms 목표이며 모든 트랙/스트림에서 보장되지는 않습니다.
-- 앨범 아트는 Music의 artwork raw data를 사용합니다. 읽기에 실패하면 생성 레이블로 대체됩니다.
-- 노치가 없는 화면에서는 조작 중 화면 상단 중앙의 메뉴 바 영역을 덮습니다.
-- 물리적 노치 위에서는 커서가 보이지 않습니다. 화면 최상단 중앙을 겨냥해 드래그하세요.
+| Constant | Default | Effect |
+| --- | ---: | --- |
+| `pullStartDistance` | 8 pt | Movement before a pull is recognised. |
+| `grabDetent` | 40 pt | The halfway point where the record snaps out. |
+| `grabDistance` | 80 pt | Pointer travel that corresponds to full extraction. |
+| `confirmDistance` | 240 pt | Extra pull that pins the record. |
+| `scrollConfirmDistance` | 480 pt | The same distance in scroll units. |
+| `confirmScrubDeadzone` | 90 pt | Horizontal dead zone while confirming. |
+| `mouseDismissDistance` | 30 pt | Upward movement that snaps the record back in. |
+| `scrollSkipDistance` | 90 pt | Horizontal travel required to change tracks. |
+| `clickSlop` | 4 pt | Movement still treated as a click. |
+| `recordRadius` | 90 pt | Record size. |
+| `labelRadius` | 30 pt | Printed label size. |
+| `labelHitSlop` | 12 pt | Extra play/pause hit area around the label. |
+| `playbackDegreesPerSecond` | 200 | 33⅓ RPM. |
+| `ScrollAxisLock.horizontalDominance` | 1.5× | How much wider than vertical a skip must be. |
+| `ScrollAxisLock.decisionThreshold` | 0.5 pt | Travel before the scroll axis is locked. |
+| `confirmWindow` | 1.0 s | Time allowed for the re-grab confirm. |
+
+Scroll feel is split across `scrollPullScale` (0.55), `scrollScrubScale` (0.9), the 30 pt
+pinned-scrub dead zone, and the 40 pt close distance in `OverlayController`. Scrub sensitivity
+lives in `ScrubEngine.ScrubTuning` (`minSensitivity`, `maxSensitivity`, `speedAtMaxSensitivity`,
+and `sensitivityExponent`), with 45 ms attack and 120 ms release on the speed filter. Record skins
+are palettes in `VinylSkin`; the selected skin is stored under `groovie.skinID` in `UserDefaults`.
+
+## Known limitations
+
+- Scroll input has no release event, so an unconfirmed record returns after 1.4 s of inactivity
+  rather than when the fingers leave the trackpad.
+- Seeking targets 100 ms, but Apple Music does not guarantee that precision on every track or
+  stream.
+- Album art comes from Music's raw artwork data. If that read fails, a generated paper label is
+  used instead.
+- On a display without a notch, the open stage covers the top-centre part of the menu bar while
+  the record is out.
+- The pointer is not visible over a physical notch. Aim for the top-centre of the screen when
+  starting a drag.
+- Apple Music only. Spotify's AppleScript does not expose seek, which the whole interaction
+  depends on.
+- Rebuilding changes the ad-hoc signature, so macOS may ask for Automation permission again during
+  development.
+
+## Contributing
+
+Issues and pull requests are welcome. Run `make test` before sending a change. If you add a
+user-facing string, add it to every language file and run `make l10n-check`.
+
+The interaction rules live in pure types (`ScrubEngine`, `ScrollAxisLock`, `ConfirmAccumulator`,
+`WiggleDetector`), and the self-checks exercise them directly. Keeping new logic at that level
+makes it testable without a window server.
+
+## License
+
+[MIT](LICENSE) © Groovie contributors.
+
+Groovie is an independent project and is not affiliated with Apple Inc. Apple Music is a trademark
+of Apple Inc.
