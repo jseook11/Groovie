@@ -11,6 +11,9 @@ only the value in your language file.
 | `menu.retryMusic` | Reconnect to Music | Status menu |
 | `menu.openMusic` | Open Music | Status menu |
 | `menu.automationSettings` | Automation Settings… | Status menu |
+| `menu.checkUpdates` | Check for Updates… | Status menu, when up to date |
+| `menu.checkingUpdates` | Checking for Updates… | Status menu, while a check is running |
+| `menu.updateAvailable` | Groovie %1$@ Available | Status menu, when a newer release exists |
 | `menu.quit` | Quit Groovie | Status menu |
 | `skin.classic` | Classic Black | Record Skin submenu |
 | `skin.rust` | Rust | Record Skin submenu |
@@ -28,7 +31,15 @@ only the value in your language file.
 | `alert.permissionTitle` | Groovie can't control Music | Automation permission alert title |
 | `alert.permissionBody` | Allow Groovie to control Music in System Settings → Privacy & Security → Automation. | Permission alert body |
 | `alert.openSettings` | Open Settings | Permission alert button |
-| `alert.later` | Later | Permission alert button |
+| `alert.later` | Later | Permission and update alert button |
+| `alert.ok` | OK | Update check alerts |
+| `alert.updateTitle` | Update Available | Update alert title |
+| `alert.updateBody` | Groovie %1$@ is available. You're using %2$@. | Update alert body (latest, then current) |
+| `alert.openRelease` | Open Release Page | Update alert button |
+| `alert.upToDateTitle` | You're Up to Date | Manual check title when current |
+| `alert.upToDateBody` | Groovie %1$@ is the latest version. | Manual check body |
+| `alert.updateFailedTitle` | Couldn't Check for Updates | Manual check failure title |
+| `alert.updateFailedBody` | Check your internet connection and try again. | Manual check failure body |
 | `a11y.app` | Groovie | Menu bar item, header accessibility label |
 | `a11y.headerTitle` | Groovie, %1$@ | Header accessibility label (title only) |
 | `a11y.headerTitleArtist` | Groovie, %1$@, %2$@ | Header accessibility label (title and artist) |

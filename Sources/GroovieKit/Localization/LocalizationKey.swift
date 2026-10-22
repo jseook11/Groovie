@@ -15,6 +15,9 @@ enum LocalizationKey: String, CaseIterable {
     case menuRetryMusic = "menu.retryMusic"
     case menuOpenMusic = "menu.openMusic"
     case menuAutomationSettings = "menu.automationSettings"
+    case menuCheckUpdates = "menu.checkUpdates"
+    case menuCheckingUpdates = "menu.checkingUpdates"
+    case menuUpdateAvailable = "menu.updateAvailable"
     case menuQuit = "menu.quit"
 
     // MARK: Skins
@@ -54,6 +57,17 @@ enum LocalizationKey: String, CaseIterable {
     case alertPermissionBody = "alert.permissionBody"
     case alertOpenSettings = "alert.openSettings"
     case alertLater = "alert.later"
+    case alertOK = "alert.ok"
+
+    // MARK: Update alerts
+
+    case alertUpdateTitle = "alert.updateTitle"
+    case alertUpdateBody = "alert.updateBody"
+    case alertOpenRelease = "alert.openRelease"
+    case alertUpToDateTitle = "alert.upToDateTitle"
+    case alertUpToDateBody = "alert.upToDateBody"
+    case alertUpdateFailedTitle = "alert.updateFailedTitle"
+    case alertUpdateFailedBody = "alert.updateFailedBody"
 
     // MARK: Accessibility
 
