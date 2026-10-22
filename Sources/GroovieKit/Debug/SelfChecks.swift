@@ -554,6 +554,59 @@ public enum SelfChecks {
         )
         expect(nextSlot != slot, "repeated package clicks cascade")
 
+        // MARK: Desktop record storage
+
+        MainActor.assumeIsolated {
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("GroovieSelfChecks-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+
+            let store = DesktopRecordStore(baseDirectory: directory)
+            expect(store.records.isEmpty, "a new desktop store starts empty")
+            expect(store.insert(disc), "a desktop record can be inserted")
+            store.updatePosition(
+                id: disc.id,
+                position: CGPoint(x: 120, y: 140),
+                screenID: "2"
+            )
+
+            let reloaded = DesktopRecordStore(baseDirectory: directory)
+            expect(reloaded.records.count == 1, "desktop records reload from disk")
+            expect(reloaded.records.first?.position == CGPoint(x: 120, y: 140),
+                   "desktop positions persist across a reload")
+            expect(reloaded.records.first?.screenID == "2",
+                   "desktop screen identities persist across a reload")
+
+            let unsafeArtwork = DesktopRecord(
+                track: TrackSnapshot(
+                    persistentID: "persist-1",
+                    title: "Blue in Green",
+                    artist: "Miles Davis",
+                    album: "Kind of Blue",
+                    duration: 337,
+                    artworkFile: "../outside.png"
+                ),
+                style: .disc,
+                position: .zero,
+                screenID: nil
+            )
+            expect(reloaded.artwork(for: unsafeArtwork) == nil,
+                   "artwork paths cannot escape the artwork directory")
+
+            reloaded.remove(id: disc.id)
+            let emptied = DesktopRecordStore(baseDirectory: directory)
+            expect(emptied.records.isEmpty, "desktop removals persist across a reload")
+
+            // A corrupt file must not block the next launch.
+            let fileURL = directory.appendingPathComponent("desktop-records.json")
+            try? Data("not-json".utf8).write(to: fileURL)
+            let recovered = DesktopRecordStore(baseDirectory: directory)
+            expect(recovered.records.isEmpty, "a corrupt desktop store starts empty")
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+            expect(files.contains(where: { $0.hasPrefix("desktop-records.corrupt-") }),
+                   "a corrupt desktop store is backed up")
+        }
+
         // MARK: Report
 
         if failures.isEmpty {
