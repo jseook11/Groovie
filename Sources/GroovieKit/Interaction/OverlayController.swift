@@ -54,6 +54,10 @@ final class OverlayController {
     private var hoverInside = false
     private var hapticTime: TimeInterval = 0
     private var demoTask: Task<Void, Never>?
+    /// The real provider while a demo is running. Ownership of the restore
+    /// lives in `endDemo` so deactivation can end a demo synchronously.
+    private var demoPrevious: MusicProviding?
+    private var demoGeneration = 0
     private var isDemoActive = false
     private var announcedPermissionDenied = false
     /// Global and local mouse-move monitors while the record is pinned.
@@ -143,8 +147,13 @@ final class OverlayController {
     }
 
     func deactivate() {
+        // Set this first so a demo ending now does not restart Music polling
+        // while the overlay is being switched off.
         isEnabled = false
         model.isEnabled = false
+        demoTask?.cancel()
+        demoTask = nil
+        endDemo()
         vanishImmediately()
         music.stop()
         panel?.orderOut(nil)
@@ -1397,7 +1406,11 @@ final class OverlayController {
     private func startTicking() {
         guard tickTimer == nil else { return }
         lastTick = CACurrentMediaTime()
-        let timer = Timer(timeInterval: 1.0 / 60.0, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+        // A block timer captures the controller weakly, so a scheduled tick
+        // cannot keep the controller (and its panel) alive after teardown.
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
         RunLoop.main.add(timer, forMode: .common)
         tickTimer = timer
     }
@@ -1407,7 +1420,11 @@ final class OverlayController {
         tickTimer = nil
     }
 
-    @objc private func tick() {
+    deinit {
+        tickTimer?.invalidate()
+    }
+
+    private func tick() {
         let now = CACurrentMediaTime()
         let dt = min(max(now - lastTick, 0), 0.05)
         lastTick = now
@@ -1574,39 +1591,68 @@ final class OverlayController {
     // MARK: - Demo
 
     func runDemo() {
-        demoTask?.cancel()
+        // A running demo owns the music provider. Refusing a second start is
+        // simpler than coordinating two sequences and their restores.
+        guard !isDemoActive else { return }
+        demoGeneration += 1
+        let generation = demoGeneration
         demoTask = Task { [weak self] in
-            await self?.demoSequence()
+            await self?.demoSequence(generation: generation)
         }
     }
 
-    private func demoSequence() async {
-        guard model.phase == .idle || model.phase == .armed else { return }
+    /// Stop the demo and hand the real provider back. Idempotent: deactivation
+    /// calls this synchronously, and a cancelled sequence's `defer` may call it
+    /// again.
+    private func endDemo() {
+        guard let previous = demoPrevious else { return }
+        demoPrevious = nil
+        isDemoActive = false
+        music.stop()
+        music = previous
+        music.onUpdate = { [weak self] in self?.syncFromMusic() }
+        if isEnabled {
+            previous.start()
+        }
+        syncFromMusic()
+    }
+
+    private func demoSequence(generation: Int) async {
+        guard generation == demoGeneration,
+              isEnabled,
+              demoPrevious == nil,
+              model.phase == .idle || model.phase == .armed
+        else { return }
 
         isDemoActive = true
         let demo = DemoMusicService()
         let previous = music
+        demoPrevious = previous
         previous.stop()
         music = demo
         music.onUpdate = { [weak self] in self?.syncFromMusic() }
         music.start()
         syncFromMusic()
 
+        // `endDemo` owns the restore. If a newer demo has superseded this one,
+        // leave the shared provider alone.
         defer {
-            isDemoActive = false
-            music.stop()
-            music = previous
-            music.onUpdate = { [weak self] in self?.syncFromMusic() }
-            previous.start()
-            syncFromMusic()
+            if generation == demoGeneration {
+                endDemo()
+            }
+        }
+
+        func shouldStop() -> Bool {
+            Task.isCancelled || !isEnabled || generation != demoGeneration
         }
 
         func sleep(_ seconds: Double) async {
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         }
-        if Task.isCancelled { return }
+        if shouldStop() { return }
 
         await sleep(0.7)
+        if shouldStop() { return }
         let notch = geometry.notchRect
         var point = CGPoint(x: notch.midX, y: notch.midY)
         var timestamp = ProcessInfo.processInfo.systemUptime
@@ -1615,7 +1661,7 @@ final class OverlayController {
         // Pull the record out.
         let pullSteps = 36
         for i in 1...pullSteps {
-            if Task.isCancelled { return }
+            if shouldStop() { return }
             point.y = notch.midY - (110 * CGFloat(i) / CGFloat(pullSteps))
             timestamp += 1.0 / 60.0
             handleMouseDragged(to: point, timestamp: timestamp)
@@ -1623,11 +1669,12 @@ final class OverlayController {
         }
 
         await sleep(0.35)
+        if shouldStop() { return }
 
         // Rewind: drag right.
         let rightSteps = 22
         for _ in 1...rightSteps {
-            if Task.isCancelled { return }
+            if shouldStop() { return }
             point.x += 120 / CGFloat(rightSteps)
             timestamp += 1.0 / 60.0
             handleMouseDragged(to: point, timestamp: timestamp)
@@ -1635,11 +1682,12 @@ final class OverlayController {
         }
 
         await sleep(0.3)
+        if shouldStop() { return }
 
         // Fast forward: drag left.
         let leftSteps = 18
         for _ in 1...leftSteps {
-            if Task.isCancelled { return }
+            if shouldStop() { return }
             point.x -= 250 / CGFloat(leftSteps)
             timestamp += 1.0 / 60.0
             handleMouseDragged(to: point, timestamp: timestamp)
@@ -1647,11 +1695,12 @@ final class OverlayController {
         }
 
         await sleep(0.5)
+        if shouldStop() { return }
 
         // Slow, precise forward nudge.
         let slowSteps = 24
         for _ in 1...slowSteps {
-            if Task.isCancelled { return }
+            if shouldStop() { return }
             point.x -= 26 / CGFloat(slowSteps)
             timestamp += 1.0 / 45.0
             handleMouseDragged(to: point, timestamp: timestamp)
@@ -1660,7 +1709,7 @@ final class OverlayController {
 
         // Hold so the state can be inspected / screenshotted.
         await sleep(4.2)
-        if Task.isCancelled { return }
+        if shouldStop() { return }
         handleMouseUp(at: point, timestamp: timestamp + 0.05)
         await sleep(0.5)
         if latched { closeLatched() }

@@ -26,8 +26,20 @@ final class AppleMusicService: MusicProviding {
     private var runningObservers: [NSObjectProtocol] = []
     private var permissionObserver: NSObjectProtocol?
 
-    private var artworkAttempted: Set<String> = []
-    private var artworkCache: [String: NSImage] = [:]
+    /// Only recent covers are kept: the record shows one track at a time, and
+    /// the cache exists so skipping back a few tracks does not pay for another
+    /// AppleScript read. A 320 px thumbnail is at most ~0.39 MB, so eight
+    /// entries stay under ~3 MB.
+    private let artworkCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 8
+        cache.totalCostLimit = 8 * 1024 * 1024
+        return cache
+    }()
+    /// Tracks Music has already reported without artwork, bounded so the
+    /// marker cannot grow with listening time. A successful cover is not
+    /// recorded here: if its thumbnail is evicted, it should be fetched again.
+    private var noCoverTracks = RecentSet<String>(limit: 64)
     /// The track whose artwork request is currently running. When a skip
     /// arrives while this is set, the new track is picked up when the request
     /// finishes instead of being dropped.
@@ -72,6 +84,9 @@ final class AppleMusicService: MusicProviding {
         pollTimer?.invalidate()
         pollTimer = nil
         readInFlight = false
+        artworkCache.removeAllObjects()
+        noCoverTracks.removeAll()
+        artworkRequestTrackID = nil
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         runningObservers.forEach { workspaceCenter.removeObserver($0) }
         runningObservers.removeAll()
@@ -79,6 +94,10 @@ final class AppleMusicService: MusicProviding {
             NotificationCenter.default.removeObserver(permissionObserver)
             self.permissionObserver = nil
         }
+    }
+
+    deinit {
+        pollTimer?.invalidate()
     }
 
     func refresh() {
@@ -123,15 +142,15 @@ final class AppleMusicService: MusicProviding {
         // The overlay estimates the playing position locally, so polling only
         // has to notice track/play-state changes. Every AppleScript read costs
         // real CPU, and the previous 0.8 s cadence was the app's idle floor.
-        let timer = Timer(timeInterval: 1.5, target: self, selector: #selector(pollTimerFired), userInfo: nil, repeats: true)
+        // The block captures the service weakly so the timer cannot keep it
+        // alive after teardown.
+        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollNow() }
+        }
         // Tolerance keeps the poll from competing with animation frames.
         timer.tolerance = 0.3
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
-    }
-
-    @objc private func pollTimerFired() {
-        pollNow()
     }
 
     private var isMusicRunning: Bool {
@@ -396,11 +415,12 @@ final class AppleMusicService: MusicProviding {
     // MARK: - Artwork
 
     private func updateArtwork(for trackID: String) {
-        if let cached = artworkCache[trackID] {
+        guard started else { return }
+        if let cached = artworkCache.object(forKey: trackID as NSString) {
             artwork = cached
             return
         }
-        if artworkAttempted.contains(trackID) {
+        if noCoverTracks.contains(trackID) {
             // Music already told us this track has no artwork. Drop the
             // previous cover so the texture falls back to the printed label
             // instead of leaving the old album on screen.
@@ -412,15 +432,24 @@ final class AppleMusicService: MusicProviding {
         // leave the second track without its cover.
         guard artworkRequestTrackID == nil else { return }
 
-        artworkAttempted.insert(trackID)
         artworkRequestTrackID = trackID
 
         bridge.readArtworkThumbnail(maxPixelSize: 320) { [weak self] image in
             Task { @MainActor in
                 guard let self else { return }
-                self.artworkRequestTrackID = nil
+                // A stop/start cycle can leave an older read in flight; do not
+                // clear the marker belonging to a newer request.
+                if self.artworkRequestTrackID == trackID {
+                    self.artworkRequestTrackID = nil
+                }
                 if let image {
-                    self.artworkCache[trackID] = image
+                    self.artworkCache.setObject(
+                        image,
+                        forKey: trackID as NSString,
+                        cost: Self.artworkCost(image)
+                    )
+                } else {
+                    self.noCoverTracks.insert(trackID)
                 }
 
                 let currentTrackID = self.nowPlaying?.trackID
@@ -429,7 +458,8 @@ final class AppleMusicService: MusicProviding {
                     // result for when they come back, and fetch the current
                     // track's artwork now.
                     if let currentTrackID,
-                       !self.artworkAttempted.contains(currentTrackID) {
+                       self.artworkCache.object(forKey: currentTrackID as NSString) == nil,
+                       !self.noCoverTracks.contains(currentTrackID) {
                         self.updateArtwork(for: currentTrackID)
                         self.onUpdate?()
                     }
@@ -440,5 +470,9 @@ final class AppleMusicService: MusicProviding {
                 self.onUpdate?()
             }
         }
+    }
+
+    private static func artworkCost(_ image: NSImage) -> Int {
+        max(1, Int(image.size.width * image.size.height * 4))
     }
 }

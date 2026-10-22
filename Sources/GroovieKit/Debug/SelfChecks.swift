@@ -272,6 +272,23 @@ public enum SelfChecks {
         expect((try? AppleMusicBridge.parse("NOTRUNNING").get()) == .notRunning, "not-running parse")
         expect((try? AppleMusicBridge.parse("NOTRACK").get()) == .noTrack, "no-track parse")
 
+        // MARK: Recent tracking
+
+        var recent = RecentSet<Int>(limit: 3)
+        recent.insert(1)
+        recent.insert(2)
+        recent.insert(3)
+        expect(recent.contains(1) && recent.contains(3), "recent set keeps inserted values")
+        recent.insert(4)
+        expect(!recent.contains(1), "recent set evicts the oldest value")
+        expect(recent.contains(2) && recent.contains(4), "recent set keeps the newest values")
+        recent.insert(2)
+        recent.insert(5)
+        expect(recent.contains(2), "refreshing a value keeps it")
+        expect(!recent.contains(3), "a refreshed value is not evicted")
+        recent.removeAll()
+        expect(recent.count == 0 && !recent.contains(2), "recent set can be cleared")
+
         // MARK: Formatter
 
         expect(TimeOffsetFormatter.string(for: -2.74) == "−2.7s", "negative offset formatting")

@@ -18,6 +18,12 @@ let source = URL(fileURLWithPath: arguments[1], isDirectory: true)
 let destination = URL(fileURLWithPath: arguments[2], isDirectory: true)
 let fileManager = FileManager.default
 
+// The language code becomes a directory name below, so it must stay within the
+// BCP 47 shape documented by the schema. Without this check a malformed file
+// could use `..` or a path separator to write outside the resources directory.
+let languageCodePattern = "^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$"
+let destinationRoot = destination.standardizedFileURL.resolvingSymlinksInPath()
+
 /// Localization key -> Info.plist key.
 let mappings = [
     "info.appleEventsUsageDescription": "NSAppleEventsUsageDescription",
@@ -48,6 +54,13 @@ for file in files {
         continue
     }
 
+    guard language.range(of: languageCodePattern, options: .regularExpression) != nil else {
+        FileHandle.standardError.write(
+            Data("error: \(file.lastPathComponent): invalid language code \"\(language)\"\n".utf8)
+        )
+        exit(1)
+    }
+
     let entries = mappings.keys.sorted().compactMap { key -> String? in
         guard let value = strings[key] as? String, !value.isEmpty else { return nil }
         let plistKey = mappings[key]!
@@ -55,7 +68,21 @@ for file in files {
     }
     guard !entries.isEmpty else { continue }
 
-    let directory = destination.appendingPathComponent("\(language).lproj", isDirectory: true)
+    let directory = destination
+        .appendingPathComponent("\(language).lproj", isDirectory: true)
+        .standardizedFileURL
+        .resolvingSymlinksInPath()
+    let rootComponents = destinationRoot.pathComponents
+    let directoryComponents = directory.pathComponents
+    guard directoryComponents.starts(with: rootComponents),
+          directoryComponents.count > rootComponents.count
+    else {
+        FileHandle.standardError.write(
+            Data("error: \(file.lastPathComponent): language path escapes the resources directory\n".utf8)
+        )
+        exit(1)
+    }
+
     try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
     let contents = """

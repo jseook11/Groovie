@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import ImageIO
+import os
 
 /// Result of a single read of Music.app.
 enum AppleMusicRead: Equatable {
@@ -32,6 +33,17 @@ enum AppleMusicBridgeError: Error, Equatable {
 /// coalesced so a slow AppleEvent can never build up a backlog.
 final class AppleMusicBridge {
     private let queue = DispatchQueue(label: "com.groovie.applemusic", qos: .userInitiated)
+    /// ImageIO parses and downsamples artwork here, not on the script queue, so
+    /// a large cover cannot delay a seek or a transport command.
+    private let artworkDecodeQueue = DispatchQueue(label: "com.groovie.artwork", qos: .userInitiated)
+    private let log = Logger(subsystem: "com.groovie.app", category: "music")
+
+    /// Covers larger than this are treated as broken rather than materialised
+    /// and decoded. Typical embedded artwork is a few megabytes.
+    private static let maxArtworkBytes = 32 * 1024 * 1024
+    /// Reject pathological dimensions before ImageIO can allocate for them.
+    private static let maxArtworkDimension = 20_000
+    private static let maxArtworkPixels = 100_000_000
 
     private var readScript: NSAppleScript?
     private var readScriptFailed = false
@@ -238,18 +250,24 @@ final class AppleMusicBridge {
 
     // MARK: - Artwork
 
-    /// Read the current cover and downscale it on the bridge queue. Embedded
+    /// Read the current cover and downscale it off the main thread. Embedded
     /// artwork can be several megapixels; decoding it on the main thread was a
-    /// measurable part of the skip spike, and ImageIO can do the same work off
-    /// the main thread without touching AppKit's view state.
+    /// measurable part of the skip spike. The AppleScript read stays on the
+    /// serial script queue and the decode runs on its own queue.
     func readArtworkThumbnail(maxPixelSize: Int, completion: @escaping (NSImage?) -> Void) {
         queue.async {
-            let image = self.performArtworkThumbnail(maxPixelSize: maxPixelSize)
-            DispatchQueue.main.async { completion(image) }
+            guard let data = self.fetchArtworkData() else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            self.artworkDecodeQueue.async {
+                let image = Self.makeArtworkThumbnail(from: data, maxPixelSize: maxPixelSize)
+                DispatchQueue.main.async { completion(image) }
+            }
         }
     }
 
-    private func performArtworkThumbnail(maxPixelSize: Int) -> NSImage? {
+    private func fetchArtworkData() -> Data? {
         let source = """
         tell application "Music"
             if it is running then
@@ -267,16 +285,36 @@ final class AppleMusicBridge {
         let descriptor = script.executeAndReturnError(&errorInfo)
         if errorInfo != nil { return nil }
         let data = descriptor.data
-        guard !data.isEmpty,
-              let imageSource = CGImageSourceCreateWithData(data as CFData, nil)
-        else { return nil }
+        guard !data.isEmpty else { return nil }
+        guard data.count <= Self.maxArtworkBytes else {
+            log.debug("Skipping artwork: \(data.count, privacy: .public) bytes exceeds the limit")
+            return nil
+        }
+        return data
+    }
+
+    private static func makeArtworkThumbnail(from data: Data, maxPixelSize: Int) -> NSImage? {
+        guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+
+        // The header is cheap to inspect and catches an image whose dimensions
+        // are absurd even when the encoded file is small.
+        if let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any],
+           let width = properties[kCGImagePropertyPixelWidth] as? Int,
+           let height = properties[kCGImagePropertyPixelHeight] as? Int,
+           width > 0,
+           height > 0,
+           width > Self.maxArtworkDimension
+               || height > Self.maxArtworkDimension
+               || width * height > Self.maxArtworkPixels {
+            return nil
+        }
 
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            // Decode now while we are already on the background queue instead
-            // of leaving a lazy image for the main thread to decode later.
+            // Decode now while we are on the artwork queue instead of leaving a
+            // lazy image for the main thread to decode later.
             kCGImageSourceShouldCacheImmediately: true,
         ]
         guard let cgImage = CGImageSourceCreateThumbnailAtIndex(

@@ -71,6 +71,10 @@ for file in files {
         error("\(file.lastPathComponent): missing \"language\"")
         continue
     }
+    guard code.range(of: "^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$", options: .regularExpression) != nil else {
+        error("\(file.lastPathComponent): invalid language code \"\(code)\"")
+        continue
+    }
     guard let name = object["name"] as? String, !name.isEmpty else {
         error("\(file.lastPathComponent): missing \"name\"")
         continue
