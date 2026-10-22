@@ -137,6 +137,12 @@ Move `build/Groovie.app` to `/Applications` to keep it around, and add it to
 There is no installer and no notarized binary yet. The app is ad-hoc signed locally, which is
 enough for development and for the Music automation prompt.
 
+### Updates
+
+Groovie checks the public GitHub release feed once a day. When a newer version exists, the status
+menu shows **Groovie X.Y.Z Available**; choosing it opens the release page. Nothing is downloaded
+or installed automatically. Use **Check for Updates…** in the status menu to check immediately.
+
 ### First launch
 
 1. Groovie appears in the menu bar. It has no Dock icon and no main window.
@@ -327,6 +333,7 @@ open build/Groovie.app --args --fake-music --demo
 open build/Groovie.app --args --fake-music --simulate-no-notch
 open build/Groovie.app --args --fake-music --demo --skin=rust
 open build/Groovie.app --args --gesture-hint
+open build/Groovie.app --args --check-updates
 ```
 
 | Flag | What it does |
@@ -338,6 +345,7 @@ open build/Groovie.app --args --gesture-hint
 | `--skin=<id>` | Pins one of `classic`, `rust`, `teal`, `smoke`, `mono` for this run. |
 | `--long-title` | Makes the demo title long enough to exercise the menu-header marquee. |
 | `--lang=<code>` | Pins the UI language for this run, e.g. `en` or `ko`. |
+| `--check-updates` | Checks the release feed immediately and shows the result, bypassing the daily limit. |
 | `--self-test` | Runs the headless checks and exits. |
 
 ### Localization

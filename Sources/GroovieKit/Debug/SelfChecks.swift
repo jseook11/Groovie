@@ -427,6 +427,47 @@ public enum SelfChecks {
                    "--lang=\(requested) must select that language")
         }
 
+        // MARK: Update checker
+
+        expect(UpdateChecker.isNewer("0.1.2", than: "0.1.1"), "a patch release is newer")
+        expect(UpdateChecker.isNewer("0.2.0", than: "0.1.9"), "a minor release is newer")
+        expect(UpdateChecker.isNewer("v1.0.0", than: "0.9.9"), "a leading v is ignored")
+        expect(!UpdateChecker.isNewer("0.1.1", than: "0.1.1"), "the same version is not newer")
+        expect(!UpdateChecker.isNewer("0.1", than: "0.1.0"), "missing components count as zero")
+        expect(!UpdateChecker.isNewer("1.0.0+build.7", than: "1.0.0"), "build metadata is ignored")
+        expect(!UpdateChecker.isNewer("0.1.1-beta.1", than: "0.1.1"),
+               "a prerelease is older than its release")
+        expect(UpdateChecker.isNewer("0.1.1", than: "0.1.1-beta.1"),
+               "a release is newer than its prerelease")
+        expect(UpdateChecker.isNewer("0.1.1-beta.2", than: "0.1.1-beta.1"),
+               "prerelease identifiers compare numerically")
+        expect(!UpdateChecker.isNewer("not-a-version", than: "0.1.1"),
+               "an unparseable tag never triggers an update")
+        expect(!UpdateChecker.isNewer("0.1.2", than: "not-a-version"),
+               "an unknown current version never triggers an update")
+        expect(UpdateChecker.displayVersion("v0.2.0") == "0.2.0", "display versions drop the tag prefix")
+
+        let releaseJSON = #"""
+        {
+          "tag_name": "v0.2.0",
+          "html_url": "https://github.com/jseook11/Groovie/releases/tag/v0.2.0",
+          "name": "Groovie 0.2.0",
+          "body": "Notes"
+        }
+        """#
+        let parsedRelease = UpdateChecker.release(
+            from: Data(releaseJSON.utf8),
+            currentVersion: "0.1.1"
+        )
+        expect(parsedRelease?.version == "0.2.0", "release parsing strips the tag prefix")
+        expect(parsedRelease?.pageURL.absoluteString
+               == "https://github.com/jseook11/Groovie/releases/tag/v0.2.0",
+               "release parsing keeps the release page")
+        expect(UpdateChecker.release(from: Data(releaseJSON.utf8), currentVersion: "0.2.0") == nil,
+               "the running release is not reported as an update")
+        expect(UpdateChecker.release(from: Data("{}".utf8), currentVersion: "0.1.1") == nil,
+               "a malformed payload is ignored")
+
         // MARK: Report
 
         if failures.isEmpty {

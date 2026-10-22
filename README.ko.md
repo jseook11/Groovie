@@ -140,6 +140,12 @@ open build/Groovie.app
 아직 설치 프로그램이나 공증된 바이너리는 없습니다. 앱은 로컬에서 ad-hoc 서명되며,
 개발과 Music 자동화 권한 요청에는 이것으로 충분합니다.
 
+### 업데이트
+
+Groovie는 하루에 한 번 공개 GitHub 릴리스 피드를 확인합니다. 새 버전이 있으면 상태 메뉴에
+**Groovie X.Y.Z 사용 가능** 항목이 나타나고, 선택하면 릴리스 페이지가 열립니다. 자동으로
+내려받거나 설치하지는 않습니다. 상태 메뉴의 **업데이트 확인…**으로 즉시 확인할 수 있습니다.
+
 ### 첫 실행
 
 1. Groovie가 메뉴 바에 나타납니다. Dock 아이콘과 메인 창은 없습니다.
@@ -331,6 +337,7 @@ open build/Groovie.app --args --fake-music --demo
 open build/Groovie.app --args --fake-music --simulate-no-notch
 open build/Groovie.app --args --fake-music --demo --skin=rust
 open build/Groovie.app --args --gesture-hint
+open build/Groovie.app --args --check-updates
 ```
 
 | 플래그 | 동작 |
@@ -342,6 +349,7 @@ open build/Groovie.app --args --gesture-hint
 | `--skin=<id>` | 이번 실행의 스킨을 `classic`, `rust`, `teal`, `smoke`, `mono` 중 하나로 고정합니다. |
 | `--long-title` | 데모 제목을 길게 만들어 메뉴 헤더 마퀴를 확인합니다. |
 | `--lang=<code>` | 이번 실행의 UI 언어를 `en`, `ko` 등으로 고정합니다. |
+| `--check-updates` | 일일 확인을 기다리지 않고 릴리스 피드를 즉시 확인해 결과를 표시합니다. |
 | `--self-test` | 헤드리스 검사를 실행하고 종료합니다. |
 
 ### 언어

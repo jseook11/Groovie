@@ -19,6 +19,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     private static let gestureHintShownKey = "groovie.gestureHintShown"
     private var permissionAlertShown = false
     private var screenObserver: NSObjectProtocol?
+    private let updateChecker = UpdateChecker()
+    private var availableUpdate: UpdateChecker.Release?
+    private var isCheckingUpdates = false
 
     /// Entry point used by the executable target.
     public static func run() {
@@ -44,6 +47,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         setUpStatusItem()
         refreshOverlaySetup()
         scheduleFirstRunHint()
+        startUpdateCheck()
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -246,6 +250,27 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         automationItem.target = self
         menu.addItem(automationItem)
 
+        let updateItem: NSMenuItem
+        if isCheckingUpdates {
+            updateItem = NSMenuItem(title: L10n.t(.menuCheckingUpdates), action: nil, keyEquivalent: "")
+            updateItem.isEnabled = false
+        } else if let update = availableUpdate {
+            updateItem = NSMenuItem(
+                title: L10n.t(.menuUpdateAvailable, update.version),
+                action: #selector(openAvailableUpdate),
+                keyEquivalent: ""
+            )
+            updateItem.target = self
+        } else {
+            updateItem = NSMenuItem(
+                title: L10n.t(.menuCheckUpdates),
+                action: #selector(checkForUpdatesNow),
+                keyEquivalent: ""
+            )
+            updateItem.target = self
+        }
+        menu.addItem(updateItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: L10n.t(.menuQuit), action: #selector(quit), keyEquivalent: "q")
@@ -351,6 +376,106 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    // MARK: - Updates
+
+    /// The version shown to the user and reported to the release feed. When
+    /// the executable runs outside an `.app` there is no Info.plist, so manual
+    /// checks fall back to zero and automatic checks are skipped.
+    private var currentVersion: String {
+        UpdateChecker.bundledVersion() ?? "0.0.0"
+    }
+
+    private func startUpdateCheck() {
+        availableUpdate = updateChecker.cachedUpdate(currentVersion: currentVersion)
+        rebuildMenu()
+
+        let arguments = ProcessInfo.processInfo.arguments
+        let forced = arguments.contains("--check-updates")
+        let canCheckAutomatically = UpdateChecker.bundledVersion() != nil
+            && updateChecker.shouldCheckAutomatically()
+        guard forced || canCheckAutomatically else { return }
+
+        Task { [weak self] in
+            guard let self else { return }
+            if !forced {
+                // Let the overlay and Music bridge settle before touching the
+                // network; the result only affects the status menu.
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+            await self.checkForUpdates(manual: forced)
+        }
+    }
+
+    private func checkForUpdates(manual: Bool) async {
+        guard !isCheckingUpdates else { return }
+        isCheckingUpdates = true
+        rebuildMenu()
+
+        let version = currentVersion
+        let outcome = await updateChecker.check(currentVersion: version, force: manual)
+        isCheckingUpdates = false
+
+        switch outcome {
+        case .available(_, let release):
+            availableUpdate = release
+            if manual { presentUpdateAlert(release, current: version) }
+        case .upToDate:
+            availableUpdate = nil
+            if manual { presentUpToDateAlert(version: version) }
+        case .failed:
+            // Keep any update found on a previous launch; a failed background
+            // check must not erase the menu entry.
+            availableUpdate = updateChecker.cachedUpdate(currentVersion: version)
+            if manual { presentUpdateCheckFailedAlert() }
+        }
+        rebuildMenu()
+    }
+
+    @objc private func checkForUpdatesNow() {
+        Task { await checkForUpdates(manual: true) }
+    }
+
+    @objc private func openAvailableUpdate() {
+        guard let update = availableUpdate else { return }
+        NSWorkspace.shared.open(update.pageURL)
+    }
+
+    private func presentUpdateAlert(_ release: UpdateChecker.Release, current: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = L10n.t(.alertUpdateTitle)
+        alert.informativeText = L10n.t(.alertUpdateBody, release.version, current)
+        alert.addButton(withTitle: L10n.t(.alertOpenRelease))
+        alert.addButton(withTitle: L10n.t(.alertLater))
+
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(release.pageURL)
+        }
+    }
+
+    private func presentUpToDateAlert(version: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = L10n.t(.alertUpToDateTitle)
+        alert.informativeText = L10n.t(.alertUpToDateBody, version)
+        alert.addButton(withTitle: L10n.t(.alertOK))
+
+        NSApp.activate(ignoringOtherApps: true)
+        _ = alert.runModal()
+    }
+
+    private func presentUpdateCheckFailedAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.t(.alertUpdateFailedTitle)
+        alert.informativeText = L10n.t(.alertUpdateFailedBody)
+        alert.addButton(withTitle: L10n.t(.alertOK))
+
+        NSApp.activate(ignoringOtherApps: true)
+        _ = alert.runModal()
     }
 
     private func showPermissionAlert() {
