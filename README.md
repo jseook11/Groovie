@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <a href="#why">Why</a> ·
+  <a href="#why-the-notch">Why the Notch?</a> ·
   <a href="#features">Features</a> ·
   <a href="#requirements">Requirements</a> ·
   <a href="#install">Install</a> ·
@@ -45,7 +45,7 @@ and track changes. Let go and it drops back into the notch.
 Everything is one physical object. There is no slider, no popover, and no window to arrange:
 just a record that behaves like a record.
 
-## Why
+## Why the Notch?
 
 The notch is always black, always top-centre, and always above whatever you are doing. That makes
 it the one piece of screen real estate where a skeuomorphic object can live without competing with
@@ -59,32 +59,31 @@ the interaction an obvious resting place.
 
 ### The record
 
-- **Pull to grab.** A vertical drag that starts in the notch begins pulling at 8 pt. At 40 pt the
-  magnet takes over and the record snaps fully out with a light haptic. Release before the detent
-  and it springs back.
+- **Pull to grab.** A vertical drag that starts in the notch begins pulling right away. At the
+  halfway point the magnet takes over and the record snaps fully out with a light haptic. Release
+  before the detent and it springs back.
 - **Drag to rotate.** Hold the record and move sideways to turn it. Right rewinds, left
-  fast-forwards, and faster gestures seek farther per point. The ends of the track clamp, so the
-  record stops turning at 0:00 and at the end of the song.
-- **Pin it.** While grabbed, pull 240 pt farther — or grab again within a second — and the record
-  stays out. A translucent gauge under the record fills as you pull; velocity makes it fill up to
-  3.2× faster. While pinning, the horizontal dead zone widens to 90 pt so a vertical pull never
-  turns into an accidental seek.
+  fast-forwards, and the faster you move, the further it jumps. Seeking stops at the beginning
+  or end of the track, and the record stops turning there too.
+- **Pin it.** While grabbed, pull farther — or grab again within a second — and the record stays
+  out. A translucent gauge under the record fills as you pull, and a faster pull fills it faster.
+  While pinning, sideways movement is ignored until it is clearly deliberate, so a vertical pull
+  never turns into an accidental seek.
 - **Put it back.** Click the vinyl, drag up, or scroll up. The record springs into the notch and
   playback resumes at the chosen position. If it was paused before, it stays paused.
-- **Wiggle to cancel.** Shake the record — four direction changes of 8 pt or more within one
-  second — to abandon the seek and return to where you grabbed it.
-- **Return to 33⅓.** When the scrub ends, manual rotation eases back into playback at 33⅓ RPM
-  (200°/s).
+- **Wiggle to cancel.** Shake the record — four direction changes within one second — to abandon
+  the seek and return to where you grabbed it.
+- **Return to 33⅓.** When the scrub ends, manual rotation eases back into playback at 33⅓ RPM.
 
 ### Playback
 
 - **Click the label.** Once pinned, clicking the centre label toggles play/pause and the record
-  stays out. The record's rotation and the UI update immediately; a short hold keeps a stale Apple
-  Music poll from flipping the state back.
+  stays out. The record's rotation and the UI update immediately; a short hold keeps a delayed
+  status update from flipping it back.
 - **Hover hint.** On a pinned record, hovering the label darkens it, reveals a faint ❚❚ or ▶
   glyph, and changes the cursor to a pointing hand. The vinyl itself never reacts, so moving the
   pointer across the record does not make the screen flicker. The label's visible half is small,
-  so the hit target is 42 pt — a 30 pt label plus 12 pt of slop.
+  so the click target reaches a little beyond its printed edge.
 - **Skip tracks.** A horizontal two-finger swipe over the notch, or over a pinned record's label,
   goes to the next or previous track. On the pinned record, a swipe that starts on the vinyl still
   scrubs.
@@ -93,17 +92,17 @@ the interaction an obvious resting place.
 
 ### The notch
 
-- **Out of the way.** The overlay is a borderless, non-activating panel one level above the status
-  bar. It never steals focus or activates the app, and there is no Dock icon.
-- **Works without a notch.** On displays without a camera housing, the top-centre 179 pt strip
-  behaves exactly the same way.
+- **Out of the way.** The overlay is a borderless panel that sits above the status bar without
+  taking focus or activating the app, and there is no Dock icon.
+- **Works without a notch.** On displays without a camera housing, the top-centre strip behaves
+  exactly the same way.
 - **First-run hint.** On a display without a notch, a small card under the strip introduces the
   hidden gestures: click to play/pause, swipe with two fingers to change tracks, pull down for the
   record. It never takes mouse events, disappears on the first gesture, and can be replayed from
   the status menu.
-- **Status menu.** A fixed 252 pt header with the logo, track, artist, and progress. Long titles
-  scroll after 0.7 s; short ones stay still. Only actionable states — Music closed, no track,
-  permission needed — are surfaced there.
+- **Status menu.** A fixed-width header with the logo, track, artist, and progress. Long titles
+  scroll; short ones stay still. Only actionable states — Music closed, no track, permission
+  needed — are surfaced there.
 - **Five skins.** Classic black, rust, deep teal, smoke, and mono. The label always follows the
   track: album art when available, otherwise a paper label generated from the track's palette.
 - **English and Korean UI**, discovered from JSON files at runtime.
@@ -113,7 +112,7 @@ the interaction an obvious resting place.
 - Reads the current track, play state, position, duration, and artwork through AppleScript.
 - Seeks with a ~100 ms target.
 - Opens Music when it is not running, and brings it forward when there is no track to play.
-- Explains permission problems instead of failing silently.
+- Provides clear guidance when permissions are missing.
 
 ## Requirements
 
@@ -184,8 +183,8 @@ Once grabbed, an upward lift puts it away.
 
 Grab the record and move sideways. Moving right rewinds; moving left fast-forwards. Slow movement
 is precise, fast movement covers more ground: the `ScrubEngine` maps pointer speed onto a
-sensitivity curve instead of using a fixed rate. Movement past the start or end of the track is
-clamped, and the record stops turning there too.
+sensitivity curve instead of using a fixed rate. Seeking stops at the beginning or end of the
+track, and the record stops turning there too.
 
 Until the record is pinned, a sideways drag has to be deliberate before it starts scrubbing, so
 the sideways wobble of a pin pull is ignored. A pinned record responds to much smaller movements.
@@ -218,8 +217,7 @@ release-based:
   can skip only once. An unintended skip is worse than a missed one.
 - **Up** puts the record back.
 - **No input for a moment** after opening puts the record back, unless it has been confirmed.
-- Momentum events are ignored, so a flick does not keep scrubbing after your fingers leave the
-  trackpad.
+- Momentum is ignored, so a flick does not keep scrubbing after your fingers leave the trackpad.
 
 ### Cancel a seek
 
@@ -230,7 +228,7 @@ If the record was pinned, it stays pinned.
 
 ### Displays without a notch
 
-On an external display, the top-centre 179 pt strip becomes the interaction area. The record
+On an external display, the top-centre strip becomes the interaction area. The record
 emerges from the top edge of the screen and its centre sits on that boundary, exactly as it does
 inside a physical notch. When several displays are connected, the built-in notched display is
 preferred.

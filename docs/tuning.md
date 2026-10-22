@@ -36,6 +36,16 @@ exactly on the emergence line, which is why the visible half never drifts while 
 The magnet snap uses a 320 stiffness and 26 damping in `OverlayController`; the put-back spring
 uses the 260/24 pair above.
 
+## Notch geometry
+
+`Notch/NotchGeometry.swift` and `StageGeometry`.
+
+| Value | Default | Effect |
+| --- | ---: | --- |
+| Notch-less strip | 179 pt | Top-centre interaction width on a display without a camera housing. |
+| Idle margin | 6 pt | Extra horizontal and downward hit area around the strip. |
+| Stage size | 300 × 190 pt | Expanded overlay; the width grows to fit a wider physical notch. |
+
 ## Scroll
 
 Scroll input has no button-release event, so the policy is time-based. Values live in
