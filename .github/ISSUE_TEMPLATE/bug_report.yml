@@ -1,0 +1,72 @@
+name: Bug report
+description: Something in the notch interaction, playback control, or UI is wrong.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please remove personal information from screenshots and logs
+        before attaching them.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Play a track in Apple Music
+        2. Drag down from the notch
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.6 (24G84)"
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Mac model and notch
+      placeholder: "MacBook Pro 14-inch (M3, notch)"
+    validations:
+      required: true
+  - type: input
+    id: music
+    attributes:
+      label: Apple Music version
+      placeholder: "1.6.0"
+    validations:
+      required: false
+  - type: input
+    id: groovie
+    attributes:
+      label: Groovie version or commit
+      placeholder: "0.1.0 / 6bbff9c"
+    validations:
+      required: true
+  - type: dropdown
+    id: fake-music
+    attributes:
+      label: Does `--fake-music` reproduce it?
+      options:
+        - "Yes"
+        - "No"
+        - "Not tried"
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots, recordings, or logs
+      description: Drag files here.
+    validations:
+      required: false
