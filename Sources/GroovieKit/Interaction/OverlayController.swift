@@ -55,6 +55,21 @@ final class OverlayController {
     /// Global and local mouse-move monitors while the record is pinned.
     private var hoverMonitors: [Any] = []
 
+    /// Horizontal scroll bookkeeping for track changes. The axis is locked at
+    /// the start of a gesture so a pull can never turn into a skip.
+    private var skipAxis = ScrollAxisLock()
+    private var skipTarget: SkipTarget?
+    private var skipFired = false
+    private var skipGestureActive = false
+    private var skipLastEvent: TimeInterval = 0
+
+    private enum SkipTarget {
+        /// The closed notch: the record must be pulled out first.
+        case notch
+        /// The centre label of a pinned record.
+        case label
+    }
+
     private struct Session {
         var start: CGPoint
         var lastPoint: CGPoint
@@ -221,6 +236,7 @@ final class OverlayController {
         model.offsetSeconds = 0
         model.isSpinning = false
         model.recordHover = .none
+        resetSkipGesture()
         spinBaseAngle = 0
         spinBaseTime = CACurrentMediaTime()
 
@@ -247,6 +263,7 @@ final class OverlayController {
     private func vanishImmediately() {
         stopTicking()
         stopHoverTracking()
+        resetSkipGesture()
         session = nil
         scrollSession = nil
         releaseElapsed = 0
@@ -648,11 +665,11 @@ final class OverlayController {
         startTicking()
     }
 
-    /// A click on the centre label flips playback but keeps the record out, so
-    /// a pinned record doubles as a play/pause button.
-    private func togglePlaybackFromLabel() {
+    /// Flip playback from a click on the label or the closed notch. The UI
+    /// reacts immediately, which matters most while the record is pinned.
+    private func togglePlayback() {
         guard let now = music.nowPlaying else { return }
-        interactionLog.debug("label click -> toggle playback")
+        interactionLog.debug("click -> toggle playback")
         // The click is the instruction. Stop or start the record immediately
         // instead of waiting for the player's state read to come back.
         model.isPlaying = !now.isPlaying
@@ -801,7 +818,7 @@ final class OverlayController {
             } else if session.moved {
                 latchRecord()
             } else if session.centerTap {
-                togglePlaybackFromLabel()
+                togglePlayback()
             } else {
                 closeLatched()
             }
@@ -820,10 +837,15 @@ final class OverlayController {
         self.session = nil
 
         if session.aborted || !session.pulled {
+            let click = !session.aborted
+                && hypot(point.x - session.start.x, point.y - session.start.y) <= layout.clickSlop
             model.phase = .idle
             syncSpin()
             stopTicking()
             settleHover()
+            if click, model.canInteract, music.nowPlaying != nil {
+                togglePlayback()
+            }
             return
         }
 
@@ -846,6 +868,7 @@ final class OverlayController {
     private func beginCollapse() {
         guard model.phase != .releasing else { return }
         stopHoverTracking()
+        resetSkipGesture()
         latched = false
         pendingConfirmUntil = nil
         model.confirmProgress = 0
@@ -893,6 +916,7 @@ final class OverlayController {
            event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .began
         {
             commitScrollScrub()
+            resetSkipGesture()
             return
         }
         // Momentum events continue after the fingers lift; they must not keep
@@ -918,6 +942,13 @@ final class OverlayController {
 
         let timestamp = event.timestamp > 0 ? event.timestamp : ProcessInfo.processInfo.systemUptime
         let wallClock = ProcessInfo.processInfo.systemUptime
+
+        // A deliberate horizontal swipe changes tracks. This must run before
+        // the pull and scrub paths so a sideways gesture cannot open the
+        // record or seek by accident.
+        if handleTrackSkip(event: event, vector: vector, wallClock: wallClock) {
+            return
+        }
 
         // A quick downward scroll while the record is still collapsing should
         // start a new session instead of being swallowed by the release.
@@ -995,6 +1026,85 @@ final class OverlayController {
         performHaptic(.levelChange)
 
         processScroll(right: 0, pull: vector.pull, timestamp: timestamp, wallClock: wallClock)
+    }
+
+    /// Horizontal two-finger scrolling changes tracks. Returns true when the
+    /// event belongs to a skip gesture and must not reach the pull or scrub
+    /// paths.
+    private func handleTrackSkip(
+        event: NSEvent,
+        vector: (right: CGFloat, pull: CGFloat),
+        wallClock: TimeInterval
+    ) -> Bool {
+        // Start a fresh classification at the beginning of a gesture. A quiet
+        // gap also starts one, which covers wheels and devices without phases.
+        if event.phase == .began || !skipGestureActive || wallClock - skipLastEvent > 0.35 {
+            resetSkipGesture()
+            skipGestureActive = true
+            skipTarget = skipTargetAtPointer()
+        }
+        skipLastEvent = wallClock
+
+        guard skipTarget != nil else { return false }
+
+        switch skipAxis.update(right: vector.right, pull: vector.pull) {
+        case .undecided:
+            return false
+
+        case .vertical:
+            // The pull/close paths own this gesture now. The lock keeps any
+            // later sideways drift from turning it into a skip.
+            return false
+
+        case .horizontal:
+            // An opening or latched scrub from an earlier gesture must not keep
+            // seeking while this gesture changes tracks.
+            if scrollSession != nil {
+                if latched {
+                    latchScrollSession()
+                } else {
+                    finishScrollSession(commit: true)
+                }
+            }
+            guard !skipFired else { return true }
+            if abs(skipAxis.horizontalTravel) >= layout.scrollSkipDistance {
+                skipFired = true
+                performTrackSkip(forward: skipAxis.horizontalTravel > 0)
+            }
+            return true
+        }
+    }
+
+    /// Skips are allowed from the closed notch and from the centre label of a
+    /// pinned record. The vinyl itself still scrubs.
+    private func skipTargetAtPointer() -> SkipTarget? {
+        if latched {
+            guard model.phase == .grabbed || model.phase == .scrubbing else { return nil }
+            guard let point = contentPoint(forScreenPoint: NSEvent.mouseLocation) else { return nil }
+            return layout.hoverRegion(at: point, exposure: model.exposure) == .label ? .label : nil
+        }
+        if model.phase == .idle || model.phase == .armed {
+            return .notch
+        }
+        return nil
+    }
+
+    private func performTrackSkip(forward: Bool) {
+        interactionLog.debug("track skip \(forward ? "next" : "previous", privacy: .public)")
+        if forward {
+            music.skipToNext()
+        } else {
+            music.skipToPrevious()
+        }
+        performHaptic(.alignment)
+    }
+
+    private func resetSkipGesture() {
+        skipAxis.reset()
+        skipTarget = nil
+        skipFired = false
+        skipGestureActive = false
+        skipLastEvent = 0
     }
 
     private func processScroll(right: CGFloat, pull: CGFloat, timestamp: TimeInterval, wallClock: TimeInterval) {
@@ -1420,7 +1530,7 @@ final class OverlayController {
             } else if session.moved {
                 latchRecord()
             } else if session.centerTap {
-                togglePlaybackFromLabel()
+                togglePlayback()
             } else {
                 closeLatched()
             }
@@ -1436,9 +1546,15 @@ final class OverlayController {
                 beginCollapse()
             }
         } else {
+            let point = NSEvent.mouseLocation
+            let click = !session.aborted
+                && hypot(point.x - session.start.x, point.y - session.start.y) <= layout.clickSlop
             model.phase = .idle
             stopTicking()
             settleHover()
+            if click, model.canInteract, music.nowPlaying != nil {
+                togglePlayback()
+            }
         }
     }
 

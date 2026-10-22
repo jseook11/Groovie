@@ -373,6 +373,23 @@ final class AppleMusicService: MusicProviding {
         }
     }
 
+    func skipToNext() {
+        skip(forward: true)
+    }
+
+    func skipToPrevious() {
+        skip(forward: false)
+    }
+
+    private func skip(forward: Bool) {
+        guard nowPlaying != nil else { return }
+        // The next track's metadata is unknown until Music answers, so read it
+        // back as soon as the command completes instead of showing a guess.
+        bridge.skip(toNext: forward) { [weak self] in
+            self?.pollNow()
+        }
+    }
+
     // MARK: - Artwork
 
     private func updateArtwork(for trackID: String) {

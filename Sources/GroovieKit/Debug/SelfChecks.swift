@@ -121,6 +121,34 @@ public enum SelfChecks {
         expect(natural.pull == traditional.pull, "both scrolling preferences must produce the same vertical pull")
         expect(natural.pull < 0, "the vertical direction is inverted relative to the first implementation")
 
+        // MARK: Scroll axis lock
+
+        var axisLock = ScrollAxisLock()
+        expect(axisLock.update(right: 10, pull: 1) == .horizontal,
+               "a clearly horizontal scroll must lock the horizontal axis")
+        expect(approx(axisLock.horizontalTravel, 10), "horizontal travel must accumulate")
+        expect(axisLock.update(right: 0, pull: 40) == .horizontal,
+               "a locked axis must not flip mid-gesture")
+        expect(approx(axisLock.horizontalTravel, 10),
+               "vertical movement after the lock must not count as travel")
+
+        axisLock.reset()
+        expect(axisLock.update(right: 1, pull: 10) == .vertical,
+               "a vertical scroll must lock the vertical axis")
+        expect(axisLock.update(right: 40, pull: 0) == .vertical,
+               "later horizontal drift must not revive a skip")
+
+        var ambiguous = ScrollAxisLock()
+        expect(ambiguous.update(right: 14, pull: 10) == .undecided,
+               "a diagonal gesture must not decide the axis immediately")
+        expect(ambiguous.update(right: 16, pull: 10) == .horizontal,
+               "a subsequent clearly horizontal event must lock it")
+
+        axisLock.reset()
+        expect(axisLock.update(right: -10, pull: 0) == .horizontal,
+               "leftward scrolling must also lock horizontally")
+        expect(approx(axisLock.horizontalTravel, -10), "leftward travel must be signed")
+
         // MARK: Confirm meter
 
         var slowMeter = ConfirmAccumulator()
@@ -184,6 +212,10 @@ public enum SelfChecks {
                "scroll confirm should require twice the pointer travel")
         expect(layout.confirmScrubDeadzone == 90,
                "the confirm phase should use a 3x wider horizontal dead-zone")
+        expect(layout.scrollSkipDistance == 90,
+               "a track skip must require a deliberate horizontal swipe")
+        expect(layout.clickSlop == 4,
+               "a click may drift 4 points before it counts as a drag")
 
         let flat = VinylLayout(notchWidth: 179, capHeight: 0, emergenceInset: 0)
         expect(approx(flat.recordCenterY(exposure: flat.fullExposure), 0),
@@ -279,6 +311,19 @@ public enum SelfChecks {
         let monoAccent = VinylSkin.mono.labelAccent(for: trackSeed)
         expect(spread(monoAccent) < spread(classicAccent) * 0.5,
                "the mono skin must desaturate the track accent")
+
+        // MARK: Demo player
+
+        MainActor.assumeIsolated {
+            let demo = DemoMusicService()
+            let firstTitle = demo.nowPlaying?.title
+            expect(demo.nowPlaying?.isPlaying == true, "the demo must start playing")
+            demo.skipToNext()
+            expect(demo.nowPlaying?.title != firstTitle, "a demo skip must change the track")
+            expect(demo.nowPlaying?.position == 0, "a skipped-to track must start at zero")
+            demo.skipToPrevious()
+            expect(demo.nowPlaying?.title == firstTitle, "a demo previous skip must return")
+        }
 
         // MARK: Localization
 

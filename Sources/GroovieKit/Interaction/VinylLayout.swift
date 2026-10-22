@@ -70,6 +70,13 @@ struct VinylLayout {
     /// vertical pulling never accidentally scrubs.
     var confirmScrubDeadzone: CGFloat { 90 }
 
+    /// A deliberate horizontal swipe changes tracks. Skipping by accident is
+    /// worse than a missed gesture, so this is much longer than the scrub
+    /// dead-zone.
+    let scrollSkipDistance: CGFloat = 90
+    /// Pointer movement allowed in a click before it becomes a drag.
+    let clickSlop: CGFloat = 4
+
     let recordRadius: CGFloat = 90
     let labelRadius: CGFloat = 30
     /// The label is the play/pause target once the record is pinned. Only its

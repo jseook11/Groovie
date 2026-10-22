@@ -204,6 +204,37 @@ final class AppleMusicBridge {
         }
     }
 
+    // MARK: - Track changes
+
+    /// Skip to the next or previous track with the same commands Music's
+    /// transport buttons use.
+    func skip(toNext: Bool, completion: (() -> Void)? = nil) {
+        queue.async {
+            let command = toNext ? "next track" : "previous track"
+            let source = """
+            tell application "Music"
+                if it is running then
+                    \(command)
+                end if
+            end tell
+            """
+            let script = NSAppleScript(source: source)
+            var errorInfo: NSDictionary?
+            script?.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                let error = Self.bridgeError(from: errorInfo)
+                if case .permissionDenied = error {
+                    DispatchQueue.main.async {
+                        NotificationCenter.default.post(name: .groovieMusicPermissionDenied, object: nil)
+                    }
+                }
+            }
+            if let completion {
+                DispatchQueue.main.async { completion() }
+            }
+        }
+    }
+
     // MARK: - Artwork
 
     func readArtwork(completion: @escaping (Data?) -> Void) {

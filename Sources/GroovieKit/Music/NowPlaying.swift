@@ -54,6 +54,9 @@ protocol MusicProviding: AnyObject {
     /// Flip between playing and paused without moving the position. Used by a
     /// click on the record's centre label.
     func togglePlayback()
+    /// Change tracks without scrubbing. Used by a horizontal two-finger swipe.
+    func skipToNext()
+    func skipToPrevious()
     func refresh()
 }
 
