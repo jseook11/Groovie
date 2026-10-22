@@ -160,7 +160,7 @@ struct VinylStageView: View {
     }
 
     private var titleLine: String {
-        let title = model.trackTitle.isEmpty ? "Notch Vinyl" : model.trackTitle
+        let title = model.trackTitle.isEmpty ? "Groovie" : model.trackTitle
         let artist = model.trackArtist
         return artist.isEmpty ? title : "\(title) · \(artist)"
     }

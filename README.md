@@ -1,4 +1,4 @@
-# Notch Vinyl
+# Groovie
 
 MacBook 노치 안에 LP판이 들어 있다는 설정으로 만든 음악 스크럽 인터페이스입니다.
 노치에서 레코드를 아래로 당겨 꺼내고, 잡은 채 좌우로 돌려 재생 위치를 탐색한 뒤,
@@ -66,7 +66,7 @@ Idle → Armed (hover) → Pulling (8 px) → Grabbed (80 px) ⇄ Scrubbing → 
 ## 빌드와 실행
 
 ```sh
-make app      # build/NotchVinyl.app 생성 (release)
+make app      # build/Groovie.app 생성 (release)
 make run      # 빌드 후 실행
 make test     # 헤드리스 상호작용 모델 검사
 make demo     # 데모를 실행하고 화면을 캡처 (build/demo.png)
@@ -125,12 +125,12 @@ Music 읽기 파서, 시간 표시 포맷을 검사합니다.
 
 ## Music 권한
 
-Notch Vinyl은 AppleScript로 Music을 제어합니다. 앱을 시작할 때 Music이 실행 중이
+Groovie는 AppleScript로 Music을 제어합니다. 앱을 시작할 때 Music이 실행 중이
 아니면 Music을 자동으로 엽니다. 실행 중이지만 재생할 트랙이 없으면 Music을 앞으로
-가져와 곡을 고를 수 있게 합니다. 첫 실행 시 “Notch Vinyl wants to control Music”
+가져와 곡을 고를 수 있게 합니다. 첫 실행 시 “Groovie wants to control Music”
 자동화 권한 요청이 뜨면 **허용**해야 합니다.
 
-- 거부한 경우: 시스템 설정 → 개인정보 보호 및 보안 → 자동화 → Notch Vinyl → Music을 켜거나,
+- 거부한 경우: 시스템 설정 → 개인정보 보호 및 보안 → 자동화 → Groovie → Music을 켜거나,
   상태 메뉴의 “Music 연결 다시 시도”를 사용하세요.
 - 상태 메뉴 상단에 곡 제목·아티스트·진행 바가 표시됩니다. 연결 문제가 있으면
   그 자리에 Music 미실행/트랙 없음/권한 필요 문구가 대신 나옵니다.
@@ -142,10 +142,10 @@ Notch Vinyl은 AppleScript로 Music을 제어합니다. 앱을 시작할 때 Mus
 ## 개발용 모드
 
 ```sh
-open build/NotchVinyl.app --args --fake-music
-open build/NotchVinyl.app --args --fake-music --demo
-open build/NotchVinyl.app --args --fake-music --simulate-no-notch
-open build/NotchVinyl.app --args --fake-music --demo --skin=rust
+open build/Groovie.app --args --fake-music
+open build/Groovie.app --args --fake-music --demo
+open build/Groovie.app --args --fake-music --simulate-no-notch
+open build/Groovie.app --args --fake-music --demo --skin=rust
 ```
 
 - `--fake-music` — Music 없이 가상 트랙으로 실제 마우스 드래그를 테스트합니다.
@@ -159,7 +159,7 @@ open build/NotchVinyl.app --args --fake-music --demo --skin=rust
 ## 구조
 
 ```
-Sources/NotchVinylKit/
+Sources/GroovieKit/
   App/AppDelegate.swift              메뉴 바 앱, 상태 메뉴, 권한 안내
   Notch/NotchGeometry.swift          노치/비노치 화면 감지, 창 프레임
   Notch/OverlayPanel.swift           비활성(non-activating) 오버레이 패널과 입력 뷰
@@ -206,7 +206,7 @@ Scripts/make-app-icon.sh             슈퍼타원 마스크를 적용해 .icns �
   `requiredReversals` 4).
 - `VinylSkin` — 5종 바이닐 팔레트(`recordCenter`, `recordEdge`, `grooveLight`,
   `sheen`, `sheenStrength`, `accentSaturation`). 기본값은 `classic`,
-  `UserDefaults` 키 `notchVinyl.skinID`.
+  `UserDefaults` 키 `groovie.skinID`.
 - `RecordTexture` — 홈 밀도(96링), 밴드·런아웃·레이블 인쇄. `VinylDiscView` — 회전하지 않는
   셰인·스펙큘러·림 강도. `VinylLayout.labelRadius`는 30(레코드 지름의 약 1/3).
 - `VinylLayout.recordCenterY` — `emergenceInset + exposure − recordRadius`.

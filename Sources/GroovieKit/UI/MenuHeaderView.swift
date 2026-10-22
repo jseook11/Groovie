@@ -115,7 +115,7 @@ final class MenuHeaderView: NSView {
         basePosition = 0
         trackDuration = 0
         isPlaying = false
-        setAccessibilityLabel("Notch Vinyl, \(text)")
+        setAccessibilityLabel("Groovie, \(text)")
         layoutTitle(reset: true)
         stopTimers()
     }
@@ -171,7 +171,7 @@ final class MenuHeaderView: NSView {
 
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel("Notch Vinyl")
+        setAccessibilityLabel("Groovie")
         for child in [logoView, titleClip, titleLabel, titleEcho, artistLabel, progressTrack, progressFill, warningDot] {
             child.setAccessibilityElement(false)
         }
@@ -313,7 +313,7 @@ final class MenuHeaderView: NSView {
     }
 
     private func accessibilityText(title: String, artist: String) -> String {
-        artist.isEmpty ? "Notch Vinyl, \(title)" : "Notch Vinyl, \(title), \(artist)"
+        artist.isEmpty ? "Groovie, \(title)" : "Groovie, \(title), \(artist)"
     }
 
     override func viewDidChangeEffectiveAppearance() {

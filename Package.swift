@@ -2,21 +2,21 @@
 import PackageDescription
 
 let package = Package(
-    name: "NotchVinyl",
+    name: "Groovie",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "NotchVinyl", targets: ["NotchVinyl"]),
+        .executable(name: "Groovie", targets: ["Groovie"]),
     ],
     targets: [
         .target(
-            name: "NotchVinylKit",
-            path: "Sources/NotchVinylKit",
+            name: "GroovieKit",
+            path: "Sources/GroovieKit",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "NotchVinyl",
-            dependencies: ["NotchVinylKit"],
-            path: "Sources/NotchVinyl",
+            name: "Groovie",
+            dependencies: ["GroovieKit"],
+            path: "Sources/Groovie",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ],

@@ -34,7 +34,7 @@ struct RotatingDiscView: NSViewRepresentable {
 final class DiscLayerView: NSView {
     private let spinner = CALayer()
     private var textureIdentity: ObjectIdentifier?
-    private let rotationKey = "com.notchvinyl.disc.spin"
+    private let rotationKey = "com.groovie.disc.spin"
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

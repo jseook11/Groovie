@@ -12,7 +12,7 @@ final class AppleMusicService: MusicProviding {
     var onUpdate: (() -> Void)?
 
     private let bridge = AppleMusicBridge()
-    private let log = Logger(subsystem: "com.notchvinyl.app", category: "music")
+    private let log = Logger(subsystem: "com.groovie.app", category: "music")
 
     private var pollTimer: Timer?
     private var started = false
@@ -42,7 +42,7 @@ final class AppleMusicService: MusicProviding {
         permissionDenied = false
         observeWorkspace()
         permissionObserver = NotificationCenter.default.addObserver(
-            forName: .notchVinylMusicPermissionDenied,
+            forName: .groovieMusicPermissionDenied,
             object: nil,
             queue: .main
         ) { [weak self] _ in

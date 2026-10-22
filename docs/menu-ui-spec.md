@@ -2,7 +2,7 @@
 
 상태: **v1 제안** (구현 전 검토용)
 범위: 메뉴 바 상태 아이콘, 상태 메뉴 상단 헤더, 앱 아이콘
-관련 문서: [design-spec.md](design-spec.md), [로고 시안](design/notch-vinyl-cream-transparent-v1.png)
+관련 문서: [design-spec.md](design-spec.md), [로고 시안](design/groovie-cream-transparent-v1.png)
 
 ---
 
@@ -11,7 +11,7 @@
 현재 상태 메뉴는 다음 두 항목으로 시작합니다.
 
 ```
-Notch Vinyl
+Groovie
 Music 재생 중 · 곡 제목
 ```
 
@@ -92,12 +92,12 @@ SF Symbol을 제거하고 브랜드 마크로 교체합니다.
 - **패키징:** 선정 시안에 macOS 슈퍼타원 마스크를 적용해 모서리를 투명하게 만든 뒤
   `Resources/AppIcon.icns` 생성, `Contents/Resources`에 복사,
   `Info.plist`에 `CFBundleIconFile = AppIcon` 추가. `Scripts/build-app.sh`에서 처리.
-- 참고: 기존 [로고 시안](design/notch-vinyl-cream-transparent-v1.png)은 형태·재질의
+- 참고: 기존 [로고 시안](design/groovie-cream-transparent-v1.png)은 형태·재질의
   기준으로만 사용한다(비정방형 구도, 큰 여백, 3D 렌더라 아이콘 원본으로는 부적합).
 
 ### 3.3 상태 메뉴 상단 헤더
 
-기존 상단 두 항목(`Notch Vinyl`, `Music 재생 중 · 제목`)을 **커스텀 뷰 아이템 하나**로
+기존 상단 두 항목(`Groovie`, `Music 재생 중 · 제목`)을 **커스텀 뷰 아이템 하나**로
 교체합니다.
 
 ```
@@ -115,7 +115,7 @@ SF Symbol을 제거하고 브랜드 마크로 교체합니다.
 │     Music 열기                               │
 │     자동화 권한 설정…                        │
 ├──────────────────────────────────────────────┤
-│     Notch Vinyl 종료                         │
+│     Groovie 종료                         │
 └──────────────────────────────────────────────┘
 ```
 
@@ -216,7 +216,7 @@ SF Symbol을 제거하고 브랜드 마크로 교체합니다.
   중에도 돈다. 경과 시간으로 오프셋을 계산하고, `masksToBounds`로 자른다.
 - **측정** — 실제 렌더와 같은 `NSAttributedString` 속성으로 폭을 재서 188 pt와 비교한다.
   한글·이모지·결합 문자는 `size()` 결과를 그대로 사용한다.
-- **접근성** — 헤더 뷰에 `setAccessibilityLabel("Notch Vinyl, <제목>, <아티스트>")`.
+- **접근성** — 헤더 뷰에 `setAccessibilityLabel("Groovie, <제목>, <아티스트>")`.
   마퀴는 VoiceOver에 영향을 주지 않는다.
 - **앱 아이콘** — `Resources/AppIcon.iconset` → `iconutil -c icns`.
   `build-app.sh`에서 복사, `Info.plist`에 `CFBundleIconFile`.

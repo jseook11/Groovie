@@ -1,5 +1,5 @@
 import Foundation
-import NotchVinylKit
+import GroovieKit
 
 if CommandLine.arguments.contains("--self-test") {
     exit(Int32(SelfChecks.run() == 0 ? 0 : 1))

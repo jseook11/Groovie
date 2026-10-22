@@ -7,11 +7,11 @@ app:
 	./Scripts/build-app.sh
 
 run: app
-	open build/NotchVinyl.app
+	open build/Groovie.app
 
 test:
 	swift build
-	.build/debug/NotchVinyl --self-test
+	.build/debug/Groovie --self-test
 
 demo: app
 	./Scripts/capture-demo.sh

@@ -1,6 +1,6 @@
 import AppKit
 
-/// The Notch Vinyl mark: a wide notch housing with the lower half of a record
+/// The Groovie mark: a wide notch housing with the lower half of a record
 /// emerging beneath it.
 ///
 /// The mark is drawn in code rather than downscaled from the raster app icon so

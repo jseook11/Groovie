@@ -119,8 +119,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             button.image = BrandMark.menuBar
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyDown
-            button.toolTip = "Notch Vinyl"
-            button.setAccessibilityLabel("Notch Vinyl")
+            button.toolTip = "Groovie"
+            button.setAccessibilityLabel("Groovie")
         }
         statusItem = item
         rebuildMenu()
@@ -202,7 +202,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Notch Vinyl 종료", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Groovie 종료", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -309,10 +309,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Notch Vinyl이 Music을 제어할 수 없습니다"
+        alert.messageText = "Groovie가 Music을 제어할 수 없습니다"
         alert.informativeText = """
         시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 \
-        Notch Vinyl이 Music을 제어하도록 허용해 주세요.
+        Groovie가 Music을 제어하도록 허용해 주세요.
         """
         alert.addButton(withTitle: "설정 열기")
         alert.addButton(withTitle: "나중에")

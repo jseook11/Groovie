@@ -30,7 +30,7 @@ enum AppleMusicBridgeError: Error, Equatable {
 /// All AppleScript traffic is funnelled through one serial queue. Finishes are
 /// coalesced so a slow AppleEvent can never build up a backlog.
 final class AppleMusicBridge {
-    private let queue = DispatchQueue(label: "com.notchvinyl.applemusic", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "com.groovie.applemusic", qos: .userInitiated)
 
     private var readScript: NSAppleScript?
     private var readScriptFailed = false
@@ -153,7 +153,7 @@ final class AppleMusicBridge {
             let error = Self.bridgeError(from: errorInfo)
             if case .permissionDenied = error {
                 DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .notchVinylMusicPermissionDenied, object: nil)
+                    NotificationCenter.default.post(name: .groovieMusicPermissionDenied, object: nil)
                 }
             }
         }
@@ -244,5 +244,5 @@ final class AppleMusicBridge {
 }
 
 extension Notification.Name {
-    static let notchVinylMusicPermissionDenied = Notification.Name("notchVinylMusicPermissionDenied")
+    static let groovieMusicPermissionDenied = Notification.Name("groovieMusicPermissionDenied")
 }

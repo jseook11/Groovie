@@ -37,8 +37,8 @@ final class OverlayController {
     private let snapOpenStiffness: CGFloat = 320
     private let snapOpenDamping: CGFloat = 26
 
-    private let scrollLog = Logger(subsystem: "com.notchvinyl.app", category: "scroll")
-    private let interactionLog = Logger(subsystem: "com.notchvinyl.app", category: "interaction")
+    private let scrollLog = Logger(subsystem: "com.groovie.app", category: "scroll")
+    private let interactionLog = Logger(subsystem: "com.groovie.app", category: "interaction")
     private let scrollPullScale: CGFloat = 0.55
     private let scrollScrubScale: CGFloat = 0.9
     /// Horizontal dead-zone before scroll scrubbing starts. It suppresses the

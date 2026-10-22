@@ -14,7 +14,7 @@ struct VinylSkin: Identifiable, Equatable {
     /// 1 keeps the track accent as-is; lower values pull it toward grey.
     let accentSaturation: CGFloat
 
-    static let defaultsKey = "notchVinyl.skinID"
+    static let defaultsKey = "groovie.skinID"
     static let defaultID = "classic"
 
     static let classic = VinylSkin(
