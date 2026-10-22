@@ -18,6 +18,7 @@ enum LocalizationKey: String, CaseIterable {
     case menuCheckUpdates = "menu.checkUpdates"
     case menuCheckingUpdates = "menu.checkingUpdates"
     case menuUpdateAvailable = "menu.updateAvailable"
+    case menuClearDesktopRecords = "menu.clearDesktopRecords"
     case menuQuit = "menu.quit"
 
     // MARK: Skins
@@ -41,6 +42,7 @@ enum LocalizationKey: String, CaseIterable {
 
     case headerNoTrack = "header.noTrack"
     case overlayPullToLock = "overlay.pullToLock"
+    case overlayDropToRemove = "overlay.dropToRemove"
 
     // MARK: Gesture hint
 
@@ -58,6 +60,9 @@ enum LocalizationKey: String, CaseIterable {
     case alertOpenSettings = "alert.openSettings"
     case alertLater = "alert.later"
     case alertOK = "alert.ok"
+    case alertClearDesktopRecordsTitle = "alert.clearDesktopRecordsTitle"
+    case alertClearDesktopRecordsBody = "alert.clearDesktopRecordsBody"
+    case alertClear = "alert.clear"
 
     // MARK: Update alerts
 

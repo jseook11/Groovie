@@ -11,6 +11,8 @@ final class OverlayController {
     /// Fired when a real pointer or scroll gesture begins, so transient UI such
     /// as the first-run gesture hint can step out of the way.
     var onInteractionStart: (() -> Void)?
+    /// Owns the decorative copies that live on the desktop.
+    weak var desktopRecords: DesktopRecordController?
 
     private(set) var geometry: StageGeometry
     private(set) var layout: VinylLayout
@@ -27,6 +29,7 @@ final class OverlayController {
     private var spinBaseTime: CFTimeInterval = 0
 
     private var session: Session?
+    private var copySession: CopySession?
     private var scrollSession: ScrollSession?
     private var releaseVelocity: CGFloat = 0
     private var releaseElapsed: Double = 0
@@ -104,6 +107,17 @@ final class OverlayController {
         var scrubArmed = false
         var moved = false
         var confirm = ConfirmAccumulator()
+    }
+
+    /// A pointer gesture that copies the fully opened record to the desktop.
+    /// It is deliberately separate from `Session`: the original record must not
+    /// scrub, latch, close, or toggle playback while the copy is in flight.
+    private struct CopySession {
+        var start: CGPoint
+        var snapshot: TrackSnapshot
+        var artwork: NSImage?
+        var wasLatched: Bool
+        var ghostShown = false
     }
 
     private struct ScrollSession {
@@ -221,8 +235,8 @@ final class OverlayController {
         content.onHoverChanged = { [weak self] inside in
             self?.handleHover(inside)
         }
-        content.onMouseDownAt = { [weak self] point, timestamp in
-            self?.handleMouseDown(at: point, timestamp: timestamp)
+        content.onMouseDownAt = { [weak self] point, timestamp, modifiers in
+            self?.handleMouseDown(at: point, timestamp: timestamp, modifiers: modifiers)
         }
         content.onMouseDraggedTo = { [weak self] point, timestamp in
             self?.handleMouseDragged(to: point, timestamp: timestamp)
@@ -278,6 +292,8 @@ final class OverlayController {
         stopHoverTracking()
         resetSkipGesture()
         session = nil
+        copySession = nil
+        desktopRecords?.hideCopyGhost()
         scrollSession = nil
         releaseElapsed = 0
         releaseVelocity = 0
@@ -377,9 +393,23 @@ final class OverlayController {
 
     // MARK: - Gesture
 
-    private func handleMouseDown(at point: CGPoint, timestamp: TimeInterval) {
+    private func handleMouseDown(
+        at point: CGPoint,
+        timestamp: TimeInterval,
+        modifiers: NSEvent.ModifierFlags = []
+    ) {
         scrollLog.debug("mouseDown at \(point.x, privacy: .public),\(point.y, privacy: .public) phase=\(String(describing: self.model.phase), privacy: .public)")
         onInteractionStart?()
+
+        // Option on a fully opened record begins a decorative copy instead of
+        // scrubbing, closing, or toggling playback. This intentionally runs
+        // before the pending-confirm and latched branches.
+        if modifiers.contains(.option), isFullyOpenForCopy, isOnRecord(at: point) {
+            guard let desktopRecords, !desktopRecords.isAtCapacity else { return }
+            startDesktopCopy(at: point, timestamp: timestamp)
+            return
+        }
+
         if pendingConfirmUntil != nil {
             confirmLatch()
             if model.canInteract, music.nowPlaying != nil {
@@ -425,7 +455,128 @@ final class OverlayController {
         startTicking()
     }
 
+    // MARK: - Desktop copies
+
+    /// Whether the source record is fully out. The press must also land on the
+    /// record itself; that is checked separately.
+    private var isFullyOpenForCopy: Bool {
+        guard isEnabled,
+              model.canInteract,
+              music.nowPlaying?.isValid == true
+        else { return false }
+
+        if latched || pendingConfirmUntil != nil { return true }
+        return model.phase == .grabbed && model.exposure >= layout.fullExposure - 0.5
+    }
+
+    private func isOnRecord(at screenPoint: CGPoint) -> Bool {
+        guard let point = contentPoint(forScreenPoint: screenPoint) else { return false }
+        let center = CGPoint(
+            x: layout.windowWidth / 2,
+            y: layout.recordCenterY(exposure: model.exposure)
+        )
+        return hypot(point.x - center.x, point.y - center.y) <= layout.recordRadius + 2
+    }
+
+    private func startDesktopCopy(at point: CGPoint, timestamp: TimeInterval) {
+        guard let now = music.nowPlaying, now.isValid else { return }
+
+        copySession = CopySession(
+            start: point,
+            snapshot: TrackSnapshot(
+                persistentID: now.trackID,
+                title: now.title,
+                artist: now.artist,
+                album: now.album,
+                duration: now.duration
+            ),
+            artwork: model.artwork,
+            wasLatched: latched
+        )
+
+        // A record that was about to fall back into the notch stays out for the
+        // duration of the gesture. It gets its normal confirmation window back
+        // when the copy ends.
+        pendingConfirmUntil = nil
+        model.showConfirmGauge = false
+        model.confirmProgress = 0
+        clearRecordHover()
+        interactionLog.debug("desktop copy started")
+    }
+
+    private func updateDesktopCopy(_ copy: inout CopySession, point: CGPoint) {
+        let travel = hypot(point.x - copy.start.x, point.y - copy.start.y)
+        if !copy.ghostShown, travel >= layout.pullStartDistance {
+            copy.ghostShown = true
+            desktopRecords?.showCopyGhost(
+                snapshot: copy.snapshot,
+                artwork: copy.artwork,
+                at: point
+            )
+            performHaptic(.levelChange)
+            NSCursor.closedHand.set()
+        }
+        if copy.ghostShown {
+            desktopRecords?.moveCopyGhost(to: point)
+        }
+    }
+
+    private func finishDesktopCopy(_ copy: CopySession, at point: CGPoint) {
+        let travel = hypot(point.x - copy.start.x, point.y - copy.start.y)
+        desktopRecords?.hideCopyGhost()
+
+        if travel <= layout.clickSlop {
+            // A single Option-click packages the album instead of dragging the
+            // bare record out.
+            let created = desktopRecords?.createRecord(
+                snapshot: copy.snapshot,
+                artwork: copy.artwork,
+                style: .sleeve,
+                at: nil
+            )
+            if created != nil { performHaptic(.alignment) }
+        } else if travel < layout.pullStartDistance {
+            // Too far for a click, too short for a drag: leave no trace.
+        } else if geometry.idleFrame.insetBy(dx: -1, dy: -1).contains(point) {
+            // Dropped back on the notch strip: cancel the copy. The larger
+            // desktop delete zone is deliberately not used here because the
+            // source record itself sits inside it.
+            interactionLog.debug("desktop copy cancelled in the notch")
+        } else {
+            let created = desktopRecords?.createRecord(
+                snapshot: copy.snapshot,
+                artwork: copy.artwork,
+                style: .disc,
+                at: point
+            )
+            if created != nil { performHaptic(.alignment) }
+        }
+
+        restoreOpenStateAfterCopy(copy)
+    }
+
+    /// Unpinned records would normally be gone by now. Re-open the one-second
+    /// confirmation window so the original drops back into the notch naturally
+    /// after the gesture instead of disappearing mid-copy.
+    private func restoreOpenStateAfterCopy(_ copy: CopySession) {
+        NSCursor.arrow.set()
+        guard !copy.wasLatched else { return }
+
+        pendingConfirmUntil = ProcessInfo.processInfo.systemUptime + confirmWindow
+        model.showConfirmGauge = true
+        model.phase = .grabbed
+        showStage()
+        syncSpin()
+        startTicking()
+        NSCursor.openHand.set()
+    }
+
     private func handleMouseDragged(to point: CGPoint, timestamp: TimeInterval) {
+        if var copy = copySession {
+            updateDesktopCopy(&copy, point: point)
+            copySession = copy
+            return
+        }
         if session == nil {
             beginReGrabIfPossible(at: point, timestamp: timestamp)
         }
@@ -822,6 +973,11 @@ final class OverlayController {
     }
 
     private func handleMouseUp(at point: CGPoint, timestamp: TimeInterval) {
+        if let copy = copySession {
+            copySession = nil
+            finishDesktopCopy(copy, at: point)
+            return
+        }
         if let session, session.latchedInteraction {
             self.session = nil
             if session.scrubArmed {
@@ -922,6 +1078,9 @@ final class OverlayController {
     // MARK: - Two-finger scroll control
 
     private func handleScroll(_ event: NSEvent) {
+        // A mouse copy gesture owns the record; do not let a stray scroll close
+        // or scrub it mid-copy.
+        guard copySession == nil else { return }
         // The fingers lifted (or the gesture was cancelled): commit the scrub
         // now. The session outlives the gesture for the confirm/collapse
         // policy, but waiting for the inactivity timer before seeking would
@@ -1544,6 +1703,12 @@ final class OverlayController {
     }
 
     private func finishLostDrag() {
+        if let copy = copySession {
+            copySession = nil
+            desktopRecords?.hideCopyGhost()
+            restoreOpenStateAfterCopy(copy)
+            return
+        }
         guard let session else { return }
         self.session = nil
         if session.latchedInteraction {

@@ -468,6 +468,92 @@ public enum SelfChecks {
         expect(UpdateChecker.release(from: Data("{}".utf8), currentVersion: "0.1.1") == nil,
                "a malformed payload is ignored")
 
+        // MARK: Desktop records
+
+        let snapshot = TrackSnapshot(
+            persistentID: "persist-1",
+            title: "Blue in Green",
+            artist: "Miles Davis",
+            album: "Kind of Blue",
+            duration: 337
+        )
+        let disc = DesktopRecord(
+            track: snapshot,
+            style: .disc,
+            position: CGPoint(x: 400, y: 300),
+            screenID: "1"
+        )
+        let sleeve = DesktopRecord(
+            track: snapshot,
+            style: .sleeve,
+            position: CGPoint(x: 600, y: 260),
+            screenID: "1"
+        )
+        let document = DesktopRecordDocument(records: [disc, sleeve])
+
+        if let data = try? JSONEncoder().encode(document),
+           let decoded = try? JSONDecoder().decode(DesktopRecordDocument.self, from: data)
+        {
+            expect(decoded.records.count == 2, "desktop records survive a JSON round trip")
+            expect(decoded.records[0].style == .disc, "the disc style survives a round trip")
+            expect(decoded.records[1].style == .sleeve, "the sleeve style survives a round trip")
+            expect(decoded.records[1].track.album == "Kind of Blue",
+                   "track metadata survives a round trip")
+            expect(decoded.records[0].id != decoded.records[1].id,
+                   "duplicate copies keep independent identities")
+        } else {
+            expect(false, "desktop records must encode and decode")
+        }
+
+        let visible = CGRect(x: 0, y: 0, width: 1440, height: 800)
+        let discSize = DesktopRecordGeometry.itemSize(for: .disc)
+        let inside = DesktopRecordGeometry.clamp(
+            CGPoint(x: 10, y: 10),
+            itemSize: discSize,
+            to: visible
+        )
+        expect(inside.x >= discSize.width / 2 && inside.y >= discSize.height / 2,
+               "desktop items clamp inside the visible frame")
+
+        let outside = DesktopRecordGeometry.clamp(
+            CGPoint(x: 5000, y: 5000),
+            itemSize: discSize,
+            to: visible
+        )
+        expect(outside.x <= visible.maxX - discSize.width / 2,
+               "desktop items clamp at the right edge")
+        expect(outside.y <= visible.maxY - discSize.height / 2,
+               "desktop items clamp at the top edge")
+
+        let notch = CGRect(x: 640, y: 770, width: 160, height: 30)
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 800)
+        let zone = DesktopRecordGeometry.deleteZone(notchRect: notch, screenFrame: screen)
+        expect(zone.contains(CGPoint(x: 720, y: 790)),
+               "the notch is inside the delete zone")
+        expect(!zone.contains(CGPoint(x: 720, y: 400)),
+               "the middle of the screen is outside the delete zone")
+        expect(!zone.contains(CGPoint(x: 40, y: 790)),
+               "the far top-left corner is outside the delete zone")
+
+        let slot = DesktopRecordGeometry.defaultSlot(
+            itemSize: discSize,
+            screenFrame: screen,
+            visibleFrame: visible,
+            notchHeight: 30,
+            index: 0
+        )
+        expect(!zone.contains(slot), "the default package slot starts below the delete zone")
+        expect(visible.contains(slot), "the default package slot is on screen")
+
+        let nextSlot = DesktopRecordGeometry.defaultSlot(
+            itemSize: discSize,
+            screenFrame: screen,
+            visibleFrame: visible,
+            notchHeight: 30,
+            index: 1
+        )
+        expect(nextSlot != slot, "repeated package clicks cascade")
+
         // MARK: Report
 
         if failures.isEmpty {

@@ -40,7 +40,7 @@ final class PassthroughHostingView<Content: View>: NSHostingView<Content> {
 /// Receives hover and drag input over the notch. Never becomes first responder.
 final class OverlayContentView: NSView {
     var onHoverChanged: ((Bool) -> Void)?
-    var onMouseDownAt: ((CGPoint, TimeInterval) -> Void)?
+    var onMouseDownAt: ((CGPoint, TimeInterval, NSEvent.ModifierFlags) -> Void)?
     var onMouseDraggedTo: ((CGPoint, TimeInterval) -> Void)?
     var onMouseUpAt: ((CGPoint, TimeInterval) -> Void)?
     var onScrollWheel: ((NSEvent) -> Void)?
@@ -101,7 +101,7 @@ final class OverlayContentView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        onMouseDownAt?(NSEvent.mouseLocation, event.timestamp)
+        onMouseDownAt?(NSEvent.mouseLocation, event.timestamp, event.modifierFlags)
     }
 
     override func mouseDragged(with event: NSEvent) {

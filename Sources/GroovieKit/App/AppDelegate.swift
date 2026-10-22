@@ -22,6 +22,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     private let updateChecker = UpdateChecker()
     private var availableUpdate: UpdateChecker.Release?
     private var isCheckingUpdates = false
+    private var desktopRecords: DesktopRecordController?
 
     /// Entry point used by the executable target.
     public static func run() {
@@ -44,8 +45,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        // Desktop decorations are independent of Music and of the notch, so
+        // they are restored before the overlay is set up. `--desktop-demo` uses
+        // a throwaway store so the layer can be inspected without touching the
+        // user's saved items.
+        let isDesktopDemo = ProcessInfo.processInfo.arguments.contains("--desktop-demo")
+        let demoDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GroovieDesktopDemo", isDirectory: true)
+        if isDesktopDemo {
+            try? FileManager.default.removeItem(at: demoDirectory)
+        }
+        let demoStore = isDesktopDemo
+            ? DesktopRecordStore(baseDirectory: demoDirectory)
+            : nil
+        let records = DesktopRecordController(store: demoStore)
+        records.onRecordsChanged = { [weak self] in self?.rebuildMenu() }
+        records.start()
+        desktopRecords = records
+
         setUpStatusItem()
         refreshOverlaySetup()
+        if isDesktopDemo {
+            seedDesktopDemo(records)
+        }
         scheduleFirstRunHint()
         startUpdateCheck()
 
@@ -67,6 +89,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     public func applicationWillTerminate(_ notification: Notification) {
         hintSchedule?.cancel()
         gestureHint.dismiss(animated: false)
+        desktopRecords?.stop()
         controller?.deactivate()
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
@@ -81,6 +104,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         hasNotch = notch != nil
         currentNotch = notch
         gestureHint.dismiss(animated: false)
+        desktopRecords?.updateGeometry(notch.map { StageGeometry(notch: $0) })
 
         if let notch {
             if let controller {
@@ -112,8 +136,36 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         controller?.onInteractionStart = { [weak self] in
             self?.gestureHint.dismiss()
         }
+        controller?.desktopRecords = desktopRecords
 
         rebuildMenu()
+    }
+
+    /// Development aid: `--desktop-demo --fake-music` seeds one disc and one
+    /// packaged album in a throwaway store so the desktop layer can be checked
+    /// without a Music library or a manual Option drag.
+    private func seedDesktopDemo(_ controller: DesktopRecordController) {
+        guard controller.recordCount == 0, let screen = NSScreen.main else { return }
+        let snapshot = TrackSnapshot(
+            persistentID: "demo-desktop",
+            title: "Blue in Green",
+            artist: "Miles Davis",
+            album: "Kind of Blue",
+            duration: 337
+        )
+        let visible = screen.visibleFrame
+        _ = controller.createRecord(
+            snapshot: snapshot,
+            artwork: nil,
+            style: .disc,
+            at: CGPoint(x: visible.midX - 170, y: visible.midY + 80)
+        )
+        _ = controller.createRecord(
+            snapshot: snapshot,
+            artwork: nil,
+            style: .sleeve,
+            at: CGPoint(x: visible.midX + 90, y: visible.midY + 80)
+        )
     }
 
     /// Introduce the hidden strip on a display that has no physical notch to
@@ -144,6 +196,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
     private func setEnabled(_ newValue: Bool) {
         enabled = newValue
+        desktopRecords?.setActive(newValue)
         if newValue {
             controller?.activate()
         } else {
@@ -230,6 +283,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         skinItem.submenu = skinMenu
         skinItem.isEnabled = hasNotch && enabled
         menu.addItem(skinItem)
+
+        let clearDesktopItem = NSMenuItem(
+            title: L10n.t(.menuClearDesktopRecords, desktopRecords?.recordCount ?? 0),
+            action: #selector(clearDesktopRecords),
+            keyEquivalent: ""
+        )
+        clearDesktopItem.target = self
+        clearDesktopItem.isEnabled = enabled && (desktopRecords?.recordCount ?? 0) > 0
+        menu.addItem(clearDesktopItem)
 
         menu.addItem(.separator())
 
@@ -361,7 +423,28 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     @objc private func selectSkin(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
         controller?.selectSkin(id)
+        desktopRecords?.refreshSkins(VinylSkin.skin(id: id))
         rebuildMenu()
+    }
+
+    @objc private func clearDesktopRecords() {
+        guard let desktopRecords, desktopRecords.recordCount > 0 else { return }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.t(.alertClearDesktopRecordsTitle)
+        alert.informativeText = L10n.t(
+            .alertClearDesktopRecordsBody,
+            desktopRecords.recordCount
+        )
+        alert.addButton(withTitle: L10n.t(.alertClear))
+        alert.addButton(withTitle: L10n.t(.alertLater))
+
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            desktopRecords.deleteAll()
+            rebuildMenu()
+        }
     }
 
     @objc private func openMusic() {
