@@ -585,6 +585,11 @@ public enum SelfChecks {
             expect(reloaded.records.first?.screenID == "2",
                    "desktop screen identities persist across a reload")
 
+            reloaded.updateStyle(id: disc.id, style: .sleeve)
+            let restyled = DesktopRecordStore(baseDirectory: directory)
+            expect(restyled.records.first?.style == .sleeve,
+                   "desktop style changes persist across a reload")
+
             let unsafeArtwork = DesktopRecord(
                 track: TrackSnapshot(
                     persistentID: "persist-1",

@@ -154,7 +154,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             duration: 337
         )
         let visible = screen.visibleFrame
-        _ = controller.createRecord(
+        let disc = controller.createRecord(
             snapshot: snapshot,
             artwork: nil,
             style: .disc,
@@ -166,6 +166,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             style: .sleeve,
             at: CGPoint(x: visible.midX + 90, y: visible.midY + 80)
         )
+
+        // `--desktop-demo-toggle` exercises the same path as an Option-click
+        // without needing a visible desktop or a synthetic mouse event.
+        if ProcessInfo.processInfo.arguments.contains("--desktop-demo-toggle"),
+           let disc
+        {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                controller.toggleStyle(id: disc.id)
+            }
+        }
     }
 
     /// Introduce the hidden strip on a display that has no physical notch to

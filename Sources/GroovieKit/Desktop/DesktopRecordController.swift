@@ -14,9 +14,9 @@ final class DesktopRecordController {
     private var windows: [UUID: DesktopRecordWindow] = [:]
     private var isEnabled = true
 
-    private var optionTimer: Timer?
     private var draggingID: UUID?
     private var artworkByID: [UUID: NSImage] = [:]
+    private var hoverMonitors: [Any] = []
     private var ghostPanel: DesktopCopyGhostPanel?
     private var deletePanel: DesktopDeleteTargetPanel?
 
@@ -37,11 +37,11 @@ final class DesktopRecordController {
 
     func start() {
         restoreWindows()
-        startOptionTimerIfNeeded()
+        startHoverTracking()
     }
 
     func stop() {
-        stopOptionTimer()
+        stopHoverTracking()
         draggingID = nil
         hideCopyGhost()
         hideDeleteTarget()
@@ -61,15 +61,14 @@ final class DesktopRecordController {
             for window in windows.values {
                 window.orderFrontRegardless()
             }
-            startOptionTimerIfNeeded()
-            pollOptionState()
+            startHoverTracking()
         } else {
             for window in windows.values {
                 window.cancelDrag()
                 window.orderOut(nil)
             }
+            stopHoverTracking()
             draggingID = nil
-            stopOptionTimer()
             hideCopyGhost()
             hideDeleteTarget()
         }
@@ -167,7 +166,38 @@ final class DesktopRecordController {
 
     func beginDrag(_ id: UUID) {
         draggingID = id
-        startOptionTimerIfNeeded()
+    }
+
+    /// Option-click on a desktop item flips the bare record and the packaged
+    /// album. The centre stays put; the window is recreated at the new size.
+    func toggleStyle(id: UUID) {
+        guard let record = store.records.first(where: { $0.id == id }) else { return }
+        let newStyle: DesktopRecordStyle = record.style == .disc ? .sleeve : .disc
+        store.updateStyle(id: id, style: newStyle)
+
+        var updated = record
+        updated.style = newStyle
+        if let targetScreen = screen(containing: record.position) ?? NSScreen.main {
+            let itemSize = DesktopRecordGeometry.itemSize(for: newStyle)
+            updated.position = DesktopRecordGeometry.clamp(
+                record.position,
+                itemSize: itemSize,
+                to: targetScreen.visibleFrame
+            )
+            store.updatePosition(
+                id: id,
+                position: updated.position,
+                screenID: DesktopRecordGeometry.screenID(for: targetScreen)
+            )
+        }
+
+        guard let window = windows.removeValue(forKey: id) else { return }
+        let artwork = artworkByID[id] ?? store.artwork(for: record)
+        window.cancelDrag()
+        window.orderOut(nil)
+        window.close()
+        addWindow(for: updated, artwork: artwork, fadeIn: true)
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 
     func dragMoved(_ id: UUID) {
@@ -184,7 +214,6 @@ final class DesktopRecordController {
         windows[id]?.setDeleteArmed(false)
 
         guard let window = windows[id] else {
-            pollOptionState()
             return
         }
         let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
@@ -208,8 +237,6 @@ final class DesktopRecordController {
                 screenID: DesktopRecordGeometry.screenID(for: targetScreen)
             )
         }
-
-        pollOptionState()
     }
 
     func delete(id: UUID, animated: Bool) {
@@ -217,9 +244,6 @@ final class DesktopRecordController {
         artworkByID.removeValue(forKey: id)
         store.remove(id: id)
         onRecordsChanged?()
-        if windows.isEmpty {
-            stopOptionTimer()
-        }
 
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
 
@@ -252,7 +276,6 @@ final class DesktopRecordController {
     func deleteAll() {
         hideCopyGhost()
         hideDeleteTarget()
-        stopOptionTimer()
         draggingID = nil
         for window in windows.values {
             window.cancelDrag()
@@ -363,6 +386,12 @@ final class DesktopRecordController {
         window.onDragBegan = { [weak self] id in self?.beginDrag(id) }
         window.onDragMoved = { [weak self] id, _ in self?.dragMoved(id) }
         window.onDragEnded = { [weak self] id, point in self?.dragEnded(id, pointer: point) }
+        window.onClicked = { [weak self] id in
+            // Let the mouse-up finish before replacing the window.
+            DispatchQueue.main.async {
+                self?.toggleStyle(id: id)
+            }
+        }
         window.setFrameOrigin(CGPoint(
             x: record.position.x - window.frame.width / 2,
             y: record.position.y - window.frame.height / 2
@@ -384,8 +413,6 @@ final class DesktopRecordController {
                 }
             }
         }
-        applyInteraction(to: window, optionHeld: optionHeld)
-        startOptionTimerIfNeeded()
     }
 
     private func reclampAll() {
@@ -413,46 +440,61 @@ final class DesktopRecordController {
         }
     }
 
-    // MARK: - Option tracking
+    // MARK: - Option hover
 
-    private var optionHeld: Bool {
-        CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate)
-    }
+    /// Global moves cover the inactive app; local moves cover the active one.
+    /// Only movement drives this, so an idle desktop still does no work.
+    private func startHoverTracking() {
+        guard hoverMonitors.isEmpty, isEnabled else { return }
 
-    /// Runs while any desktop item exists, independent of which app is
-    /// frontmost and of where the pointer last moved. A flag read at 20 Hz is
-    /// negligible; it keeps Option+click responsive after the app loses focus.
-    private func startOptionTimerIfNeeded() {
-        guard optionTimer == nil, isEnabled, !windows.isEmpty else { return }
-        pollOptionState()
-        let timer = Timer(timeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.pollOptionState() }
+        let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshOptionHover() }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        optionTimer = timer
+        let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
+            MainActor.assumeIsolated { self?.refreshOptionHover() }
+            return event
+        }
+        if let global { hoverMonitors.append(global) }
+        if let local { hoverMonitors.append(local) }
+        refreshOptionHover()
     }
 
-    private func stopOptionTimer() {
-        optionTimer?.invalidate()
-        optionTimer = nil
-    }
-
-    private func pollOptionState() {
-        let held = optionHeld
+    private func stopHoverTracking() {
+        for monitor in hoverMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        hoverMonitors.removeAll()
         for window in windows.values {
-            applyInteraction(to: window, optionHeld: held)
+            window.setOptionHover(false)
         }
     }
 
-    private func applyInteraction(to window: DesktopRecordWindow, optionHeld: Bool) {
-        if window.isDraggingRecord {
-            window.ignoresMouseEvents = false
-        } else {
-            let ignores = !(optionHeld && isEnabled && window.isVisible)
-            if ignores {
-                window.clearHover()
-            }
-            window.ignoresMouseEvents = ignores
+    private func refreshOptionHover() {
+        guard isEnabled else { return }
+
+        let point = NSEvent.mouseLocation
+        let option = NSEvent.modifierFlags.contains(.option)
+        let topWindowNumber = NSWindow.windowNumber(
+            at: point,
+            belowWindowWithWindowNumber: 0
+        )
+
+        // Only the topmost item under the pointer reacts. This keeps a hidden
+        // desktop item from changing the cursor while a normal app window
+        // covers it.
+        let hit = windows.values.first { window in
+            guard window.windowNumber == topWindowNumber else { return false }
+            let item = DesktopRecordGeometry.itemSize(for: window.style)
+            let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
+            return abs(point.x - center.x) <= item.width / 2 + 2
+                && abs(point.y - center.y) <= item.height / 2 + 2
+        }
+
+        for window in windows.values {
+            window.setOptionHover(window === hit && option)
+        }
+        if hit != nil, option {
+            NSCursor.openHand.set()
         }
     }
 

@@ -173,6 +173,7 @@ For a full walkthrough of every gesture, threshold, and edge case, see the
 | Copy to the desktop | ⌥-drag a fully opened record | ⌥-drag |
 | Package the album | ⌥-click a fully opened record | ⌥-click |
 | Move a desktop copy | ⌥-drag it | ⌥-drag |
+| Switch cover / vinyl | ⌥-click a desktop copy | ⌥-click |
 | Remove a desktop copy | Drag its centre into the top notch area | Same |
 | Cancel a seek | Shake four times in one second | — |
 
@@ -219,9 +220,9 @@ briefly after release and then springs back.
 
 Once the record is fully out, hold ⌥ and drag it to leave a static copy on the desktop.
 ⌥-click without dragging packages the album as a cover instead. Desktop copies are decorative:
-they never play, scrub, or skip. Hold ⌥ to move one, and drop its centre on the top notch area
-to remove it. The status menu can clear them all. Copies survive a relaunch and stay on the
-display where they were placed.
+they never play, scrub, or skip. Hold ⌥ to move one, ⌥-click to switch between the bare record
+and its album cover, and drop its centre on the top notch area to remove it. The status menu can
+clear them all. Copies survive a relaunch and stay on the display where they were placed.
 
 ### Trackpad
 

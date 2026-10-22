@@ -61,7 +61,10 @@ uses the 260/24 pair above.
 | `cascadeCount` | 5 | Slots before the cascade wraps. |
 | `maxRecords` | 100 | Safety cap for desktop items. |
 | Fade-in | 0.18 s | One-time appearance animation; nothing runs afterwards. |
-| Option poll | 20 Hz | While any desktop item exists; independent of focus and pointer proximity. |
+
+Desktop windows always accept mouse events, so pressing Option while the pointer already rests
+on an item works immediately. There is no polling timer, and a plain click on an item is a
+no-op. Option+click (≤ 4 pt) switches `.disc` ↔ `.sleeve`; Option+drag moves the item.
 
 Desktop windows use `CGWindowLevelForKey(.desktopIconWindow) + 1`, above the Finder desktop
 icons but below normal application windows, so they stay clickable when another app is

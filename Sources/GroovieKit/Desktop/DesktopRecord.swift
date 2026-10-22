@@ -45,7 +45,7 @@ enum DesktopRecordStyle: String, Codable, CaseIterable {
 struct DesktopRecord: Codable, Identifiable, Equatable {
     let id: UUID
     var track: TrackSnapshot
-    let style: DesktopRecordStyle
+    var style: DesktopRecordStyle
     /// Centre of the item in global screen coordinates.
     var position: CGPoint
     /// `NSScreenNumber` of the display the item belongs to, when known.

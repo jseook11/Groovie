@@ -10,6 +10,7 @@ final class DesktopRecordWindow: NSPanel {
     var onDragBegan: ((UUID) -> Void)?
     var onDragMoved: ((UUID, CGPoint) -> Void)?
     var onDragEnded: ((UUID, CGPoint) -> Void)?
+    var onClicked: ((UUID) -> Void)?
 
     private let baseLevel: NSWindow.Level
     private let recordView: DesktopRecordContentView
@@ -58,7 +59,12 @@ final class DesktopRecordWindow: NSPanel {
         animationBehavior = .none
         becomesKeyOnlyIfNeeded = true
         acceptsMouseMovedEvents = true
-        ignoresMouseEvents = true
+        // Always accept events. If the item ignored them unless Option was
+        // already held, pressing Option while the pointer rests on the item
+        // would not take effect until it left and re-entered. Plain clicks are
+        // swallowed and do nothing; Option+click toggles the style, Option+drag
+        // moves the item.
+        ignoresMouseEvents = false
         isExcludedFromWindowsMenu = true
         contentView = recordView
 
@@ -80,8 +86,8 @@ final class DesktopRecordWindow: NSPanel {
         recordView.updateImage(image)
     }
 
-    func clearHover() {
-        recordView.clearHover()
+    func setOptionHover(_ hovering: Bool) {
+        recordView.setOptionHover(hovering)
     }
 
     /// Stop an in-flight drag without reporting a drop. Used when the whole
@@ -147,12 +153,21 @@ final class DesktopRecordWindow: NSPanel {
             NSEvent.removeMonitor(monitor)
             mouseUpMonitor = nil
         }
+        let end = NSEvent.mouseLocation
+        let travel = dragStartMouse.map {
+            hypot(end.x - $0.x, end.y - $0.y)
+        } ?? 0
         dragStartMouse = nil
         dragStartOrigin = nil
         level = baseLevel
         recordView.setDragging(false)
         NSCursor.arrow.set()
-        onDragEnded?(recordID, NSEvent.mouseLocation)
+
+        if travel <= 4 {
+            onClicked?(recordID)
+        } else {
+            onDragEnded?(recordID, end)
+        }
     }
 }
 
@@ -167,7 +182,6 @@ final class DesktopRecordContentView: NSView {
     private let ringLayer = CAShapeLayer()
     private let itemRect: CGRect
     private let ringPath: CGPath
-    private var tracking: NSTrackingArea?
     private var hovered = false
     private var deleteArmed = false
     private var dragging = false
@@ -226,31 +240,6 @@ final class DesktopRecordContentView: NSView {
         bounds.contains(point) ? self : nil
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        tracking = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        hovered = true
-        updateRing()
-        NSCursor.openHand.set()
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hovered = false
-        updateRing()
-        NSCursor.arrow.set()
-    }
-
     override func mouseDown(with event: NSEvent) {
         onMouseDown?(event)
     }
@@ -267,11 +256,12 @@ final class DesktopRecordContentView: NSView {
         imageLayer.contents = Self.cgImage(from: image)
     }
 
-    func clearHover() {
-        guard hovered else { return }
-        hovered = false
+    /// The controller drives this from its mouse-move monitors. Only Option
+    /// hover shows the ring; a plain hover leaves the item visually still.
+    func setOptionHover(_ hovering: Bool) {
+        guard hovered != hovering else { return }
+        hovered = hovering
         updateRing()
-        NSCursor.arrow.set()
     }
 
     func setDragging(_ dragging: Bool) {

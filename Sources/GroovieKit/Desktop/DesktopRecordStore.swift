@@ -58,6 +58,13 @@ final class DesktopRecordStore {
         save()
     }
 
+    func updateStyle(id: UUID, style: DesktopRecordStyle) {
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+        guard records[index].style != style else { return }
+        records[index].style = style
+        save()
+    }
+
     func remove(id: UUID) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         let removed = records.remove(at: index)
