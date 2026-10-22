@@ -481,6 +481,15 @@ final class OverlayController {
     private func startDesktopCopy(at point: CGPoint, timestamp: TimeInterval) {
         guard let now = music.nowPlaying, now.isValid else { return }
 
+        // Finish a scroll session first. Its inactivity timeout would otherwise
+        // collapse the source record while the mouse copy is in flight.
+        if let scroll = scrollSession {
+            scrollSession = nil
+            if scroll.didScrub {
+                music.finishScrub(position: scroll.desiredPosition, wasPlaying: scroll.wasPlaying)
+            }
+        }
+
         copySession = CopySession(
             start: point,
             snapshot: TrackSnapshot(
@@ -501,6 +510,7 @@ final class OverlayController {
         model.showConfirmGauge = false
         model.confirmProgress = 0
         clearRecordHover()
+        startTicking()
         interactionLog.debug("desktop copy started")
     }
 
@@ -1627,16 +1637,23 @@ final class OverlayController {
         }
 
         // If the mouse-up was lost (space switch, app focus, etc.) finish safely.
-        if !isDemoActive, session != nil, model.phase != .releasing, NSEvent.pressedMouseButtons == 0 {
+        // Copy sessions do not use `session`, so both are checked here.
+        if !isDemoActive,
+           session != nil || copySession != nil,
+           model.phase != .releasing,
+           NSEvent.pressedMouseButtons == 0
+        {
             finishLostDrag()
         }
 
         // A latched record has nothing left to animate or wait for: playback
         // rotation lives in Core Animation. Let the app sleep until the next
-        // gesture instead of waking at 60 Hz forever.
+        // gesture instead of waking at 60 Hz forever. A copy session keeps the
+        // timer alive so a lost mouse-up can still be detected.
         if model.phase == .grabbed,
            session == nil,
            scrollSession == nil,
+           copySession == nil,
            pendingConfirmUntil == nil,
            !snapOpenActive
         {

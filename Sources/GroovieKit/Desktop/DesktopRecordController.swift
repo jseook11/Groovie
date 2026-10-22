@@ -14,9 +14,9 @@ final class DesktopRecordController {
     private var windows: [UUID: DesktopRecordWindow] = [:]
     private var isEnabled = true
 
-    private var pointerMonitor: Any?
     private var optionTimer: Timer?
     private var draggingID: UUID?
+    private var artworkByID: [UUID: NSImage] = [:]
     private var ghostPanel: DesktopCopyGhostPanel?
     private var deletePanel: DesktopDeleteTargetPanel?
 
@@ -31,19 +31,18 @@ final class DesktopRecordController {
     }
 
     var recordCount: Int { store.records.count }
-    var records: [DesktopRecord] { store.records }
     var isAtCapacity: Bool { store.records.count >= DesktopRecordGeometry.maxRecords }
 
     // MARK: - Lifecycle
 
     func start() {
         restoreWindows()
-        installPointerMonitor()
+        startOptionTimerIfNeeded()
     }
 
     func stop() {
-        removePointerMonitor()
         stopOptionTimer()
+        draggingID = nil
         hideCopyGhost()
         hideDeleteTarget()
         for window in windows.values {
@@ -52,6 +51,7 @@ final class DesktopRecordController {
             window.close()
         }
         windows.removeAll()
+        artworkByID.removeAll()
     }
 
     func setActive(_ active: Bool) {
@@ -61,14 +61,14 @@ final class DesktopRecordController {
             for window in windows.values {
                 window.orderFrontRegardless()
             }
-            installPointerMonitor()
+            startOptionTimerIfNeeded()
             pollOptionState()
         } else {
             for window in windows.values {
                 window.cancelDrag()
                 window.orderOut(nil)
             }
-            removePointerMonitor()
+            draggingID = nil
             stopOptionTimer()
             hideCopyGhost()
             hideDeleteTarget()
@@ -80,19 +80,19 @@ final class DesktopRecordController {
         reclampAll()
     }
 
-    func screenParametersChanged() {
-        reclampAll()
-    }
-
     func refreshSkins(_ skin: VinylSkin) {
         guard skin != self.skin else { return }
         self.skin = skin
         for (id, window) in windows {
             guard let record = store.records.first(where: { $0.id == id }) else { continue }
+            let artwork = artworkByID[id] ?? store.artwork(for: record)
+            if let artwork, artworkByID[id] == nil {
+                artworkByID[id] = artwork
+            }
             let image = DesktopArtworkRenderer.image(
                 for: record.style,
                 snapshot: record.track,
-                artwork: store.artwork(for: record),
+                artwork: artwork,
                 skin: skin
             )
             window.updateImage(image)
@@ -214,17 +214,31 @@ final class DesktopRecordController {
 
     func delete(id: UUID, animated: Bool) {
         guard let window = windows.removeValue(forKey: id) else { return }
+        artworkByID.removeValue(forKey: id)
         store.remove(id: id)
         onRecordsChanged?()
         if windows.isEmpty {
             stopOptionTimer()
         }
 
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+
         if animated {
+            // Move the item toward the notch while it fades. If the notch
+            // geometry is unavailable, the fade still communicates removal.
+            let targetOrigin = deleteZone.map {
+                CGPoint(
+                    x: $0.midX - window.frame.width / 2,
+                    y: $0.midY - window.frame.height / 2
+                )
+            }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.18
                 context.timingFunction = CAMediaTimingFunction(name: .easeIn)
                 window.animator().alphaValue = 0
+                if let targetOrigin {
+                    window.animator().setFrameOrigin(targetOrigin)
+                }
             } completionHandler: {
                 window.orderOut(nil)
                 window.close()
@@ -239,13 +253,16 @@ final class DesktopRecordController {
         hideCopyGhost()
         hideDeleteTarget()
         stopOptionTimer()
+        draggingID = nil
         for window in windows.values {
             window.cancelDrag()
             window.orderOut(nil)
             window.close()
         }
         windows.removeAll()
+        artworkByID.removeAll()
         store.removeAll()
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         onRecordsChanged?()
     }
 
@@ -352,6 +369,9 @@ final class DesktopRecordController {
         ))
         window.alphaValue = fadeIn ? 0 : 1
         windows[record.id] = window
+        if let artwork {
+            artworkByID[record.id] = artwork
+        }
         if isEnabled {
             window.orderFrontRegardless()
             if fadeIn {
@@ -365,17 +385,23 @@ final class DesktopRecordController {
             }
         }
         applyInteraction(to: window, optionHeld: optionHeld)
+        startOptionTimerIfNeeded()
     }
 
     private func reclampAll() {
         for (id, window) in windows {
             guard let record = store.records.first(where: { $0.id == id }) else { continue }
-            let targetScreen = screen(withID: record.screenID)
+            guard let targetScreen = screen(withID: record.screenID)
                 ?? screen(containing: record.position)
                 ?? NSScreen.main
+            else { continue }
+
             let itemSize = DesktopRecordGeometry.itemSize(for: record.style)
-            let visible = targetScreen?.visibleFrame ?? .zero
-            let clamped = DesktopRecordGeometry.clamp(record.position, itemSize: itemSize, to: visible)
+            let clamped = DesktopRecordGeometry.clamp(
+                record.position,
+                itemSize: itemSize,
+                to: targetScreen.visibleFrame
+            )
             window.setFrameOrigin(CGPoint(
                 x: clamped.x - window.frame.width / 2,
                 y: clamped.y - window.frame.height / 2
@@ -393,44 +419,11 @@ final class DesktopRecordController {
         CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate)
     }
 
-    private func installPointerMonitor() {
-        guard pointerMonitor == nil, isEnabled else { return }
-        pointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.pointerMoved(to: NSEvent.mouseLocation)
-            }
-        }
-    }
-
-    private func removePointerMonitor() {
-        if let pointerMonitor {
-            NSEvent.removeMonitor(pointerMonitor)
-            self.pointerMonitor = nil
-        }
-    }
-
-    private func pointerMoved(to point: CGPoint) {
-        let near = windows.values.contains { window in
-            let item = DesktopRecordGeometry.itemSize(for: window.style)
-            let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
-            return abs(point.x - center.x) <= item.width / 2 + 24
-                && abs(point.y - center.y) <= item.height / 2 + 24
-        }
-
-        if near || draggingID != nil {
-            startOptionTimerIfNeeded()
-        } else {
-            stopOptionTimer()
-            for window in windows.values {
-                applyInteraction(to: window, optionHeld: false)
-            }
-        }
-    }
-
-    /// The poll runs only while the pointer is near an item. At rest there is
-    /// no timer at all, which keeps an idle desktop at effectively zero CPU.
+    /// Runs while any desktop item exists, independent of which app is
+    /// frontmost and of where the pointer last moved. A flag read at 20 Hz is
+    /// negligible; it keeps Option+click responsive after the app loses focus.
     private func startOptionTimerIfNeeded() {
-        guard optionTimer == nil, isEnabled else { return }
+        guard optionTimer == nil, isEnabled, !windows.isEmpty else { return }
         pollOptionState()
         let timer = Timer(timeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.pollOptionState() }

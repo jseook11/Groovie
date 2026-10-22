@@ -18,11 +18,13 @@ final class DesktopRecordWindow: NSPanel {
     private var mouseUpMonitor: Any?
     private(set) var isDraggingRecord = false
 
-    /// Just above the desktop icons, still far below normal application
-    /// windows. This is what makes the item read as a desktop object rather
-    /// than a floating utility window.
+    /// Just above the Finder desktop icons, still far below normal application
+    /// windows. Sitting exactly at the icon level lets Finder's desktop window
+    /// come forward when another app gains focus and swallow the item's
+    /// clicks; one level higher keeps the item interactive while the desktop is
+    /// visible.
     static let desktopLevel = NSWindow.Level(
-        rawValue: Int(CGWindowLevelForKey(.desktopIconWindow))
+        rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1
     )
 
     init(record: DesktopRecord, image: NSImage) {

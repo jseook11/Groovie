@@ -240,14 +240,20 @@ enum DesktopArtworkRenderer {
         sleeveEdge.stroke()
 
         // The cover sits in front and casts a short shadow onto the sleeve.
+        // Draw a near-transparent shape with the shadow first: `drawCover`
+        // clips its artwork to the cover rect, which would clip a shadow drawn
+        // at the same time.
         NSGraphicsContext.saveGraphicsState()
         let coverShadow = NSShadow()
         coverShadow.shadowColor = NSColor.black.withAlphaComponent(0.30)
         coverShadow.shadowBlurRadius = 7
         coverShadow.shadowOffset = NSSize(width: 4, height: -3)
         coverShadow.set()
-        drawCover(in: coverRect, snapshot: snapshot, artwork: artwork, skin: skin)
+        NSColor.black.withAlphaComponent(0.001).setFill()
+        NSBezierPath(rect: coverRect).fill()
         NSGraphicsContext.restoreGraphicsState()
+
+        drawCover(in: coverRect, snapshot: snapshot, artwork: artwork, skin: skin)
 
         NSGraphicsContext.restoreGraphicsState()
 
@@ -318,7 +324,7 @@ enum DesktopArtworkRenderer {
             )
         }
 
-        let ink = contrastingInk(for: accent)
+        let ink = VinylTheme.contrastingInk(for: accent)
         let margin: CGFloat = 16
         let titleFont = NSFont.systemFont(ofSize: 18, weight: .bold)
         let artistFont = NSFont.systemFont(ofSize: 10, weight: .medium)
@@ -450,13 +456,5 @@ enum DesktopArtworkRenderer {
             height: drawSize.height
         )
         image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
-    }
-
-    private static func contrastingInk(for color: NSColor) -> NSColor {
-        guard let rgb = color.usingColorSpace(.sRGB) else { return VinylTheme.labelCream }
-        let luminance = 0.2126 * rgb.redComponent
-            + 0.7152 * rgb.greenComponent
-            + 0.0722 * rgb.blueComponent
-        return luminance > 0.56 ? VinylTheme.labelInk : VinylTheme.labelCream
     }
 }

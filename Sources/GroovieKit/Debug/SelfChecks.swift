@@ -525,6 +525,14 @@ public enum SelfChecks {
         expect(outside.y <= visible.maxY - discSize.height / 2,
                "desktop items clamp at the top edge")
 
+        let noScreen = DesktopRecordGeometry.clamp(
+            CGPoint(x: 321, y: 654),
+            itemSize: discSize,
+            to: .zero
+        )
+        expect(noScreen == CGPoint(x: 321, y: 654),
+               "an unavailable screen must not collapse a desktop position")
+
         let notch = CGRect(x: 640, y: 770, width: 160, height: 30)
         let screen = CGRect(x: 0, y: 0, width: 1440, height: 800)
         let zone = DesktopRecordGeometry.deleteZone(notchRect: notch, screenFrame: screen)

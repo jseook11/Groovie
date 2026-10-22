@@ -61,10 +61,11 @@ uses the 260/24 pair above.
 | `cascadeCount` | 5 | Slots before the cascade wraps. |
 | `maxRecords` | 100 | Safety cap for desktop items. |
 | Fade-in | 0.18 s | One-time appearance animation; nothing runs afterwards. |
-| Option poll | 20 Hz | Only while the pointer is near an item; no timer at rest. |
+| Option poll | 20 Hz | While any desktop item exists; independent of focus and pointer proximity. |
 
-Desktop windows use `CGWindowLevelForKey(.desktopIconWindow)`, below normal application
-windows. During a drag the item is temporarily raised to `statusBar + 2`; the delete halo is
+Desktop windows use `CGWindowLevelForKey(.desktopIconWindow) + 1`, above the Finder desktop
+icons but below normal application windows, so they stay clickable when another app is
+frontmost. During a drag the item is temporarily raised to `statusBar + 2`; the delete halo is
 `statusBar + 1`, and the copy ghost is `statusBar + 3`. Items opt into `.canJoinAllSpaces` so
 they appear on every Space.
 

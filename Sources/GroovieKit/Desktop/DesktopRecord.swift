@@ -115,6 +115,11 @@ enum DesktopRecordGeometry {
     /// Keep the whole item inside the visible frame. `frame` is expected to be
     /// the screen's `visibleFrame`, so the menu bar and Dock stay clear.
     static func clamp(_ position: CGPoint, itemSize: CGSize, to frame: CGRect) -> CGPoint {
+        // Display hot-plug can momentarily leave no usable screen. Returning
+        // the original position keeps that transient from rewriting every
+        // record to the origin.
+        guard frame.width > 0, frame.height > 0 else { return position }
+
         let halfWidth = min(itemSize.width / 2, frame.width / 2)
         let halfHeight = min(itemSize.height / 2, frame.height / 2)
         return CGPoint(

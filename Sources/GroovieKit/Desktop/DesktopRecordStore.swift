@@ -126,7 +126,20 @@ final class DesktopRecordStore {
         do {
             let data = try Data(contentsOf: fileURL)
             let document = try JSONDecoder().decode(DesktopRecordDocument.self, from: data)
-            records = Array(document.records.prefix(DesktopRecordGeometry.maxRecords))
+
+            if document.records.count > DesktopRecordGeometry.maxRecords {
+                // A hand-edited or future file can exceed the cap. Keep the
+                // oldest entries, remove the dropped artwork, and persist the
+                // truncated list so the extra files do not leak.
+                let kept = Array(document.records.prefix(DesktopRecordGeometry.maxRecords))
+                for dropped in document.records.dropFirst(DesktopRecordGeometry.maxRecords) {
+                    deleteArtwork(for: dropped)
+                }
+                records = kept
+                save()
+            } else {
+                records = document.records
+            }
         } catch {
             log.error("Could not read desktop records: \(error.localizedDescription, privacy: .public)")
             backUpCorruptFile()

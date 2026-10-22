@@ -424,7 +424,7 @@ enum RecordTexture {
             relativeCenterPosition: NSPoint(x: -0.34, y: 0.42)
         )
 
-        let ink = contrastingInk(for: accent)
+        let ink = VinylTheme.contrastingInk(for: accent)
         let center = NSPoint(x: rect.midX, y: rect.midY)
 
         // Very faint paper fibres; they should read as texture, not lines.
@@ -556,12 +556,6 @@ enum RecordTexture {
         let letters = words.compactMap { $0.first.map(String.init) }
         let result = letters.joined().uppercased()
         return result.isEmpty ? "NV" : result
-    }
-
-    private static func contrastingInk(for color: NSColor) -> NSColor {
-        guard let rgb = color.usingColorSpace(.sRGB) else { return VinylTheme.labelCream }
-        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-        return luminance > 0.56 ? VinylTheme.labelInk : VinylTheme.labelCream
     }
 
     private static func blend(_ a: NSColor, _ b: NSColor, _ t: CGFloat) -> NSColor {

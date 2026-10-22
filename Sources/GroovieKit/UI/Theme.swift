@@ -23,4 +23,13 @@ enum VinylTheme {
         }
         return accentColors[Int(hash % UInt32(accentColors.count))]
     }
+
+    /// Ink that stays legible on printed paper and generated album covers.
+    static func contrastingInk(for color: NSColor) -> NSColor {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return labelCream }
+        let luminance = 0.2126 * rgb.redComponent
+            + 0.7152 * rgb.greenComponent
+            + 0.0722 * rgb.blueComponent
+        return luminance > 0.56 ? labelInk : labelCream
+    }
 }
