@@ -45,6 +45,13 @@ and track changes. Let go and it drops back into the notch.
 Everything is one physical object. There is no slider, no popover, and no window to arrange:
 just a record that behaves like a record.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/groovie-demo-dark.gif">
+    <img src="docs/assets/groovie-demo.gif" alt="The record sliding out of the notch, spinning to scrub the track time, then retracting" width="880">
+  </picture>
+</p>
+
 ## Why the Notch?
 
 The notch is always black, always top-centre, and always above whatever you are doing. That makes

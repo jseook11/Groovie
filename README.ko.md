@@ -46,6 +46,13 @@ Groovie는 맥북의 카메라 노치를 Apple Music을 조작하는 작은 아�
 복잡한 슬라이더도, 팝오버도, 정리해야 할 창도 없습니다. 레코드처럼 동작하는 바이닐 한
 장으로 모든 조작을 끝낼 수 있습니다.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/groovie-demo-dark.gif">
+    <img src="docs/assets/groovie-demo.gif" alt="노치에서 레코드가 나와 회전하며 재생 위치를 탐색한 뒤 다시 들어가는 모습" width="880">
+  </picture>
+</p>
+
 ## 왜 노치일까요?
 
 노치는 언제나 검은색이고, 화면 최상단 중앙에 자리하며, 하던 작업 위에 늘 떠 있습니다.
