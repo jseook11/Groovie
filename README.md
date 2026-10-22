@@ -210,6 +210,8 @@ Resources/Info.plist                 LSUIElement, 자동화 사용 설명, 앱 �
 Resources/AppIcon.icns               빌드에 포함되는 macOS 앱 아이콘
 docs/design/app-icon-cream-v3.png    앱 아이콘 마스터 시안
 docs/localization/                   번역 가이드, JSON 스키마, 키 문맥
+docs/record-crate.md                 (설계 노트) 레코드 복제·상자(플레이리스트), 미구현
+docs/record-break.md                 (대안) 레코드 떼어내기·파손, 채택 안 함
 Scripts/build-app.sh                 SwiftPM 산출물을 .app으로 묶고 ad-hoc 서명
 Scripts/check-localizations.swift    언어 파일 키/placeholder 검증
 Scripts/generate-info-plist-strings.swift InfoPlist.strings 생성
