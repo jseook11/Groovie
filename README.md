@@ -11,6 +11,8 @@
 
 <p align="center"><em>A turntable hidden in the MacBook notch.</em></p>
 
+<p align="center"><strong>Click to pause. Swipe to skip. Pull to explore.</strong></p>
+
 <p align="center">
   <a href="#requirements"><img src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white&style=flat-square" alt="macOS 14 or later"></a>
   <a href="#requirements"><img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white&style=flat-square" alt="Swift 6.0"></a>
@@ -34,10 +36,11 @@
 
 ---
 
-Groovie turns the MacBook camera notch into a small turntable for Apple Music. The record lives
-inside the notch. Pull it down and it snaps out with a magnetic detent. Grab it and turn it
-sideways to seek — slowly for precision, quickly to jump. Pull once more and it stays out, ready
-for play/pause and track changes. Let go and it drops back into the notch.
+Groovie turns the MacBook camera notch into a control surface for Apple Music. Click the notch to
+pause, swipe across it to skip, or pull the record down to explore. The record lives inside the
+notch: pull it far enough and it snaps out with a magnetic detent. Grab it and turn it sideways to
+seek — slowly for precision, quickly to jump. Pull once more and it stays out, ready for play/pause
+and track changes. Let go and it drops back into the notch.
 
 Everything is one physical object. There is no slider, no popover, and no window to arrange:
 just a record that behaves like a record.
@@ -156,7 +159,7 @@ For a full walkthrough of every gesture, threshold, and edge case, see the
 | Wake the notch | Move the pointer over it | Move the pointer over it |
 | Pull the record out | Drag down | Scroll down |
 | Seek | Drag left / right while holding | Scroll left / right over the vinyl |
-| Pin it out | Pull 240 pt farther, or grab again within 1 s | Keep scrolling down, or pause 0.8 s and scroll down again |
+| Pin it out | Pull farther, or grab again within 1 s | Keep scrolling down, or pause and scroll down again |
 | Play / pause | Click the label (pinned) or the notch (closed) | Click the label or the notch |
 | Next / previous track | — | Swipe right / left |
 | Put it back | Click the vinyl, or drag up | Scroll up |
@@ -173,9 +176,9 @@ With the record closed, the notch strip still has its own controls:
 The record is rendered as a full circle; the notch cap covers its upper half so only the lower
 semicircle is visible, with its centre exactly on the notch's bottom edge.
 
-A pull is only recognised when the first movement is vertical and downward. It starts at 8 pt,
-and at 40 pt the record snaps fully out. Releasing before the detent lets it spring back. Once
-grabbed, the record follows the pointer, and an upward movement of 30 pt snaps it back in.
+A pull is only recognised when the first movement is vertical and downward. The record follows
+the pointer, then snaps fully out at the detent; releasing before it lets the record spring back.
+Once grabbed, an upward lift puts it away.
 
 ### Seek
 
@@ -184,26 +187,24 @@ is precise, fast movement covers more ground: the `ScrubEngine` maps pointer spe
 sensitivity curve instead of using a fixed rate. Movement past the start or end of the track is
 clamped, and the record stops turning there too.
 
-Until the record is pinned, a sideways drag must clear 90 pt before it starts scrubbing, so the
-sideways wobble of a pin pull is ignored. On a pinned record the threshold drops to 4 pt for the
-mouse and 30 pt for scroll.
+Until the record is pinned, a sideways drag has to be deliberate before it starts scrubbing, so
+the sideways wobble of a pin pull is ignored. A pinned record responds to much smaller movements.
 
 ### Pin and put back
 
 A grabbed record is not pinned yet. It stays out when one of these confirm gestures happens:
 
-- pull another 240 pt beyond the detent — a fast pull fills the gauge faster, up to 3.2×;
-- release, then grab again within one second;
-- with a trackpad, keep scrolling down, or stop for 0.8 s and scroll down again (480 pt of
-  virtual travel, also velocity-assisted).
+- pull farther beyond the detent — a fast pull fills the gauge faster;
+- release, then grab again within a second;
+- with a trackpad, keep scrolling down, or pause and scroll down again.
 
 A translucent gauge under the record starts at zero when the record snaps out and fills as you
-confirm. While confirming, horizontal movement needs 90 pt before it scrubs, so the sideways
-wobble of a vertical pull is ignored.
+confirm. While confirming, horizontal movement has to be deliberate before it scrubs, so the
+sideways wobble of a vertical pull is ignored.
 
 Once pinned, click the label to toggle playback, swipe the label horizontally to change tracks,
 and click the vinyl, drag up, or scroll up to close. Without a confirm gesture, the record waits
-about a second after release (1.4 s for scroll) and then springs back.
+briefly after release and then springs back.
 
 ### Trackpad
 
@@ -212,21 +213,20 @@ release-based:
 
 - **Down** pulls the record out; the halfway point snaps it open.
 - **Left / right over the vinyl** scrubs, with the same speed-sensitive mapping as dragging.
-- **Left / right over the notch or a pinned label** changes tracks. A skip needs 90 pt of
-  horizontal travel and 1.5× horizontal dominance over vertical travel; once the gesture locks to
-  an axis it cannot change its mind. A gesture can skip only once, because an unintended skip is
-  worse than a missed one.
+- **Left / right over the notch or a pinned label** changes tracks. A skip needs a long, clearly
+  horizontal gesture; once the gesture locks to an axis it cannot change its mind, and a gesture
+  can skip only once. An unintended skip is worse than a missed one.
 - **Up** puts the record back.
-- **No input for 1.4 s** after opening puts the record back, unless it has been confirmed.
+- **No input for a moment** after opening puts the record back, unless it has been confirmed.
 - Momentum events are ignored, so a flick does not keep scrubbing after your fingers leave the
   trackpad.
 
 ### Cancel a seek
 
-While holding the record, shake it left and right — at least four direction changes of 8 pt or
-more within one second. The seek is discarded, the position returns to where you grabbed it, and
-a light haptic confirms the cancel. Small jitter or a single change of direction during precise
-scrubbing does not trigger it. If the record was pinned, it stays pinned.
+While holding the record, shake it left and right — four direction changes within one second. The
+seek is discarded, the position returns to where you grabbed it, and a light haptic confirms the
+cancel. Small jitter or a single change of direction during precise scrubbing does not trigger it.
+If the record was pinned, it stays pinned.
 
 ### Displays without a notch
 
@@ -241,13 +241,13 @@ The interaction is a small state machine with two inputs — pointer drags and t
 that feed the same model:
 
 ```
-idle ── hover ──► armed ── pull 8 pt ──► pulling ── detent 40 pt ──► grabbed
-  ▲                                                                   │
-  │                                                    drag ↔ ──► scrubbing
-  │                                                                   │
-  │                                        +240 pt or re-grab < 1 s   │
-  │                                                                   ▼
-  └────────────── click / drag up / scroll up ──────────────────── pinned
+idle ── hover ──► armed ── pull ──► pulling ── detent ──► grabbed
+  ▲                                                          │
+  │                                               drag ↔ ──► scrubbing
+  │                                                          │
+  │                                          confirm or re-grab
+  │                                                          ▼
+  └───────────── click / drag up / scroll up ──────────── pinned
 ```
 
 Some implementation details that make the physical metaphor work:
@@ -263,11 +263,11 @@ Some implementation details that make the physical metaphor work:
 - **Hover without a key window.** Global and local `mouseMoved` monitors are combined with the
   panel's tracking area, so the label can react even though the panel never becomes key.
 - **A serial bridge to Music.** Every AppleScript command goes through one queue. The position is
-  estimated locally between 1.5 s polls, and a requested play state is held for up to 2 s until
-  Music agrees, so a stale read cannot flip the record back.
-- **One axis per scroll gesture.** `ScrollAxisLock` decides between horizontal and vertical after
-  0.5 pt of travel and keeps that decision until the gesture ends. It is a pure value type, which
-  makes the tricky part of track skipping straightforward to test.
+  estimated locally between polls, and a requested play state is held briefly until Music agrees,
+  so a stale read cannot flip the record back.
+- **One axis per scroll gesture.** `ScrollAxisLock` decides between horizontal and vertical early
+  and keeps that decision until the gesture ends. It is a pure value type, which makes the tricky
+  part of track skipping straightforward to test.
 
 ### Project layout
 
@@ -300,6 +300,7 @@ docs/assets/                            README images and gesture map
 docs/design/                            app-icon master art
 docs/localization/                     translation guide, JSON schema, key context
 docs/ux-guide.md                       full interaction guide (Korean)
+docs/tuning.md                         constants, defaults, and implementation notes
 docs/record-crate.md                   design note: record crate / playlists (unbuilt)
 docs/record-break.md                   rejected alternative: breaking the record
 Scripts/                                app bundling, icon generation, localization checks
@@ -363,32 +364,12 @@ currently written in Korean.
 
 ## Tuning
 
-Most of the feel lives in a handful of constants.
+The feel is defined by a small set of constants in `VinylLayout`, `OverlayController`,
+`ScrollAxisLock`, and `ScrubEngine.ScrubTuning`. The full table, defaults, and the reasoning
+behind them live in [docs/tuning.md](docs/tuning.md).
 
-| Constant | Default | Effect |
-| --- | ---: | --- |
-| `pullStartDistance` | 8 pt | Movement before a pull is recognised. |
-| `grabDetent` | 40 pt | The halfway point where the record snaps out. |
-| `grabDistance` | 80 pt | Pointer travel that corresponds to full extraction. |
-| `confirmDistance` | 240 pt | Extra pull that pins the record. |
-| `scrollConfirmDistance` | 480 pt | The same distance in scroll units. |
-| `confirmScrubDeadzone` | 90 pt | Horizontal dead zone while confirming. |
-| `mouseDismissDistance` | 30 pt | Upward movement that snaps the record back in. |
-| `scrollSkipDistance` | 90 pt | Horizontal travel required to change tracks. |
-| `clickSlop` | 4 pt | Movement still treated as a click. |
-| `recordRadius` | 90 pt | Record size. |
-| `labelRadius` | 30 pt | Printed label size. |
-| `labelHitSlop` | 12 pt | Extra play/pause hit area around the label. |
-| `playbackDegreesPerSecond` | 200 | 33⅓ RPM. |
-| `ScrollAxisLock.horizontalDominance` | 1.5× | How much wider than vertical a skip must be. |
-| `ScrollAxisLock.decisionThreshold` | 0.5 pt | Travel before the scroll axis is locked. |
-| `confirmWindow` | 1.0 s | Time allowed for the re-grab confirm. |
-
-Scroll feel is split across `scrollPullScale` (0.55), `scrollScrubScale` (0.9), the 30 pt
-pinned-scrub dead zone, and the 40 pt close distance in `OverlayController`. Scrub sensitivity
-lives in `ScrubEngine.ScrubTuning` (`minSensitivity`, `maxSensitivity`, `speedAtMaxSensitivity`,
-and `sensitivityExponent`), with 45 ms attack and 120 ms release on the speed filter. Record skins
-are palettes in `VinylSkin`; the selected skin is stored under `groovie.skinID` in `UserDefaults`.
+Record palettes are in `VinylSkin`; the selected skin is stored under `groovie.skinID` in
+`UserDefaults`.
 
 ## Known limitations
 
