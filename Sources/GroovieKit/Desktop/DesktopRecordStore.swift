@@ -65,6 +65,15 @@ final class DesktopRecordStore {
         save()
     }
 
+    /// Slide a sleeve's record out or tuck it back in. Ignored by `.disc` at
+    /// draw time, but still persisted so a later style switch remembers it.
+    func updateRecordOut(id: UUID, recordOut: Bool) {
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+        guard records[index].recordOut != recordOut else { return }
+        records[index].recordOut = recordOut
+        save()
+    }
+
     func remove(id: UUID) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         let removed = records.remove(at: index)
@@ -133,6 +142,9 @@ final class DesktopRecordStore {
         do {
             let data = try Data(contentsOf: fileURL)
             let document = try JSONDecoder().decode(DesktopRecordDocument.self, from: data)
+            // A v1 document has been migrated in memory by the decoder. Write
+            // it back once so the shift and the new `recordOut` flag stick.
+            let needsMigration = document.version < DesktopRecordDocument.currentVersion
 
             if document.records.count > DesktopRecordGeometry.maxRecords {
                 // A hand-edited or future file can exceed the cap. Keep the
@@ -146,6 +158,9 @@ final class DesktopRecordStore {
                 save()
             } else {
                 records = document.records
+                if needsMigration {
+                    save()
+                }
             }
         } catch {
             log.error("Could not read desktop records: \(error.localizedDescription, privacy: .public)")

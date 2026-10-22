@@ -55,16 +55,33 @@ uses the 260/24 pair above.
 | --- | ---: | --- |
 | `discDiameter` | 180 pt | Bare record copy. |
 | `coverSide` | 200 pt | Album cover side. |
-| `sleevePeek` | 70 pt | Inner-sleeve strip visible beside the cover. |
-| `shadowPadding` | 18 pt | Transparent margin baked into every rendered image. |
-| `cascadeStep` | 24 pt | Offset between packaged-album slots. |
+| `sleeveExposed` | 72 pt | Open sleeve: 40% of the disc protrudes past the cover's right edge. |
+| `sleeveOpenWidth` | 272 pt | Open sleeve item width (`coverSide + sleeveExposed`). |
+| `sleeveClosedWidth` | 200 pt | Closed sleeve item width; the record is fully hidden. |
+| `shadowPadding` | 34 pt | Transparent margin baked into every rendered image. |
+| `cascadeStep` | 24 pt | Offset between default sleeve slots. |
 | `cascadeCount` | 5 | Slots before the cascade wraps. |
 | `maxRecords` | 100 | Safety cap for desktop items. |
 | Fade-in | 0.18 s | One-time appearance animation; nothing runs afterwards. |
 
+The item casts three shadow layers from one silhouette, with the light at the upper left:
+
+| Layer | Alpha | Blur | Offset |
+| --- | ---: | ---: | --- |
+| Ambient | 0.10 | 38 pt | (0, −2) |
+| Key | 0.26 | 16 pt | (5, −7) |
+| Contact | 0.38 | 2.5 pt | (0, −1) |
+
+An open sleeve adds a 13 pt gradient mouth shadow on the exposed vinyl, plus a board-thickness
+lip and mouth slit on the cover. A closed sleeve draws no vinyl at all. Opening or closing
+keeps the cover centre fixed and changes only the window's right edge.
+
 Desktop windows always accept mouse events, so pressing Option while the pointer already rests
-on an item works immediately. There is no polling timer, and a plain click on an item is a
-no-op. Option+click (≤ 4 pt) switches `.disc` ↔ `.sleeve`; Option+drag moves the item.
+on an item works immediately. There is no polling timer. Option+click on a sleeve slides its
+record out or tucks it back in; on a bare disc it converts the item to an open sleeve. A plain
+click raises the item, and Option+drag moves it. Option-hover scales the item to 1.02 and shows
+an open hand; an active drag scales it to 1.04. The outline ring appears only during a drag or
+while delete-armed.
 
 Desktop windows use `CGWindowLevelForKey(.desktopIconWindow) + 1`, above the Finder desktop
 icons but below normal application windows, so they stay clickable when another app is
@@ -72,8 +89,10 @@ frontmost. During a drag the item is temporarily raised to `statusBar + 2`; the 
 `statusBar + 1`, and the copy ghost is `statusBar + 3`. Items opt into `.canJoinAllSpaces` so
 they appear on every Space.
 
-State lives in `~/Library/Application Support/Groovie/desktop-records.json`, with artwork in
-`artwork/<uuid>.png` next to it.
+State lives in `~/Library/Application Support/Groovie/desktop-records.json` (document version
+2, one `recordOut` flag per item), with artwork in `artwork/<uuid>.png` next to it. Loading a
+version 1 file shifts each sleeve 35 pt left to the new anchor, defaults `recordOut` to true,
+and rewrites the document as version 2.
 
 ## Scroll
 

@@ -85,6 +85,7 @@ final class DesktopRecordController {
             }
             let image = DesktopArtworkRenderer.image(
                 for: record.style,
+                recordOut: record.recordOut,
                 snapshot: record.track,
                 artwork: artwork,
                 skin: skin
@@ -95,8 +96,9 @@ final class DesktopRecordController {
 
     // MARK: - Create
 
-    /// `point == nil` means the packaged-click slot; otherwise the item is
-    /// centered on the drop point.
+    /// `point == nil` means the packaged-click slot; otherwise the drop point
+    /// becomes the new item's anchor (the cover centre for a sleeve, the disc
+    /// centre for a disc).
     @discardableResult
     func createRecord(
         snapshot: TrackSnapshot,
@@ -108,14 +110,20 @@ final class DesktopRecordController {
             return nil
         }
 
-        let itemSize = DesktopRecordGeometry.itemSize(for: style)
+        // New items start with a sleeve's record out. `.disc` ignores the flag.
+        let recordOut = true
         let targetScreen: NSScreen?
         let position: CGPoint
 
         if let point {
             targetScreen = screen(containing: point)
             let visible = targetScreen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-            position = DesktopRecordGeometry.clamp(point, itemSize: itemSize, to: visible)
+            position = DesktopRecordGeometry.clamp(
+                anchor: point,
+                style: style,
+                recordOut: recordOut,
+                to: visible
+            )
         } else {
             let target = notchScreen() ?? NSScreen.main
             targetScreen = target
@@ -125,7 +133,8 @@ final class DesktopRecordController {
             let screenID = DesktopRecordGeometry.screenID(for: target)
             let index = store.records.filter { $0.screenID == screenID }.count
             position = DesktopRecordGeometry.defaultSlot(
-                itemSize: itemSize,
+                style: style,
+                recordOut: recordOut,
                 screenFrame: frame,
                 visibleFrame: visible,
                 notchHeight: notchHeight,
@@ -144,7 +153,8 @@ final class DesktopRecordController {
             track: snapshot,
             style: style,
             position: position,
-            screenID: DesktopRecordGeometry.screenID(for: targetScreen)
+            screenID: DesktopRecordGeometry.screenID(for: targetScreen),
+            recordOut: recordOut
         )
 
         guard store.insert(record) else {
@@ -163,41 +173,98 @@ final class DesktopRecordController {
         draggingID = id
     }
 
-    /// Option-click on a desktop item flips the bare record and the packaged
-    /// album. The centre stays put; the window is recreated at the new size.
+    /// Option-click on a desktop item. A sleeve slides its record in or out; a
+    /// disc becomes an open sleeve. The anchor — the cover centre for a sleeve,
+    /// the disc centre for a disc — stays fixed while the window is rebuilt at
+    /// the new size, so the cover never jumps.
+    func handleClick(id: UUID) {
+        toggleRecordState(id: id)
+    }
+
+    /// Kept for the `--desktop-demo-toggle` launch flag, which predates the
+    /// open/closed interaction. New code should call `handleClick(id:)`.
     func toggleStyle(id: UUID) {
+        toggleRecordState(id: id)
+    }
+
+    private func toggleRecordState(id: UUID) {
+        // A click can follow a sub-4pt press that armed the delete halo. Clear
+        // the transient drag UI here as well as in dragEnded, or the "drop to
+        // remove" panel can be left behind after the window is rebuilt.
+        draggingID = nil
+        updateDeleteTarget(visible: false)
+        windows[id]?.setDeleteArmed(false)
+
         guard let record = store.records.first(where: { $0.id == id }) else { return }
-        let newStyle: DesktopRecordStyle = record.style == .disc ? .sleeve : .disc
+
+        let newStyle: DesktopRecordStyle
+        let newRecordOut: Bool
+        switch record.style {
+        case .disc:
+            // A disc has no sleeve to close, so the first Option-click turns it
+            // into an open album.
+            newStyle = .sleeve
+            newRecordOut = true
+        case .sleeve:
+            newStyle = .sleeve
+            newRecordOut = !record.recordOut
+        }
+
+        // Prefer the live window origin: it is the freshest position if a drag
+        // has not been persisted yet. The persisted `position` is the anchor.
+        let anchor: CGPoint
+        if let window = windows[id] {
+            anchor = DesktopRecordGeometry.anchor(
+                windowOrigin: window.frame.origin,
+                style: window.style,
+                recordOut: window.recordOut
+            )
+        } else {
+            anchor = record.position
+        }
+
+        let targetScreen = screen(containing: anchor) ?? NSScreen.main
+        let visible = targetScreen?.visibleFrame ?? .zero
+        let clampedAnchor = DesktopRecordGeometry.clamp(
+            anchor: anchor,
+            style: newStyle,
+            recordOut: newRecordOut,
+            to: visible
+        )
+        let newScreenID = DesktopRecordGeometry.screenID(for: targetScreen)
+
         store.updateStyle(id: id, style: newStyle)
+        store.updateRecordOut(id: id, recordOut: newRecordOut)
+        store.updatePosition(id: id, position: clampedAnchor, screenID: newScreenID)
 
         var updated = record
         updated.style = newStyle
-        if let targetScreen = screen(containing: record.position) ?? NSScreen.main {
-            let itemSize = DesktopRecordGeometry.itemSize(for: newStyle)
-            updated.position = DesktopRecordGeometry.clamp(
-                record.position,
-                itemSize: itemSize,
-                to: targetScreen.visibleFrame
-            )
-            store.updatePosition(
-                id: id,
-                position: updated.position,
-                screenID: DesktopRecordGeometry.screenID(for: targetScreen)
-            )
-        }
+        updated.recordOut = newRecordOut
+        updated.position = clampedAnchor
+        updated.screenID = newScreenID
 
-        guard let window = windows.removeValue(forKey: id) else { return }
         let artwork = artworkByID[id] ?? store.artwork(for: record)
-        window.cancelDrag()
-        window.orderOut(nil)
-        window.close()
+        if let window = windows.removeValue(forKey: id) {
+            window.cancelDrag()
+            window.orderOut(nil)
+            window.close()
+        }
         addWindow(for: updated, artwork: artwork, fadeIn: true)
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 
     func dragMoved(_ id: UUID) {
         guard let window = windows[id] else { return }
-        let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
+        let anchor = DesktopRecordGeometry.anchor(
+            windowOrigin: window.frame.origin,
+            style: window.style,
+            recordOut: window.recordOut
+        )
+        let center = DesktopRecordGeometry.itemCenter(
+            anchor: anchor,
+            style: window.style,
+            recordOut: window.recordOut
+        )
         let armed = isInDeleteZone(center)
         window.setDeleteArmed(armed)
         updateDeleteTarget(visible: armed)
@@ -211,19 +278,33 @@ final class DesktopRecordController {
         guard let window = windows[id] else {
             return
         }
-        let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
+        let anchor = DesktopRecordGeometry.anchor(
+            windowOrigin: window.frame.origin,
+            style: window.style,
+            recordOut: window.recordOut
+        )
+        let center = DesktopRecordGeometry.itemCenter(
+            anchor: anchor,
+            style: window.style,
+            recordOut: window.recordOut
+        )
 
         if isInDeleteZone(center) {
             delete(id: id, animated: true)
         } else {
             let targetScreen = screen(containing: center) ?? NSScreen.main
-            let itemSize = DesktopRecordGeometry.itemSize(for: window.style)
             let visible = targetScreen?.visibleFrame ?? .zero
-            let clamped = DesktopRecordGeometry.clamp(center, itemSize: itemSize, to: visible)
-            if clamped != center {
-                window.setFrameOrigin(CGPoint(
-                    x: clamped.x - window.frame.width / 2,
-                    y: clamped.y - window.frame.height / 2
+            let clamped = DesktopRecordGeometry.clamp(
+                anchor: anchor,
+                style: window.style,
+                recordOut: window.recordOut,
+                to: visible
+            )
+            if clamped != anchor {
+                window.setFrameOrigin(DesktopRecordGeometry.windowOrigin(
+                    anchor: clamped,
+                    style: window.style,
+                    recordOut: window.recordOut
                 ))
             }
             store.updatePosition(
@@ -236,6 +317,7 @@ final class DesktopRecordController {
 
     func delete(id: UUID, animated: Bool) {
         guard let window = windows.removeValue(forKey: id) else { return }
+        NSCursor.arrow.set()
         artworkByID.removeValue(forKey: id)
         store.remove(id: id)
         onRecordsChanged?()
@@ -294,6 +376,7 @@ final class DesktopRecordController {
         hideCopyGhost()
         let image = DesktopArtworkRenderer.image(
             for: .disc,
+            recordOut: true,
             snapshot: snapshot,
             artwork: artwork,
             skin: skin
@@ -373,6 +456,7 @@ final class DesktopRecordController {
     ) {
         let image = DesktopArtworkRenderer.image(
             for: record.style,
+            recordOut: record.recordOut,
             snapshot: record.track,
             artwork: artwork,
             skin: skin
@@ -381,15 +465,19 @@ final class DesktopRecordController {
         window.onDragBegan = { [weak self] id in self?.beginDrag(id) }
         window.onDragMoved = { [weak self] id, _ in self?.dragMoved(id) }
         window.onDragEnded = { [weak self] id, point in self?.dragEnded(id, pointer: point) }
+        window.onRaise = { [weak self] id in
+            self?.windows[id]?.orderFrontRegardless()
+        }
         window.onClicked = { [weak self] id in
             // Let the mouse-up finish before replacing the window.
             DispatchQueue.main.async {
-                self?.toggleStyle(id: id)
+                self?.handleClick(id: id)
             }
         }
-        window.setFrameOrigin(CGPoint(
-            x: record.position.x - window.frame.width / 2,
-            y: record.position.y - window.frame.height / 2
+        window.setFrameOrigin(DesktopRecordGeometry.windowOrigin(
+            anchor: record.position,
+            style: record.style,
+            recordOut: record.recordOut
         ))
         window.alphaValue = fadeIn ? 0 : 1
         windows[record.id] = window
@@ -418,15 +506,16 @@ final class DesktopRecordController {
                 ?? NSScreen.main
             else { continue }
 
-            let itemSize = DesktopRecordGeometry.itemSize(for: record.style)
             let clamped = DesktopRecordGeometry.clamp(
-                record.position,
-                itemSize: itemSize,
+                anchor: record.position,
+                style: record.style,
+                recordOut: record.recordOut,
                 to: targetScreen.visibleFrame
             )
-            window.setFrameOrigin(CGPoint(
-                x: clamped.x - window.frame.width / 2,
-                y: clamped.y - window.frame.height / 2
+            window.setFrameOrigin(DesktopRecordGeometry.windowOrigin(
+                anchor: clamped,
+                style: record.style,
+                recordOut: record.recordOut
             ))
             let newScreenID = DesktopRecordGeometry.screenID(for: targetScreen)
             if clamped != record.position || newScreenID != record.screenID {

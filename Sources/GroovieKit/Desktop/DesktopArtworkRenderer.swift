@@ -4,7 +4,7 @@ import AppKit
 ///
 /// Everything on the desktop is a still image: no rotation, no per-frame
 /// SwiftUI updates, no animation timer. Re-rendering only happens when the item
-/// is created or the record skin changes.
+/// is created, the record is pulled out or tucked in, or the skin changes.
 enum DesktopArtworkRenderer {
     private static let cache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
@@ -13,29 +13,49 @@ enum DesktopArtworkRenderer {
         return cache
     }()
 
+    /// Bitmap scale for the finished object and its shadows. Kept as one
+    /// constant so the cache cost and the rendered pixels cannot drift apart.
+    private static let scale: CGFloat = 2
+
     static func image(
         for style: DesktopRecordStyle,
+        recordOut: Bool,
         snapshot: TrackSnapshot,
         artwork: NSImage?,
         skin: VinylSkin
     ) -> NSImage {
-        let key = cacheKey(style: style, snapshot: snapshot, artwork: artwork, skin: skin)
+        let key = cacheKey(
+            style: style,
+            recordOut: recordOut,
+            snapshot: snapshot,
+            artwork: artwork,
+            skin: skin
+        )
         if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
 
-        let image = render(style: style, snapshot: snapshot, artwork: artwork, skin: skin)
-        let item = DesktopRecordGeometry.windowSize(for: style)
+        let image = render(
+            style: style,
+            recordOut: recordOut,
+            snapshot: snapshot,
+            artwork: artwork,
+            skin: skin
+        )
+        let window = DesktopRecordGeometry.windowSize(for: style, recordOut: recordOut)
+        let pixelsWide = Int(ceil(window.width * scale))
+        let pixelsHigh = Int(ceil(window.height * scale))
         cache.setObject(
             image,
             forKey: key as NSString,
-            cost: Int(item.width * item.height * 4)
+            cost: pixelsWide * pixelsHigh * 4
         )
         return image
     }
 
     private static func cacheKey(
         style: DesktopRecordStyle,
+        recordOut: Bool,
         snapshot: TrackSnapshot,
         artwork: NSImage?,
         skin: VinylSkin
@@ -45,6 +65,7 @@ enum DesktopArtworkRenderer {
             ?? "none"
         return [
             style.rawValue,
+            recordOut ? "out" : "in",
             skin.id,
             snapshot.persistentID,
             snapshot.title,
@@ -54,21 +75,39 @@ enum DesktopArtworkRenderer {
         ].joined(separator: "|")
     }
 
+    // MARK: - Composition
+
     private static func render(
         style: DesktopRecordStyle,
+        recordOut: Bool,
         snapshot: TrackSnapshot,
         artwork: NSImage?,
         skin: VinylSkin
     ) -> NSImage {
-        let item = DesktopRecordGeometry.itemSize(for: style)
+        let item = DesktopRecordGeometry.itemSize(for: style, recordOut: recordOut)
         let padding = DesktopRecordGeometry.shadowPadding
         let pointSize = NSSize(
             width: item.width + padding * 2,
             height: item.height + padding * 2
         )
-        let scale: CGFloat = 2
 
+        // Compose the physical object at item size first, then cast the three
+        // shadow layers from that one silhouette. Casting per-piece would give
+        // the vinyl and the cover separate shadows and break the illusion that
+        // the record is inside the sleeve.
+        guard let object = renderObject(
+            style: style,
+            recordOut: recordOut,
+            snapshot: snapshot,
+            artwork: artwork,
+            skin: skin
+        ) else {
+            return NSImage(size: pointSize)
+        }
         guard let (rep, ctx) = makeBitmap(pointSize: pointSize, scale: scale) else {
+            // Keep the returned image at the window's advertised size even if
+            // the final bitmap allocation fails; an item-sized image would be
+            // stretched by the content layer and no longer match hit testing.
             return NSImage(size: pointSize)
         }
 
@@ -81,19 +120,174 @@ enum DesktopArtworkRenderer {
         NSColor.clear.setFill()
         NSRect(origin: .zero, size: pointSize).fill()
 
-        let itemRect = NSRect(x: padding, y: padding, width: item.width, height: item.height)
-        switch style {
-        case .disc:
-            drawDisc(in: itemRect, snapshot: snapshot, artwork: artwork, skin: skin)
-        case .sleeve:
-            drawSleeve(in: itemRect, snapshot: snapshot, artwork: artwork, skin: skin)
-        }
+        let target = NSRect(x: padding, y: padding, width: item.width, height: item.height)
+
+        // Ambient: wide and low, the shadow of something suspended a little
+        // above the desktop.
+        drawShadowed(object, in: target, alpha: 0.10, blur: 38, offset: NSSize(width: 0, height: -2))
+        // Key: light from the upper left, so the shadow falls right and down.
+        drawShadowed(object, in: target, alpha: 0.26, blur: 16, offset: NSSize(width: 5, height: -7))
+        // Contact: tight and nearly black where the object meets the surface.
+        drawShadowed(object, in: target, alpha: 0.38, blur: 2.5, offset: NSSize(width: 0, height: -1))
+
+        // The object itself goes last so the three shadow passes never tint
+        // its face. The shadows drawn above remain around the silhouette.
+        object.draw(in: target)
 
         NSGraphicsContext.restoreGraphicsState()
 
         let image = NSImage(size: pointSize)
         image.addRepresentation(rep)
         return image
+    }
+
+    /// Draws the object at item size with no shadow. The result is composited
+    /// onto the padded canvas by `render`.
+    private static func renderObject(
+        style: DesktopRecordStyle,
+        recordOut: Bool,
+        snapshot: TrackSnapshot,
+        artwork: NSImage?,
+        skin: VinylSkin
+    ) -> NSImage? {
+        let item = DesktopRecordGeometry.itemSize(for: style, recordOut: recordOut)
+        guard let (rep, ctx) = makeBitmap(pointSize: item, scale: scale) else { return nil }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = ctx
+        ctx.shouldAntialias = true
+        ctx.imageInterpolation = .high
+        ctx.cgContext.scaleBy(x: scale, y: scale)
+
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: item).fill()
+
+        switch style {
+        case .disc:
+            let discRect = DesktopRecordGeometry.discRect(for: style, recordOut: recordOut)
+            drawDisc(in: discRect, snapshot: snapshot, artwork: artwork, skin: skin)
+        case .sleeve:
+            if recordOut {
+                drawOpenSleeve(snapshot: snapshot, artwork: artwork, skin: skin)
+            } else {
+                drawClosedSleeve(snapshot: snapshot, artwork: artwork, skin: skin)
+            }
+        }
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        let image = NSImage(size: item)
+        image.addRepresentation(rep)
+        return image
+    }
+
+    // MARK: - Sleeve
+
+    /// The record is out: the disc sits behind the cover, exposed on the
+    /// right, and the cover is drawn last and fully opaque.
+    private static func drawOpenSleeve(
+        snapshot: TrackSnapshot,
+        artwork: NSImage?,
+        skin: VinylSkin
+    ) {
+        let coverRect = DesktopRecordGeometry.coverRect(for: .sleeve, recordOut: true)
+        let discRect = DesktopRecordGeometry.discRect(for: .sleeve, recordOut: true)
+
+        if discRect.width > 1, discRect.height > 1 {
+            if let disc = RecordTexture.make(
+                radius: discRect.width / 2,
+                labelRadius: DesktopRecordGeometry.labelDiameter / 2,
+                artwork: artwork,
+                title: snapshot.title,
+                artist: snapshot.artist,
+                skin: skin,
+                scale: scale
+            ) {
+                disc.draw(in: discRect)
+            } else {
+                skin.recordCenter.setFill()
+                NSBezierPath(ovalIn: discRect).fill()
+            }
+
+            // The cover's right edge blocks light from the exposed vinyl. The
+            // gradient is the cue that the record is tucked under the board
+            // rather than floating on top of it.
+            drawMouthShadow(from: coverRect.maxX, in: discRect)
+        }
+
+        drawCover(in: coverRect, snapshot: snapshot, artwork: artwork, skin: skin)
+    }
+
+    /// The record is in: only the sleeve exists. Nothing of the vinyl is drawn,
+    /// so there is no stray disc edge or vinyl shadow to give it away.
+    private static func drawClosedSleeve(
+        snapshot: TrackSnapshot,
+        artwork: NSImage?,
+        skin: VinylSkin
+    ) {
+        let coverRect = DesktopRecordGeometry.coverRect(for: .sleeve, recordOut: false)
+        drawCover(in: coverRect, snapshot: snapshot, artwork: artwork, skin: skin)
+    }
+
+    /// Soft shadow cast by the cover's mouth onto the record behind it.
+    ///
+    /// A horizontal gradient leaves the cover edge at its darkest and fades
+    /// across the exposed vinyl. It is clipped to the disc and multiplied by a
+    /// vertical gradient so it dies out at the disc's top and bottom instead of
+    /// ending in a hard band.
+    private static func drawMouthShadow(from edge: CGFloat, in disc: NSRect) {
+        guard let cg = NSGraphicsContext.current?.cgContext else { return }
+
+        let reach: CGFloat = 13
+        let space = CGColorSpaceCreateDeviceRGB()
+        guard let shade = CGColor(colorSpace: space, components: [0, 0, 0, 0.42]),
+              let clear = CGColor(colorSpace: space, components: [0, 0, 0, 0]) else {
+            return
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(ovalIn: disc).addClip()
+
+        cg.beginTransparencyLayer(auxiliaryInfo: nil)
+
+        if let gradient = CGGradient(
+            colorsSpace: space,
+            colors: [shade, clear] as CFArray,
+            locations: [0, 1]
+        ) {
+            cg.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: edge, y: disc.midY),
+                end: CGPoint(x: edge + reach, y: disc.midY),
+                options: [.drawsBeforeStartLocation]
+            )
+        }
+
+        // Keep only the part of the band that falls inside the exposed arc's
+        // vertical span, with a soft roll-off at both ends.
+        cg.setBlendMode(.destinationIn)
+        guard let fork = CGColor(colorSpace: space, components: [0, 0, 0, 0]),
+              let full = CGColor(colorSpace: space, components: [0, 0, 0, 1]) else {
+            cg.endTransparencyLayer()
+            NSGraphicsContext.restoreGraphicsState()
+            return
+        }
+        if let mask = CGGradient(
+            colorsSpace: space,
+            colors: [fork, full, full, fork] as CFArray,
+            locations: [0, 0.14, 0.86, 1]
+        ) {
+            cg.drawLinearGradient(
+                mask,
+                start: CGPoint(x: disc.midX, y: disc.minY),
+                end: CGPoint(x: disc.midX, y: disc.maxY),
+                options: []
+            )
+        }
+        cg.setBlendMode(.normal)
+        cg.endTransparencyLayer()
+
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     // MARK: - Disc
@@ -116,14 +310,7 @@ enum DesktopArtworkRenderer {
             skin: skin,
             scale: 3
         ) {
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            shadow.shadowColor = NSColor.black.withAlphaComponent(0.38)
-            shadow.shadowBlurRadius = 13
-            shadow.shadowOffset = NSSize(width: 0, height: -5)
-            shadow.set()
             disc.draw(in: rect)
-            NSGraphicsContext.restoreGraphicsState()
         } else {
             skin.recordCenter.setFill()
             NSBezierPath(ovalIn: rect).fill()
@@ -159,115 +346,17 @@ enum DesktopArtworkRenderer {
         }
         NSGraphicsContext.restoreGraphicsState()
 
-        let rim = NSBezierPath(ovalIn: rect.insetBy(dx: 0.45, dy: 0.45))
-        rim.lineWidth = 0.9
-        skin.sheen.withAlphaComponent(0.22).setStroke()
+        // Physical thickness: a dark lip at the silhouette and a thin
+        // catchlight just inside it.
+        let lip = NSBezierPath(ovalIn: rect.insetBy(dx: 0.55, dy: 0.55))
+        lip.lineWidth = 1.15
+        NSColor(white: 0, alpha: 0.48).setStroke()
+        lip.stroke()
+
+        let rim = NSBezierPath(ovalIn: rect.insetBy(dx: 1.7, dy: 1.7))
+        rim.lineWidth = 0.7
+        skin.sheen.withAlphaComponent(0.24).setStroke()
         rim.stroke()
-    }
-
-    // MARK: - Sleeve
-
-    private static func drawSleeve(
-        in rect: NSRect,
-        snapshot: TrackSnapshot,
-        artwork: NSImage?,
-        skin: VinylSkin
-    ) {
-        let coverSide = DesktopRecordGeometry.coverSide
-        let peek = DesktopRecordGeometry.sleevePeek
-        let itemSize = rect.size
-        let scale: CGFloat = 2
-
-        // Compose the cover and sleeve first so one shadow belongs to the
-        // whole object instead of each piece casting its own.
-        guard let (itemRep, itemCtx) = makeBitmap(pointSize: itemSize, scale: scale) else { return }
-
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = itemCtx
-        itemCtx.shouldAntialias = true
-        itemCtx.imageInterpolation = .high
-        itemCtx.cgContext.scaleBy(x: scale, y: scale)
-
-        let local = NSRect(origin: .zero, size: itemSize)
-        NSColor.clear.setFill()
-        local.fill()
-
-        let coverRect = NSRect(x: 0, y: 0, width: coverSide, height: coverSide)
-        let sleeveRect = NSRect(x: peek, y: 0, width: coverSide, height: coverSide)
-        let vinylRect = NSRect(
-            x: sleeveRect.midX - DesktopRecordGeometry.discDiameter / 2,
-            y: sleeveRect.midY - DesktopRecordGeometry.discDiameter / 2,
-            width: DesktopRecordGeometry.discDiameter,
-            height: DesktopRecordGeometry.discDiameter
-        )
-        let paper = NSColor(srgbRed: 0.95, green: 0.93, blue: 0.88, alpha: 1)
-
-        // The sleeve body, then the record, then a translucent paper skin so
-        // the vinyl shows through exactly as it does in a paper inner sleeve.
-        paper.withAlphaComponent(0.58).setFill()
-        NSBezierPath(roundedRect: sleeveRect, xRadius: 3, yRadius: 3).fill()
-
-        if let disc = RecordTexture.make(
-            radius: DesktopRecordGeometry.discDiameter / 2,
-            labelRadius: DesktopRecordGeometry.labelDiameter / 2,
-            artwork: artwork,
-            title: snapshot.title,
-            artist: snapshot.artist,
-            skin: skin,
-            scale: 2
-        ) {
-            disc.draw(in: vinylRect)
-        }
-
-        paper.withAlphaComponent(0.52).setFill()
-        NSBezierPath(roundedRect: sleeveRect, xRadius: 3, yRadius: 3).fill()
-
-        // Top seam of the paper sleeve.
-        let seam = NSBezierPath()
-        seam.move(to: NSPoint(x: sleeveRect.minX + 9, y: sleeveRect.maxY - 11))
-        seam.line(to: NSPoint(x: sleeveRect.maxX - 9, y: sleeveRect.maxY - 11))
-        seam.lineWidth = 0.8
-        NSColor.white.withAlphaComponent(0.72).setStroke()
-        seam.stroke()
-
-        let sleeveEdge = NSBezierPath(
-            roundedRect: sleeveRect.insetBy(dx: 0.5, dy: 0.5),
-            xRadius: 3,
-            yRadius: 3
-        )
-        sleeveEdge.lineWidth = 0.8
-        NSColor.black.withAlphaComponent(0.18).setStroke()
-        sleeveEdge.stroke()
-
-        // The cover sits in front and casts a short shadow onto the sleeve.
-        // Draw a near-transparent shape with the shadow first: `drawCover`
-        // clips its artwork to the cover rect, which would clip a shadow drawn
-        // at the same time.
-        NSGraphicsContext.saveGraphicsState()
-        let coverShadow = NSShadow()
-        coverShadow.shadowColor = NSColor.black.withAlphaComponent(0.30)
-        coverShadow.shadowBlurRadius = 7
-        coverShadow.shadowOffset = NSSize(width: 4, height: -3)
-        coverShadow.set()
-        NSColor.black.withAlphaComponent(0.001).setFill()
-        NSBezierPath(rect: coverRect).fill()
-        NSGraphicsContext.restoreGraphicsState()
-
-        drawCover(in: coverRect, snapshot: snapshot, artwork: artwork, skin: skin)
-
-        NSGraphicsContext.restoreGraphicsState()
-
-        let itemImage = NSImage(size: itemSize)
-        itemImage.addRepresentation(itemRep)
-
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.34)
-        shadow.shadowBlurRadius = 14
-        shadow.shadowOffset = NSSize(width: 0, height: -5)
-        shadow.set()
-        itemImage.draw(in: rect)
-        NSGraphicsContext.restoreGraphicsState()
     }
 
     // MARK: - Cover
@@ -291,17 +380,46 @@ enum DesktopArtworkRenderer {
 
         NSGraphicsContext.restoreGraphicsState()
 
-        let edge = NSBezierPath(rect: rect.insetBy(dx: 0.5, dy: 0.5))
-        edge.lineWidth = 1
-        NSColor.black.withAlphaComponent(0.32).setStroke()
-        edge.stroke()
+        drawCoverBoard(in: rect)
+    }
 
-        let highlight = NSBezierPath()
-        highlight.move(to: NSPoint(x: rect.minX + 0.8, y: rect.maxY - 0.8))
-        highlight.line(to: NSPoint(x: rect.maxX - 0.8, y: rect.maxY - 0.8))
-        highlight.lineWidth = 0.8
-        NSColor.white.withAlphaComponent(0.22).setStroke()
-        highlight.stroke()
+    /// Board thickness and the sleeve mouth, shared by both sleeve states so
+    /// the front face reads the same whether or not the record is out.
+    private static func drawCoverBoard(in rect: NSRect) {
+        // Right and bottom sit in shade: the cut paper edge, slightly darker
+        // than the printed face.
+        NSColor(white: 0, alpha: 0.14).setFill()
+        NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: 2).fill()
+        NSRect(x: rect.maxX - 2, y: rect.minY, width: 2, height: rect.height).fill()
+
+        // Top and left catch the light as a thin cut edge.
+        let cut = NSBezierPath()
+        cut.move(to: NSPoint(x: rect.minX + 0.4, y: rect.maxY - 0.6))
+        cut.line(to: NSPoint(x: rect.maxX - 0.4, y: rect.maxY - 0.6))
+        cut.move(to: NSPoint(x: rect.minX + 0.6, y: rect.minY + 0.4))
+        cut.line(to: NSPoint(x: rect.minX + 0.6, y: rect.maxY - 0.4))
+        cut.lineWidth = 0.8
+        NSColor.white.withAlphaComponent(0.30).setStroke()
+        cut.stroke()
+
+        // The mouth: a dark slit along the opening edge with a cream paper
+        // line just inside it.
+        let slitWidth: CGFloat = 1.5
+        NSColor(white: 0, alpha: 0.55).setFill()
+        NSRect(
+            x: rect.maxX - slitWidth,
+            y: rect.minY,
+            width: slitWidth,
+            height: rect.height
+        ).fill()
+
+        NSColor(srgbRed: 0.96, green: 0.94, blue: 0.89, alpha: 0.62).setFill()
+        NSRect(
+            x: rect.maxX - slitWidth - 0.9,
+            y: rect.minY,
+            width: 0.5,
+            height: rect.height
+        ).fill()
     }
 
     private static func drawGeneratedCover(
@@ -385,6 +503,23 @@ enum DesktopArtworkRenderer {
     }
 
     // MARK: - Drawing helpers
+
+    private static func drawShadowed(
+        _ image: NSImage,
+        in rect: NSRect,
+        alpha: CGFloat,
+        blur: CGFloat,
+        offset: NSSize
+    ) {
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(alpha)
+        shadow.shadowBlurRadius = blur
+        shadow.shadowOffset = offset
+        shadow.set()
+        image.draw(in: rect)
+        NSGraphicsContext.restoreGraphicsState()
+    }
 
     private static func makeBitmap(
         pointSize: NSSize,

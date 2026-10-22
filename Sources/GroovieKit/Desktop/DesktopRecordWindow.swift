@@ -1,16 +1,24 @@
 import AppKit
 
-/// One desktop decoration. The window is exactly the size of the rendered
-/// image, including its transparent shadow margin, and accepts mouse events only
-/// while Option is held (the controller toggles `ignoresMouseEvents`).
+/// One desktop decoration. The window is exactly the rendered image's size,
+/// including its transparent shadow margin, and accepts mouse events only on
+/// the object's silhouette.
+///
+/// Plain clicks raise the item. Option+click toggles the sleeve's record, and
+/// Option+drag moves the item.
 final class DesktopRecordWindow: NSPanel {
     let recordID: UUID
     let style: DesktopRecordStyle
+    /// Whether a sleeve is showing its record. Always true for a disc.
+    let recordOut: Bool
 
     var onDragBegan: ((UUID) -> Void)?
     var onDragMoved: ((UUID, CGPoint) -> Void)?
     var onDragEnded: ((UUID, CGPoint) -> Void)?
     var onClicked: ((UUID) -> Void)?
+    /// A plain click without Option. The controller brings the window forward;
+    /// no drag begins.
+    var onRaise: ((UUID) -> Void)?
 
     private let baseLevel: NSWindow.Level
     private let recordView: DesktopRecordContentView
@@ -31,13 +39,18 @@ final class DesktopRecordWindow: NSPanel {
     init(record: DesktopRecord, image: NSImage) {
         recordID = record.id
         style = record.style
+        recordOut = record.recordOut
         baseLevel = Self.desktopLevel
 
-        let size = DesktopRecordGeometry.windowSize(for: record.style)
+        let size = DesktopRecordGeometry.windowSize(
+            for: record.style,
+            recordOut: record.recordOut
+        )
         recordView = DesktopRecordContentView(
             frame: CGRect(origin: .zero, size: size),
             image: image,
-            style: record.style
+            style: record.style,
+            recordOut: record.recordOut
         )
 
         super.init(
@@ -61,14 +74,18 @@ final class DesktopRecordWindow: NSPanel {
         acceptsMouseMovedEvents = true
         // Always accept events. If the item ignored them unless Option was
         // already held, pressing Option while the pointer rests on the item
-        // would not take effect until it left and re-entered. Plain clicks are
-        // swallowed and do nothing; Option+click toggles the style, Option+drag
-        // moves the item.
+        // would not take effect until it left and re-entered. The content view
+        // limits hit testing to the silhouette; clicks on the transparent
+        // shadow margin are deliberately still handled by this window for now.
         ignoresMouseEvents = false
         isExcludedFromWindowsMenu = true
         contentView = recordView
 
         recordView.onMouseDown = { [weak self] event in self?.beginDrag(with: event) }
+        recordView.onRaise = { [weak self] in
+            guard let self else { return }
+            self.onRaise?(self.recordID)
+        }
         recordView.onMouseDragged = { [weak self] _ in self?.updateDrag() }
         recordView.onMouseUp = { [weak self] _ in self?.endDrag() }
     }
@@ -93,14 +110,17 @@ final class DesktopRecordWindow: NSPanel {
             NSEvent.removeMonitor(monitor)
             mouseUpMonitor = nil
         }
-        guard isDraggingRecord else { return }
+        guard isDraggingRecord else {
+            recordView.restoreCursor()
+            return
+        }
         isDraggingRecord = false
         dragStartMouse = nil
         dragStartOrigin = nil
         level = baseLevel
         recordView.setDragging(false)
         recordView.setDeleteArmed(false)
-        NSCursor.arrow.set()
+        recordView.restoreCursor()
     }
 
     func setDeleteArmed(_ armed: Bool) {
@@ -110,7 +130,13 @@ final class DesktopRecordWindow: NSPanel {
     // MARK: - Drag
 
     private func beginDrag(with event: NSEvent) {
-        guard event.modifierFlags.contains(.option), !isDraggingRecord else { return }
+        // Ignore the second click of a double-click: otherwise a disc can turn
+        // into a sleeve and immediately close again, with different results
+        // depending on where the second click lands.
+        guard event.modifierFlags.contains(.option),
+              event.clickCount <= 1,
+              !isDraggingRecord
+        else { return }
         isDraggingRecord = true
         dragStartMouse = NSEvent.mouseLocation
         dragStartOrigin = frame.origin
@@ -157,7 +183,7 @@ final class DesktopRecordWindow: NSPanel {
         dragStartOrigin = nil
         level = baseLevel
         recordView.setDragging(false)
-        NSCursor.arrow.set()
+        recordView.restoreCursor()
 
         if travel <= 4 {
             onClicked?(recordID)
@@ -167,43 +193,66 @@ final class DesktopRecordWindow: NSPanel {
     }
 }
 
-/// Layer-backed still image plus a hover/delete ring. Nothing here redraws on a
-/// timer; the layer contents are replaced only when the image or ring changes.
+/// Layer-backed still image plus a drag/delete ring. The silhouette decides
+/// where clicks land. Nothing redraws on a timer; the layer contents change
+/// only with the image, the ring state, or the Option-hover lift.
 final class DesktopRecordContentView: NSView {
     var onMouseDown: ((NSEvent) -> Void)?
+    var onRaise: (() -> Void)?
     var onMouseDragged: ((NSEvent) -> Void)?
     var onMouseUp: ((NSEvent) -> Void)?
 
     private let imageLayer = CALayer()
     private let ringLayer = CAShapeLayer()
-    private let itemRect: CGRect
+    private let silhouettePath: CGPath
     private let ringPath: CGPath
     private var tracking: NSTrackingArea?
     private var hovered = false
     private var deleteArmed = false
     private var dragging = false
 
-    init(frame: CGRect, image: NSImage, style: DesktopRecordStyle) {
+    init(frame: CGRect, image: NSImage, style: DesktopRecordStyle, recordOut: Bool) {
         let padding = DesktopRecordGeometry.shadowPadding
-        itemRect = CGRect(
-            x: padding,
-            y: padding,
-            width: max(0, frame.width - padding * 2),
-            height: max(0, frame.height - padding * 2)
-        )
 
-        let ringRect = itemRect.insetBy(dx: -3, dy: -3)
+        // Geometry rects are in item coordinates (origin at the visible
+        // object's bottom-left). The content view adds the shadow margin that
+        // the window reserves around the item.
+        let cover = DesktopRecordGeometry.coverRect(
+            for: style,
+            recordOut: recordOut
+        ).offsetBy(dx: padding, dy: padding)
+        let disc = DesktopRecordGeometry.discRect(
+            for: style,
+            recordOut: recordOut
+        ).offsetBy(dx: padding, dy: padding)
+
+        let silhouette = CGMutablePath()
+        let ring: CGPath
         switch style {
         case .disc:
-            ringPath = CGPath(ellipseIn: ringRect, transform: nil)
+            silhouette.addEllipse(in: disc)
+            ring = CGPath(ellipseIn: disc.insetBy(dx: -3, dy: -3), transform: nil)
         case .sleeve:
-            ringPath = CGPath(
-                roundedRect: ringRect,
+            // A closed sleeve is just the cover. An open one is the cover plus
+            // the disc that protrudes to its right.
+            silhouette.addRect(cover)
+            let coverRing = CGPath(
+                roundedRect: cover.insetBy(dx: -3, dy: -3),
                 cornerWidth: 5,
                 cornerHeight: 5,
                 transform: nil
             )
+            if recordOut {
+                silhouette.addEllipse(in: disc)
+                ring = coverRing.union(
+                    CGPath(ellipseIn: disc.insetBy(dx: -3, dy: -3), transform: nil)
+                )
+            } else {
+                ring = coverRing
+            }
         }
+        silhouettePath = silhouette
+        ringPath = ring
 
         super.init(frame: frame)
         wantsLayer = true
@@ -218,6 +267,7 @@ final class DesktopRecordContentView: NSView {
         imageLayer.contents = Self.cgImage(from: image)
         layer?.addSublayer(imageLayer)
 
+        ringLayer.frame = bounds
         ringLayer.path = ringPath
         ringLayer.fillColor = NSColor.clear.cgColor
         ringLayer.strokeColor = NSColor.white.withAlphaComponent(0.42).cgColor
@@ -233,16 +283,20 @@ final class DesktopRecordContentView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// Clicks outside the visible object fall through the view. The window
+    /// still owns the transparent margin; true click-through during overlap is
+    /// a separate, deferred problem.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        bounds.contains(point) ? self : nil
+        let local = convert(point, from: superview)
+        return silhouettePath.contains(local) ? self : nil
     }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
         let area = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            rect: silhouettePath.boundingBoxOfPath.insetBy(dx: -2, dy: -2),
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways],
             owner: self,
             userInfo: nil
         )
@@ -251,29 +305,42 @@ final class DesktopRecordContentView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        updateOptionHover(event.modifierFlags)
+        updateOptionHover(with: event)
     }
 
     override func mouseMoved(with event: NSEvent) {
-        updateOptionHover(event.modifierFlags)
+        updateOptionHover(with: event)
     }
 
     override func mouseExited(with event: NSEvent) {
         hovered = false
         updateRing()
-        NSCursor.arrow.set()
+        updateLift()
+        if !dragging {
+            NSCursor.arrow.set()
+        }
     }
 
-    /// Only Option hover shows the ring; a plain hover leaves the item
-    /// visually still. AppKit only delivers these events while this window is
-    /// the topmost one under the pointer, so a covered item stays quiet.
-    private func updateOptionHover(_ flags: NSEvent.ModifierFlags) {
-        let option = flags.contains(.option)
+    /// Option hover lifts the item and shows the open-hand cursor. A plain
+    /// hover leaves it still. AppKit only delivers these events while this
+    /// window is the topmost one under the pointer, so a covered item stays
+    /// quiet.
+    private func updateOptionHover(with event: NSEvent) {
+        // The tracking area is the silhouette's bounding box, which includes
+        // transparent corners (notably around a disc and beside the exposed
+        // vinyl). Require the pointer to be on the object itself so the lift
+        // and open-hand cursor never appear over empty space.
+        let local = convert(event.locationInWindow, from: nil)
+        let option = event.modifierFlags.contains(.option)
+            && silhouettePath.contains(local)
         if hovered != option {
             hovered = option
             updateRing()
+            updateLift()
         }
-        if option {
+        if dragging {
+            NSCursor.closedHand.set()
+        } else if option {
             NSCursor.openHand.set()
         } else {
             NSCursor.arrow.set()
@@ -281,7 +348,11 @@ final class DesktopRecordContentView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        onMouseDown?(event)
+        if event.modifierFlags.contains(.option) {
+            onMouseDown?(event)
+        } else {
+            onRaise?()
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -299,6 +370,7 @@ final class DesktopRecordContentView: NSView {
     func setDragging(_ dragging: Bool) {
         self.dragging = dragging
         updateRing()
+        updateLift()
     }
 
     func setDeleteArmed(_ armed: Bool) {
@@ -306,8 +378,22 @@ final class DesktopRecordContentView: NSView {
         updateRing()
     }
 
+    /// Reapply the cursor for the current hover/drag state. Used after a drag
+    /// ends so the open hand comes back while Option is still held.
+    func restoreCursor() {
+        if dragging {
+            NSCursor.closedHand.set()
+        } else if hovered && NSEvent.modifierFlags.contains(.option) {
+            NSCursor.openHand.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+
+    /// The ring marks a drag or an armed delete target only. Option hover is
+    /// communicated by the lift, not an outline.
     private func updateRing() {
-        let visible = hovering || dragging
+        let visible = dragging || deleteArmed
         ringLayer.opacity = visible ? 1 : 0
         if deleteArmed {
             ringLayer.strokeColor = NSColor(
@@ -324,8 +410,27 @@ final class DesktopRecordContentView: NSView {
         imageLayer.opacity = deleteArmed ? 0.72 : 1
     }
 
-    private var hovering: Bool {
-        hovered || dragging
+    /// A barely-there scale change makes the item feel picked up under Option.
+    /// The image layer scales around its own centre; the shadow padding scales
+    /// with it.
+    private func updateLift() {
+        let scale: CGFloat
+        if dragging {
+            scale = 1.04
+        } else if hovered {
+            scale = 1.02
+        } else {
+            scale = 1
+        }
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.15)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        let transform = CATransform3DMakeScale(scale, scale, 1)
+        imageLayer.transform = transform
+        // The ring is a sibling in view coordinates. Scale it with the image
+        // so it hugs the lifted edge instead of being swallowed by it.
+        ringLayer.transform = transform
+        CATransaction.commit()
     }
 
     private static func cgImage(from image: NSImage) -> CGImage? {

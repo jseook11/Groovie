@@ -505,6 +505,109 @@ public enum SelfChecks {
             expect(false, "desktop records must encode and decode")
         }
 
+        // `recordOut` is the whole open/closed state of a sleeve, so both
+        // values must survive a round trip.
+        for recordOut in [false, true] {
+            let flagged = DesktopRecord(
+                track: snapshot,
+                style: .sleeve,
+                position: CGPoint(x: 610, y: 270),
+                screenID: "1",
+                recordOut: recordOut
+            )
+            if let data = try? JSONEncoder().encode(flagged),
+               let decoded = try? JSONDecoder().decode(DesktopRecord.self, from: data)
+            {
+                expect(decoded.recordOut == recordOut,
+                       "recordOut \(recordOut) must survive a JSON round trip")
+            } else {
+                expect(false, "a record with recordOut must encode and decode")
+            }
+        }
+
+        func jsonObject(_ record: DesktopRecord) -> [String: Any]? {
+            guard let data = try? JSONEncoder().encode(record),
+                  let object = try? JSONSerialization.jsonObject(with: data),
+                  let dictionary = object as? [String: Any]
+            else { return nil }
+            return dictionary
+        }
+
+        // A record written before recordOut existed decodes as open.
+        if var legacyRecord = jsonObject(sleeve) {
+            legacyRecord.removeValue(forKey: "recordOut")
+            if let data = try? JSONSerialization.data(
+                withJSONObject: legacyRecord,
+                options: [.sortedKeys]
+            ),
+               let decoded = try? JSONDecoder().decode(DesktopRecord.self, from: data)
+            {
+                expect(decoded.recordOut,
+                       "a record without recordOut must default to open")
+            } else {
+                expect(false, "a record without recordOut must still decode")
+            }
+        } else {
+            expect(false, "a desktop record must serialise to a JSON object")
+        }
+
+        // A v1 document stored item-centre positions and had no recordOut
+        // flag. Decoding shifts each sleeve's x by -35 pt (the old item centre
+        // to the cover centre) and leaves discs alone; the document keeps
+        // reporting v1 so the store knows to write the upgrade back.
+        if var legacyDisc = jsonObject(disc),
+           var legacySleeve = jsonObject(sleeve)
+        {
+            legacyDisc.removeValue(forKey: "recordOut")
+            legacySleeve.removeValue(forKey: "recordOut")
+            let legacy: [String: Any] = [
+                "version": 1,
+                "records": [legacyDisc, legacySleeve],
+            ]
+            if let data = try? JSONSerialization.data(
+                withJSONObject: legacy,
+                options: [.sortedKeys]
+            ),
+               let migrated = try? JSONDecoder().decode(DesktopRecordDocument.self, from: data)
+            {
+                expect(migrated.version == 1,
+                       "a migrated v1 document reports its original version")
+                expect(migrated.records.count == 2, "a v1 document keeps both records")
+
+                let migratedDisc = migrated.records.first { $0.id == disc.id }
+                let migratedSleeve = migrated.records.first { $0.id == sleeve.id }
+                expect(migratedDisc?.position == disc.position,
+                       "v1 disc positions already used the disc centre")
+                expect(approx(
+                    Double(migratedSleeve?.position.x ?? 0),
+                    Double(sleeve.position.x - 35)
+                ), "v1 sleeve positions shift left by 35 pt to the cover centre")
+                expect(migratedSleeve?.position.y == sleeve.position.y,
+                       "the v1 sleeve shift is horizontal only")
+                expect(migratedDisc?.recordOut == true && migratedSleeve?.recordOut == true,
+                       "v1 records migrate as open")
+
+                if let reencoded = try? JSONEncoder().encode(migrated),
+                   let rewritten = try? JSONDecoder().decode(
+                    DesktopRecordDocument.self,
+                    from: reencoded
+                   )
+                {
+                    expect(rewritten.version == 2,
+                           "re-encoding a migrated document writes version 2")
+                    expect(rewritten.records.first { $0.id == sleeve.id }?.position
+                           == migratedSleeve?.position,
+                           "rewriting a migrated document keeps the shifted anchor")
+                } else {
+                    expect(false, "a migrated document must re-encode")
+                }
+            } else {
+                expect(false, "a v1 document must decode")
+            }
+        } else {
+            expect(false, "desktop records must serialise for the v1 migration check")
+        }
+
         let visible = CGRect(x: 0, y: 0, width: 1440, height: 800)
         let discSize = DesktopRecordGeometry.itemSize(for: .disc)
         let inside = DesktopRecordGeometry.clamp(
@@ -562,6 +665,147 @@ public enum SelfChecks {
         )
         expect(nextSlot != slot, "repeated package clicks cascade")
 
+        // Sizes, rects, and anchors are shared by the window, the renderer, and
+        // hit testing, so check the concrete numbers rather than just equality.
+        let openSleeveSize = DesktopRecordGeometry.itemSize(for: .sleeve, recordOut: true)
+        let closedSleeveSize = DesktopRecordGeometry.itemSize(for: .sleeve, recordOut: false)
+        let bareDiscSize = DesktopRecordGeometry.itemSize(for: .disc, recordOut: false)
+        expect(openSleeveSize == CGSize(width: 272, height: 200),
+               "an open sleeve is cover + 72 pt of exposed vinyl")
+        expect(closedSleeveSize == CGSize(width: 200, height: 200),
+               "a closed sleeve is just the square cover")
+        expect(bareDiscSize == CGSize(width: 180, height: 180), "a bare disc is 180x180")
+        expect(DesktopRecordGeometry.sleeveExposed == 72,
+               "40% of the 180 pt disc stays exposed")
+        expect(DesktopRecordGeometry.sleeveOpenWidth == 272,
+               "the open sleeve width is the cover plus the exposed strip")
+        expect(DesktopRecordGeometry.sleeveClosedWidth == 200,
+               "the closed sleeve width is the cover")
+
+        let openDiscRect = DesktopRecordGeometry.discRect(for: .sleeve, recordOut: true)
+        let closedDiscRect = DesktopRecordGeometry.discRect(for: .sleeve, recordOut: false)
+        expect(approx(Double(openDiscRect.minX), 92),
+               "the open sleeve disc starts 92 pt into the item")
+        expect(approx(Double(closedDiscRect.minX), 20),
+               "the closed sleeve disc is tucked behind the cover")
+        expect(approx(Double(closedDiscRect.maxX), 200),
+               "a closed sleeve keeps the record fully hidden")
+
+        let openWindow = DesktopRecordGeometry.windowSize(for: .sleeve, recordOut: true)
+        let closedWindow = DesktopRecordGeometry.windowSize(for: .sleeve, recordOut: false)
+        let discWindow = DesktopRecordGeometry.windowSize(for: .disc, recordOut: true)
+        expect(openWindow == CGSize(width: 340, height: 268),
+               "the open sleeve window adds the 34 pt shadow margin")
+        expect(closedWindow == CGSize(width: 268, height: 268),
+               "the closed sleeve window adds the 34 pt shadow margin")
+        expect(discWindow == CGSize(width: 248, height: 248),
+               "the disc window adds the 34 pt shadow margin")
+        for style in [DesktopRecordStyle.disc, .sleeve] {
+            for recordOut in [false, true] {
+                let item = DesktopRecordGeometry.itemSize(for: style, recordOut: recordOut)
+                let window = DesktopRecordGeometry.windowSize(for: style, recordOut: recordOut)
+                expect(approx(Double(window.width - item.width), 68)
+                       && approx(Double(window.height - item.height), 68),
+                       "\(style.rawValue): the window adds 68 pt on each axis")
+            }
+        }
+
+        let anchorPoint = CGPoint(x: 600, y: 260)
+        for style in [DesktopRecordStyle.disc, .sleeve] {
+            for recordOut in [false, true] {
+                let origin = DesktopRecordGeometry.windowOrigin(
+                    anchor: anchorPoint,
+                    style: style,
+                    recordOut: recordOut
+                )
+                let roundTripped = DesktopRecordGeometry.anchor(
+                    windowOrigin: origin,
+                    style: style,
+                    recordOut: recordOut
+                )
+                expect(roundTripped == anchorPoint,
+                       "\(style.rawValue): a window origin round-trips to its anchor")
+            }
+        }
+        let openSleeveCenter = DesktopRecordGeometry.itemCenter(
+            anchor: anchorPoint,
+            style: .sleeve,
+            recordOut: true
+        )
+        expect(approx(Double(openSleeveCenter.x - anchorPoint.x), 36),
+               "an open sleeve's item centre sits 36 pt right of the cover anchor")
+        expect(approx(Double(openSleeveCenter.y), Double(anchorPoint.y)),
+               "opening a sleeve never moves the cover vertically")
+
+        let clampedAnchor = DesktopRecordGeometry.clamp(
+            anchor: CGPoint(x: 5000, y: 5000),
+            style: .sleeve,
+            recordOut: true,
+            to: visible
+        )
+        let sleeveOffset = DesktopRecordGeometry.anchorOffset(for: .sleeve, recordOut: true)
+        let clampedItem = CGRect(
+            x: clampedAnchor.x - sleeveOffset.x,
+            y: clampedAnchor.y - sleeveOffset.y,
+            width: openSleeveSize.width,
+            height: openSleeveSize.height
+        )
+        expect(visible.contains(clampedItem),
+               "clamping keeps the whole open sleeve inside the visible frame")
+
+        let openSlot = DesktopRecordGeometry.defaultSlot(
+            style: .sleeve,
+            recordOut: true,
+            screenFrame: screen,
+            visibleFrame: visible,
+            notchHeight: 30,
+            index: 0
+        )
+        let slotItem = CGRect(
+            x: openSlot.x - sleeveOffset.x,
+            y: openSlot.y - sleeveOffset.y,
+            width: openSleeveSize.width,
+            height: openSleeveSize.height
+        )
+        expect(visible.contains(slotItem),
+               "the default anchor keeps the whole open sleeve on screen")
+        expect(!zone.contains(DesktopRecordGeometry.itemCenter(
+            anchor: openSlot,
+            style: .sleeve,
+            recordOut: true
+        )), "the default open-sleeve slot stays below the delete zone")
+
+        // Renderer smoke test: the cached bitmap is exactly the window size, so
+        // the window never has to scale it. No artwork, so both the cover and
+        // the label are generated from the snapshot.
+        let openImage = DesktopArtworkRenderer.image(
+            for: .sleeve,
+            recordOut: true,
+            snapshot: snapshot,
+            artwork: nil,
+            skin: .classic
+        )
+        expect(openImage.size == openWindow,
+               "the open sleeve render matches its window size")
+        let closedImage = DesktopArtworkRenderer.image(
+            for: .sleeve,
+            recordOut: false,
+            snapshot: snapshot,
+            artwork: nil,
+            skin: .classic
+        )
+        expect(closedImage.size == closedWindow,
+               "the closed sleeve render matches its window size")
+        let discImage = DesktopArtworkRenderer.image(
+            for: .disc,
+            recordOut: true,
+            snapshot: snapshot,
+            artwork: nil,
+            skin: .classic
+        )
+        expect(discImage.size == discWindow,
+               "the disc render matches its window size")
+
         // MARK: Desktop record storage
 
         MainActor.assumeIsolated {
@@ -589,6 +833,11 @@ public enum SelfChecks {
             let restyled = DesktopRecordStore(baseDirectory: directory)
             expect(restyled.records.first?.style == .sleeve,
                    "desktop style changes persist across a reload")
+
+            restyled.updateRecordOut(id: disc.id, recordOut: false)
+            let tucked = DesktopRecordStore(baseDirectory: directory)
+            expect(tucked.records.first?.recordOut == false,
+                   "desktop recordOut changes persist across a reload")
 
             let unsafeArtwork = DesktopRecord(
                 track: TrackSnapshot(
@@ -618,6 +867,46 @@ public enum SelfChecks {
             let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
             expect(files.contains(where: { $0.hasPrefix("desktop-records.corrupt-") }),
                    "a corrupt desktop store is backed up")
+
+            // Loading a v1 file upgrades it on disk once: the sleeve anchor is
+            // shifted and the rewritten document reports version 2.
+            let legacyDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("GroovieSelfChecks-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: legacyDirectory) }
+            try? FileManager.default.createDirectory(
+                at: legacyDirectory,
+                withIntermediateDirectories: true
+            )
+            if var oldSleeve = jsonObject(sleeve) {
+                oldSleeve.removeValue(forKey: "recordOut")
+                let legacyDocument: [String: Any] = [
+                    "version": 1,
+                    "records": [oldSleeve],
+                ]
+                let legacyFile = legacyDirectory.appendingPathComponent("desktop-records.json")
+                if let data = try? JSONSerialization.data(withJSONObject: legacyDocument) {
+                    try? data.write(to: legacyFile)
+                    let migratedStore = DesktopRecordStore(baseDirectory: legacyDirectory)
+                    expect(migratedStore.records.first?.position.x
+                           == sleeve.position.x - 35,
+                           "the store shifts a v1 sleeve when it loads it")
+                    if let written = try? Data(contentsOf: legacyFile),
+                       let rewritten = try? JSONDecoder().decode(
+                        DesktopRecordDocument.self,
+                        from: written
+                       )
+                    {
+                        expect(rewritten.version == 2,
+                               "the store rewrites a migrated file as version 2")
+                    } else {
+                        expect(false, "a migrated file must be readable")
+                    }
+                } else {
+                    expect(false, "a v1 fixture must encode")
+                }
+            } else {
+                expect(false, "a v1 fixture must serialise")
+            }
         }
 
         // MARK: Report
