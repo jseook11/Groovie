@@ -580,6 +580,7 @@ final class OverlayController {
         if !session.scrubArmed {
             if abs(point.x - session.start.x) >= 3 {
                 session.scrubArmed = true
+                clearRecordHover()
                 session.angleAtGrab = freezeSpin()
                 session.engine.begin(
                     x: point.x,
@@ -630,7 +631,6 @@ final class OverlayController {
         session.grabbed = true
         session.latchedInteraction = true
         session.centerTap = allowCenterTap && isOnLabel(at: point)
-        clearRecordHover()
         session.basePosition = music.estimatedPosition(at: Date())
         session.duration = now.duration
         session.wasPlaying = now.isPlaying
@@ -704,7 +704,8 @@ final class OverlayController {
     }
 
     private func refreshRecordHover() {
-        guard latched, session == nil, scrollSession == nil, let panel,
+        let busy = session?.scrubArmed == true || session?.moved == true || scrollSession != nil
+        guard latched, !busy, let panel,
               panel.frame.contains(NSEvent.mouseLocation),
               let point = contentPoint(forScreenPoint: NSEvent.mouseLocation)
         else {
