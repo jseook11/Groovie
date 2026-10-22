@@ -94,6 +94,10 @@ the interaction an obvious resting place.
   bar. It never steals focus or activates the app, and there is no Dock icon.
 - **Works without a notch.** On displays without a camera housing, the top-centre 179 pt strip
   behaves exactly the same way.
+- **First-run hint.** On a display without a notch, a small card under the strip introduces the
+  hidden gestures: click to play/pause, swipe with two fingers to change tracks, pull down for the
+  record. It never takes mouse events, disappears on the first gesture, and can be replayed from
+  the status menu.
 - **Status menu.** A fixed 252 pt header with the logo, track, artist, and progress. Long titles
   scroll after 0.7 s; short ones stay still. Only actionable states — Music closed, no track,
   permission needed — are surfaced there.
@@ -135,12 +139,17 @@ enough for development and for the Music automation prompt.
 2. The first Music command triggers **“Groovie wants to control Music”**. Choose **Allow**.
 3. If access was denied, enable it in **System Settings → Privacy & Security → Automation →
    Groovie → Music**, or use **Reconnect Music** in the status menu.
+4. On a display without a notch, a one-time gesture card appears under the top-centre strip.
+   Choose **Show Gesture Tips** from the status menu to see it again.
 
 ## Usage
 
 <p align="center">
   <img src="docs/assets/gestures.svg" alt="Gesture map: hover the notch, pull down to grab, spin sideways to seek, pull once more to pin" width="1000">
 </p>
+
+For a full walkthrough of every gesture, threshold, and edge case, see the
+[interaction guide](docs/ux-guide.md) (currently in Korean).
 
 | You want to… | Mouse | Trackpad |
 | --- | --- | --- |
@@ -152,6 +161,12 @@ enough for development and for the Music automation prompt.
 | Next / previous track | — | Swipe right / left |
 | Put it back | Click the vinyl, or drag up | Scroll up |
 | Cancel a seek | Shake four times in one second | — |
+
+With the record closed, the notch strip still has its own controls:
+
+<p align="center">
+  <img src="docs/assets/notch-gestures.svg" alt="Notch gestures: click to play or pause, swipe with two fingers for the previous or next track, and pull down to open the record" width="1000">
+</p>
 
 ### Pull and grab
 
@@ -273,6 +288,7 @@ Sources/GroovieKit/
   UI/VinylSkin.swift                    record palettes, persistence, track colors
   UI/RecordTexture.swift                grooves, bands, runout, label print
   UI/VinylStageView.swift               SwiftUI stage, hover hint, confirm gauge
+  UI/GestureHintView.swift              first-run gesture card and its panel
   UI/BrandMark.swift                    notch + record menu-bar template mark
   UI/MenuHeaderView.swift               fixed-width header, marquee, progress
   Localization/                         language discovery and typed string keys
@@ -283,6 +299,7 @@ Resources/AppIcon.icns                  packaged macOS app icon
 docs/assets/                            README images and gesture map
 docs/design/                            app-icon master art
 docs/localization/                     translation guide, JSON schema, key context
+docs/ux-guide.md                       full interaction guide (Korean)
 docs/record-crate.md                   design note: record crate / playlists (unbuilt)
 docs/record-break.md                   rejected alternative: breaking the record
 Scripts/                                app bundling, icon generation, localization checks
@@ -313,6 +330,7 @@ open build/Groovie.app --args --fake-music
 open build/Groovie.app --args --fake-music --demo
 open build/Groovie.app --args --fake-music --simulate-no-notch
 open build/Groovie.app --args --fake-music --demo --skin=rust
+open build/Groovie.app --args --gesture-hint
 ```
 
 | Flag | What it does |
@@ -320,6 +338,7 @@ open build/Groovie.app --args --fake-music --demo --skin=rust
 | `--fake-music` | Uses a demo player with three tracks instead of Music. |
 | `--demo` | Plays a pull → rewind → fast-forward → release sequence automatically. |
 | `--simulate-no-notch` | Shows the no-notch layout on a notched Mac. |
+| `--gesture-hint` | Forces the first-run gesture card, even on a notched display. |
 | `--skin=<id>` | Pins one of `classic`, `rust`, `teal`, `smoke`, `mono` for this run. |
 | `--long-title` | Makes the demo title long enough to exercise the menu-header marquee. |
 | `--lang=<code>` | Pins the UI language for this run, e.g. `en` or `ko`. |

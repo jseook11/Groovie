@@ -43,12 +43,13 @@ struct NotchHoverView: View {
 
 struct VinylRootView: View {
     @ObservedObject var model: VinylViewModel
+    let hover: RecordHoverModel
     let layout: VinylLayout
 
     var body: some View {
         ZStack {
             if model.showStage {
-                VinylStageView(model: model, layout: layout)
+                VinylStageView(model: model, hover: hover, layout: layout)
             } else {
                 NotchHoverView(armed: model.showHoverCue)
             }

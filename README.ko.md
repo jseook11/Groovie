@@ -6,6 +6,8 @@ MacBook 노치 안에 LP판이 들어 있다는 설정으로 만든 음악 스�
 노치에서 레코드를 아래로 당겨 꺼내고, 잡은 채 좌우로 돌려 재생 위치를 탐색한 뒤,
 놓으면 레코드가 노치로 돌아갑니다. 별도의 슬라이더나 버튼 없이 레코드 하나만 조작합니다.
 
+전체 제스처와 경계 동작은 [인터랙션 가이드](docs/ux-guide.md)에 정리되어 있습니다.
+
 ```
 Idle → Armed (hover) → Pulling (8 px) → Grabbed (80 px) ⇄ Scrubbing → Releasing → Idle
 ```
@@ -71,6 +73,10 @@ Idle → Armed (hover) → Pulling (8 px) → Grabbed (80 px) ⇄ Scrubbing → 
 - **Return to Playback** — 스크럽이 끝나면 수동 회전에서 33⅓ RPM 자동 회전으로 이어집니다.
 - **노치 없는 디스플레이** — 카메라 하우징이 없으면 화면 상단 중앙을 동일한 경계선으로 사용합니다.
   레코드 중심이 화면 상단 끝에 오고, 아래쪽 반원이 보입니다(내부적으로는 풀 원 렌더링).
+  처음 실행하면 상단 중앙의 숨은 영역을 알려 주는 **제스처 안내 카드**가 잠시 나타납니다.
+  클릭 = 재생/일시정지, 두 손가락 가로 스와이프 = 곡 넘기기, 아래로 당기기 = 레코드 꺼내기를
+  보여 주며, 마우스 입력을 가로채지 않고 첫 제스처가 시작되면 사라집니다. 상태 메뉴의
+  **제스처 안내 보기**로 다시 볼 수 있습니다.
 - **Apple Music 연동** — `Music.app`의 현재 트랙, 재생 상태, 재생 위치, 앨범 아트를 읽고
   0.1초 수준으로 seek합니다. 앨범 아트가 없으면 트랙 정보로 종이 레이블을 그립니다.
 - **데모** — Music이 없어도 상태 메뉴의 “데모 재생”으로 전체 인터랙션을 볼 수 있습니다.
@@ -197,6 +203,7 @@ open build/Groovie.app --args --fake-music --demo --skin=rust
 - `--fake-music` — Music 없이 가상 트랙으로 실제 마우스 드래그를 테스트합니다.
 - `--demo` — 당기기 → 되감기 → 앞으로 감기 → 놓기 시퀀스를 자동 재생합니다.
 - `--simulate-no-notch` — 노치가 있는 Mac에서 노치 없는 레이아웃을 확인합니다.
+- `--gesture-hint` — 첫 실행 제스처 안내 카드를 강제로 표시합니다(노치 화면에서도).
 - `--skin=<id>` — `classic`, `rust`, `teal`, `smoke`, `mono` 중 하나로 이번 실행의 스킨을
   고정합니다. 저장된 선택은 바꾸지 않습니다.
 - `--long-title` — 가상 트랙 제목을 길게 만들어 상태 메뉴 헤더의 마퀴를 확인합니다.
@@ -219,6 +226,7 @@ Sources/GroovieKit/
   Music/AppleMusicBridge.swift       AppleScript 실행, seek 병합, 아트워크 읽기
   Music/AppleMusicService.swift      폴링, 상태/가용성, 아트워크 캐시
   UI/VinylSkin.swift                 레코드 스킨 팔레트, 저장/복원, 트랙 색 처리
+  UI/GestureHintView.swift           첫 실행 제스처 안내 카드와 패널
   UI/BrandMark.swift                 메뉴 바용 노치+레코드 템플릿 마크
   UI/MenuHeaderView.swift            고정 폭 메뉴 헤더, 마퀴·진행 바·예외 상태
   UI/                                레코드 텍스처, SwiftUI 스테이지, HUD
@@ -230,6 +238,7 @@ Sources/GroovieKit/
 Resources/Info.plist                 LSUIElement, 자동화 사용 설명, 앱 아이콘
 Resources/AppIcon.icns               빌드에 포함되는 macOS 앱 아이콘
 docs/design/app-icon-cream-v3.png    앱 아이콘 마스터 시안
+docs/ux-guide.md                     제스처·상태·경계 동작 설명서
 docs/localization/                   번역 가이드, JSON 스키마, 키 문맥
 docs/record-crate.md                 (설계 노트) 레코드 복제·상자(플레이리스트), 미구현
 docs/record-break.md                 (대안) 레코드 떼어내기·파손, 채택 안 함

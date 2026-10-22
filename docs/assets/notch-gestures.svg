@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" role="img" aria-labelledby="title desc">
+  <title id="title">Gestures available in the notch</title>
+  <desc id="desc">Three gestures on the notch strip: click to play or pause, two-finger swipe to change tracks, and pull down to open the record.</desc>
+
+  <rect x="0.5" y="0.5" width="999" height="299" rx="24" fill="#F2E9D8" stroke="#E0D2B8"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <!-- 1. Click -->
+    <g>
+      <!-- housing -->
+      <path d="M80 40 H254 V82 Q254 92 244 92 H90 Q80 92 80 82 Z" fill="#0B0B0C"/>
+      <circle cx="167" cy="54" r="3" fill="#242427"/>
+      <circle cx="167" cy="54" r="1.2" fill="#3A3A3E"/>
+      <!-- tap ripple on the housing -->
+      <circle cx="167" cy="71" r="21" fill="none" stroke="#B3543D" stroke-opacity="0.10" stroke-width="2"/>
+      <circle cx="167" cy="71" r="13" fill="none" stroke="#B3543D" stroke-opacity="0.22" stroke-width="2"/>
+      <circle cx="167" cy="71" r="5" fill="#B3543D"/>
+      <!-- pointer -->
+      <path d="M196 84 L196 106 L202 100 L207 111 L212 108 L207 98 L215 98 Z" fill="#3A342B"/>
+      <text x="167" y="235" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">1 · Click</text>
+      <text x="167" y="257" text-anchor="middle" font-size="12" fill="#7A6F5E">play or pause</text>
+    </g>
+
+    <!-- 2. Two-finger swipe -->
+    <g>
+      <path d="M413 40 H587 V82 Q587 92 577 92 H423 Q413 92 413 82 Z" fill="#0B0B0C"/>
+      <circle cx="500" cy="54" r="3" fill="#242427"/>
+      <circle cx="500" cy="54" r="1.2" fill="#3A3A3E"/>
+      <!-- two fingertips -->
+      <circle cx="484" cy="71" r="10" fill="#B3543D" fill-opacity="0.14"/>
+      <circle cx="484" cy="71" r="5" fill="#B3543D"/>
+      <circle cx="516" cy="71" r="10" fill="#B3543D" fill-opacity="0.14"/>
+      <circle cx="516" cy="71" r="5" fill="#B3543D"/>
+      <!-- horizontal travel -->
+      <path d="M436 113 H564" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M444 105 L436 113 L444 121" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M556 105 L564 113 L556 121" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="436" y="136" text-anchor="middle" font-size="9" fill="#7A6F5E">previous</text>
+      <text x="564" y="136" text-anchor="middle" font-size="9" fill="#7A6F5E">next</text>
+      <text x="500" y="235" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">2 · Swipe</text>
+      <text x="500" y="257" text-anchor="middle" font-size="12" fill="#7A6F5E">two fingers · previous / next track</text>
+    </g>
+
+    <!-- 3. Pull down -->
+    <g>
+      <path d="M746 40 H920 V82 Q920 92 910 92 H756 Q746 92 746 82 Z" fill="#0B0B0C"/>
+      <circle cx="833" cy="54" r="3" fill="#242427"/>
+      <circle cx="833" cy="54" r="1.2" fill="#3A3A3E"/>
+      <!-- pull gesture -->
+      <path d="M819 106 H847" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M833 108 V144" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M825 136 L833 146 L841 136" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="833" y="235" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">3 · Pull down</text>
+      <text x="833" y="257" text-anchor="middle" font-size="12" fill="#7A6F5E">open the record</text>
+    </g>
+
+    <line x1="333" y1="60" x2="333" y2="200" stroke="#E0D2B8"/>
+    <line x1="666" y1="60" x2="666" y2="200" stroke="#E0D2B8"/>
+  </g>
+</svg>

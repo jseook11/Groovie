@@ -17,8 +17,14 @@ struct VinylDiscView: View {
     private var size: CGFloat { radius * 2 }
 
     private var textureKey: String {
-        let artKey = artwork.map { String(ObjectIdentifier($0).hashValue) } ?? "-"
-        return "\(skin.id)|\(title)|\(artist)|\(artKey)"
+        RecordTexture.textureKey(
+            radius: radius,
+            labelRadius: labelRadius,
+            artwork: artwork,
+            title: title,
+            artist: artist,
+            skin: skin
+        )
     }
 
     var body: some View {
@@ -72,8 +78,9 @@ struct VinylDiscView: View {
                 .allowsHitTesting(false)
         }
         .frame(width: size, height: size)
-        .onAppear(perform: rebuildTexture)
-        .onChange(of: textureKey) { _, _ in rebuildTexture() }
+        .task(id: textureKey) {
+            await loadTexture()
+        }
     }
 
     private var sheen: AngularGradient {
@@ -129,8 +136,15 @@ struct VinylDiscView: View {
         )
     }
 
-    private func rebuildTexture() {
-        texture = RecordTexture.make(
+    @MainActor
+    private func loadTexture() async {
+        let key = textureKey
+        if let cached = RecordTexture.cachedTexture(for: key) {
+            texture = cached
+            return
+        }
+
+        let image = await RecordTextureRenderer.make(
             radius: radius,
             labelRadius: labelRadius,
             artwork: artwork,
@@ -138,5 +152,45 @@ struct VinylDiscView: View {
             artist: artist,
             skin: skin
         )
+
+        // A cancelled task belongs to an older track or a view that has gone
+        // away. The texture is already in the cache; do not publish it over
+        // the one the current view is showing.
+        guard !Task.isCancelled else { return }
+        texture = image
+    }
+}
+
+/// Records are rasterised off the main thread: a full texture used to take
+/// around 10 ms, which is long enough to register as a CPU spike in the middle
+/// of a SwiftUI update. The static vinyl base makes later renders much cheaper,
+/// but keeping even that work off the main thread protects interaction.
+enum RecordTextureRenderer {
+    private static let queue = DispatchQueue(
+        label: "com.groovie.record-texture",
+        qos: .userInitiated
+    )
+
+    static func make(
+        radius: CGFloat,
+        labelRadius: CGFloat,
+        artwork: NSImage?,
+        title: String,
+        artist: String,
+        skin: VinylSkin
+    ) async -> NSImage? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<NSImage?, Never>) in
+            queue.async {
+                let image = RecordTexture.make(
+                    radius: radius,
+                    labelRadius: labelRadius,
+                    artwork: artwork,
+                    title: title,
+                    artist: artist,
+                    skin: skin
+                )
+                continuation.resume(returning: image)
+            }
+        }
     }
 }

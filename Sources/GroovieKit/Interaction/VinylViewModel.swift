@@ -13,9 +13,6 @@ final class VinylViewModel: ObservableObject {
     @Published var offsetSeconds: Double = 0
     @Published var confirmProgress: Double = 0
     @Published var showConfirmGauge = false
-    /// Hover feedback while the record is pinned. Only the centre label reacts,
-    /// dimming for the play/pause target; the vinyl stays unchanged.
-    @Published var recordHover: RecordHover = .none
 
     @Published var trackTitle: String = ""
     @Published var trackArtist: String = ""
@@ -34,4 +31,12 @@ final class VinylViewModel: ObservableObject {
     var showOffset: Bool { phase == .scrubbing }
     var showTitle: Bool { phase.isHoldingRecord }
     var recordIsHeld: Bool { phase.isHoldingRecord }
+}
+
+/// Hover feedback while the record is pinned. Kept separate from the main
+/// view model so pointer movement invalidates only the small label overlay,
+/// not the disc and the rest of the stage.
+@MainActor
+final class RecordHoverModel: ObservableObject {
+    @Published var region: RecordHover = .none
 }

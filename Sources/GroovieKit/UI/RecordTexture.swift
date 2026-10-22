@@ -3,6 +3,45 @@ import AppKit
 /// Offscreen artwork for the record. Rendered once per track/skin (not per
 /// frame) so the 60 Hz animation only has to rotate a bitmap.
 enum RecordTexture {
+    /// Rendering a full disc costs around 10 ms, and the stage is recreated
+    /// every time the record is pulled out. Both the finished texture and the
+    /// static vinyl base (disc and grooves, which do not depend on the track)
+    /// are cached so only a genuinely new track pays for drawing.
+    private static let textureCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 8
+        cache.totalCostLimit = 20 * 1024 * 1024
+        return cache
+    }()
+    private static let baseCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 8
+        cache.totalCostLimit = 12 * 1024 * 1024
+        return cache
+    }()
+
+    /// Identity of a rendered texture. The label only prints the title and
+    /// artist when there is no artwork, so those fields must not invalidate a
+    /// texture that already contains a cover. That keeps a track change from
+    /// drawing the previous cover again while the new artwork is fetched.
+    static func textureKey(
+        radius: CGFloat,
+        labelRadius: CGFloat,
+        artwork: NSImage?,
+        title: String,
+        artist: String,
+        skin: VinylSkin,
+        scale: CGFloat = 3
+    ) -> String {
+        let content = artwork.map { "art:\(ObjectIdentifier($0).hashValue)" }
+            ?? "paper:\(title)|\(artist)"
+        return "\(skin.id)|\(radius)|\(labelRadius)|\(scale)|\(content)"
+    }
+
+    static func cachedTexture(for key: String) -> NSImage? {
+        textureCache.object(forKey: key as NSString)
+    }
+
     static func make(
         radius: CGFloat,
         labelRadius: CGFloat,
@@ -12,7 +51,122 @@ enum RecordTexture {
         skin: VinylSkin = .classic,
         scale: CGFloat = 3
     ) -> NSImage? {
+        let key = textureKey(
+            radius: radius,
+            labelRadius: labelRadius,
+            artwork: artwork,
+            title: title,
+            artist: artist,
+            skin: skin,
+            scale: scale
+        )
+        if let cached = textureCache.object(forKey: key as NSString) {
+            return cached
+        }
+
         let pointSize = NSSize(width: radius * 2, height: radius * 2)
+        guard let (rep, ctx) = makeBitmap(pointSize: pointSize, scale: scale) else {
+            return nil
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = ctx
+        ctx.shouldAntialias = true
+        ctx.imageInterpolation = .high
+        ctx.cgContext.scaleBy(x: scale, y: scale)
+
+        let fullRect = NSRect(origin: .zero, size: pointSize)
+        NSColor.clear.setFill()
+        fullRect.fill()
+
+        let center = NSPoint(x: radius, y: radius)
+
+        // The disc and its grooves depend only on the skin and size, so they
+        // are rendered once and composited under each track's label.
+        if let base = vinylBase(
+            radius: radius,
+            labelRadius: labelRadius,
+            skin: skin,
+            scale: scale
+        ) {
+            base.draw(
+                in: fullRect,
+                from: NSRect(origin: .zero, size: base.size),
+                operation: .sourceOver,
+                fraction: 1
+            )
+        } else {
+            drawDisc(radius: radius, center: center, skin: skin)
+            drawGrooves(radius: radius, labelRadius: labelRadius, center: center, skin: skin)
+        }
+        drawLabel(
+            labelRadius: labelRadius,
+            center: center,
+            artwork: artwork,
+            title: title,
+            artist: artist,
+            skin: skin
+        )
+        drawSpindle(center: center, skin: skin)
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        let image = NSImage(size: pointSize)
+        image.addRepresentation(rep)
+        textureCache.setObject(
+            image,
+            forKey: key as NSString,
+            cost: cacheCost(pointSize: pointSize, scale: scale)
+        )
+        return image
+    }
+
+    private static func vinylBase(
+        radius: CGFloat,
+        labelRadius: CGFloat,
+        skin: VinylSkin,
+        scale: CGFloat
+    ) -> NSImage? {
+        let key = "\(skin.id)|\(radius)|\(labelRadius)|\(scale)" as NSString
+        if let cached = baseCache.object(forKey: key) {
+            return cached
+        }
+
+        let pointSize = NSSize(width: radius * 2, height: radius * 2)
+        guard let (rep, ctx) = makeBitmap(pointSize: pointSize, scale: scale) else {
+            return nil
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = ctx
+        ctx.shouldAntialias = true
+        ctx.imageInterpolation = .high
+        ctx.cgContext.scaleBy(x: scale, y: scale)
+
+        let fullRect = NSRect(origin: .zero, size: pointSize)
+        NSColor.clear.setFill()
+        fullRect.fill()
+
+        let center = NSPoint(x: radius, y: radius)
+        drawDisc(radius: radius, center: center, skin: skin)
+        drawGrooves(radius: radius, labelRadius: labelRadius, center: center, skin: skin)
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        let image = NSImage(size: pointSize)
+        image.addRepresentation(rep)
+        baseCache.setObject(
+            image,
+            forKey: key,
+            cost: cacheCost(pointSize: pointSize, scale: scale)
+        )
+        return image
+    }
+
+    private static func makeBitmap(
+        pointSize: NSSize,
+        scale: CGFloat
+    ) -> (NSBitmapImageRep, NSGraphicsContext)? {
         let pixels = Int(ceil(pointSize.width * scale))
         guard pixels > 8,
               let rep = NSBitmapImageRep(
@@ -30,36 +184,11 @@ enum RecordTexture {
               let ctx = NSGraphicsContext(bitmapImageRep: rep)
         else { return nil }
         rep.size = pointSize
+        return (rep, ctx)
+    }
 
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = ctx
-        ctx.shouldAntialias = true
-        ctx.imageInterpolation = .high
-        ctx.cgContext.scaleBy(x: scale, y: scale)
-
-        let fullRect = NSRect(origin: .zero, size: pointSize)
-        NSColor.clear.setFill()
-        fullRect.fill()
-
-        let center = NSPoint(x: radius, y: radius)
-
-        drawDisc(radius: radius, center: center, skin: skin)
-        drawGrooves(radius: radius, labelRadius: labelRadius, center: center, skin: skin)
-        drawLabel(
-            labelRadius: labelRadius,
-            center: center,
-            artwork: artwork,
-            title: title,
-            artist: artist,
-            skin: skin
-        )
-        drawSpindle(center: center, skin: skin)
-
-        NSGraphicsContext.restoreGraphicsState()
-
-        let image = NSImage(size: pointSize)
-        image.addRepresentation(rep)
-        return image
+    private static func cacheCost(pointSize: NSSize, scale: CGFloat) -> Int {
+        Int(pointSize.width * scale) * Int(pointSize.height * scale) * 4
     }
 
     private static func drawDisc(radius: CGFloat, center: NSPoint, skin: VinylSkin) {

@@ -10,6 +10,7 @@ enum LocalizationKey: String, CaseIterable {
 
     case menuEnable = "menu.enable"
     case menuDemo = "menu.demo"
+    case menuGestureTips = "menu.gestureTips"
     case menuSkin = "menu.skin"
     case menuRetryMusic = "menu.retryMusic"
     case menuOpenMusic = "menu.openMusic"
@@ -37,6 +38,15 @@ enum LocalizationKey: String, CaseIterable {
 
     case headerNoTrack = "header.noTrack"
     case overlayPullToLock = "overlay.pullToLock"
+
+    // MARK: Gesture hint
+
+    case hintClickTitle = "hint.click.title"
+    case hintClickDetail = "hint.click.detail"
+    case hintSwipeTitle = "hint.swipe.title"
+    case hintSwipeDetail = "hint.swipe.detail"
+    case hintPullTitle = "hint.pull.title"
+    case hintPullDetail = "hint.pull.detail"
 
     // MARK: Permission alert
 

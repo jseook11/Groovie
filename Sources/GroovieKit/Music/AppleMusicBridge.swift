@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ImageIO
 
 /// Result of a single read of Music.app.
 enum AppleMusicRead: Equatable {
@@ -237,14 +238,18 @@ final class AppleMusicBridge {
 
     // MARK: - Artwork
 
-    func readArtwork(completion: @escaping (Data?) -> Void) {
+    /// Read the current cover and downscale it on the bridge queue. Embedded
+    /// artwork can be several megapixels; decoding it on the main thread was a
+    /// measurable part of the skip spike, and ImageIO can do the same work off
+    /// the main thread without touching AppKit's view state.
+    func readArtworkThumbnail(maxPixelSize: Int, completion: @escaping (NSImage?) -> Void) {
         queue.async {
-            let data = self.performArtworkRead()
-            DispatchQueue.main.async { completion(data) }
+            let image = self.performArtworkThumbnail(maxPixelSize: maxPixelSize)
+            DispatchQueue.main.async { completion(image) }
         }
     }
 
-    private func performArtworkRead() -> Data? {
+    private func performArtworkThumbnail(maxPixelSize: Int) -> NSImage? {
         let source = """
         tell application "Music"
             if it is running then
@@ -262,8 +267,28 @@ final class AppleMusicBridge {
         let descriptor = script.executeAndReturnError(&errorInfo)
         if errorInfo != nil { return nil }
         let data = descriptor.data
-        guard !data.isEmpty else { return nil }
-        return data
+        guard !data.isEmpty,
+              let imageSource = CGImageSourceCreateWithData(data as CFData, nil)
+        else { return nil }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            // Decode now while we are already on the background queue instead
+            // of leaving a lazy image for the main thread to decode later.
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
+            imageSource,
+            0,
+            options as CFDictionary
+        ) else { return nil }
+
+        return NSImage(
+            cgImage: cgImage,
+            size: NSSize(width: cgImage.width, height: cgImage.height)
+        )
     }
 
     // MARK: - Helpers

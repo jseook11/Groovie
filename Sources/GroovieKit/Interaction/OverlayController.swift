@@ -5,8 +5,12 @@ import os
 @MainActor
 final class OverlayController {
     let model = VinylViewModel()
+    let hover = RecordHoverModel()
     var onPermissionDenied: (() -> Void)?
     var onStateChange: (() -> Void)?
+    /// Fired when a real pointer or scroll gesture begins, so transient UI such
+    /// as the first-run gesture hint can step out of the way.
+    var onInteractionStart: (() -> Void)?
 
     private(set) var geometry: StageGeometry
     private(set) var layout: VinylLayout
@@ -197,7 +201,7 @@ final class OverlayController {
         panel = nil
         contentView = nil
 
-        let root = VinylRootView(model: model, layout: layout)
+        let root = VinylRootView(model: model, hover: hover, layout: layout)
         let hosting = PassthroughHostingView(rootView: root)
         hosting.safeAreaRegions = []
         hosting.wantsLayer = true
@@ -235,7 +239,7 @@ final class OverlayController {
         model.exposure = 0
         model.offsetSeconds = 0
         model.isSpinning = false
-        model.recordHover = .none
+        hover.region = .none
         resetSkipGesture()
         spinBaseAngle = 0
         spinBaseTime = CACurrentMediaTime()
@@ -366,6 +370,7 @@ final class OverlayController {
 
     private func handleMouseDown(at point: CGPoint, timestamp: TimeInterval) {
         scrollLog.debug("mouseDown at \(point.x, privacy: .public),\(point.y, privacy: .public) phase=\(String(describing: self.model.phase), privacy: .public)")
+        onInteractionStart?()
         if pendingConfirmUntil != nil {
             confirmLatch()
             if model.canInteract, music.nowPlaying != nil {
@@ -731,8 +736,8 @@ final class OverlayController {
         }
 
         let region = layout.hoverRegion(at: point, exposure: model.exposure)
-        guard region != model.recordHover else { return }
-        model.recordHover = region
+        guard region != hover.region else { return }
+        hover.region = region
         switch region {
         case .label:
             NSCursor.pointingHand.set()
@@ -744,8 +749,8 @@ final class OverlayController {
     }
 
     private func clearRecordHover() {
-        guard model.recordHover != .none else { return }
-        model.recordHover = .none
+        guard hover.region != .none else { return }
+        hover.region = .none
     }
 
     /// One deliberate confirmation gesture: a further downward pull, a horizontal
@@ -923,6 +928,7 @@ final class OverlayController {
         // seeking or extend the session.
         guard event.momentumPhase.isEmpty else { return }
         guard isEnabled, session == nil else { return }
+        onInteractionStart?()
         if !model.canInteract && !latched && pendingConfirmUntil == nil {
             presentPlayerForUnavailableMusic()
             return

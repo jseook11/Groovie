@@ -28,7 +28,10 @@ final class AppleMusicService: MusicProviding {
 
     private var artworkAttempted: Set<String> = []
     private var artworkCache: [String: NSImage] = [:]
-    private var artworkRequestInFlight = false
+    /// The track whose artwork request is currently running. When a skip
+    /// arrives while this is set, the new track is picked up when the request
+    /// finishes instead of being dropped.
+    private var artworkRequestTrackID: String?
     private var lastLoggedAvailability: MusicAvailability?
 
     /// A click on the record flips the UI immediately. Reads that were already
@@ -397,43 +400,45 @@ final class AppleMusicService: MusicProviding {
             artwork = cached
             return
         }
-        artwork = nil
-        guard !artworkAttempted.contains(trackID), !artworkRequestInFlight else { return }
-        artworkAttempted.insert(trackID)
-        artworkRequestInFlight = true
+        if artworkAttempted.contains(trackID) {
+            // Music already told us this track has no artwork. Drop the
+            // previous cover so the texture falls back to the printed label
+            // instead of leaving the old album on screen.
+            artwork = nil
+            return
+        }
+        // A request is already running. It will start the request for whichever
+        // track is current when it finishes, so a quick double skip cannot
+        // leave the second track without its cover.
+        guard artworkRequestTrackID == nil else { return }
 
-        bridge.readArtwork { [weak self] data in
+        artworkAttempted.insert(trackID)
+        artworkRequestTrackID = trackID
+
+        bridge.readArtworkThumbnail(maxPixelSize: 320) { [weak self] image in
             Task { @MainActor in
                 guard let self else { return }
-                self.artworkRequestInFlight = false
-                guard let data,
-                      let image = NSImage(data: data),
-                      self.nowPlaying?.trackID == trackID
-                else { return }
-                let scaled = Self.downscaled(image, maxDimension: 320)
-                self.artworkCache[trackID] = scaled
-                self.artwork = scaled
+                self.artworkRequestTrackID = nil
+                if let image {
+                    self.artworkCache[trackID] = image
+                }
+
+                let currentTrackID = self.nowPlaying?.trackID
+                guard currentTrackID == trackID else {
+                    // The user moved on while this read was in flight. Keep the
+                    // result for when they come back, and fetch the current
+                    // track's artwork now.
+                    if let currentTrackID,
+                       !self.artworkAttempted.contains(currentTrackID) {
+                        self.updateArtwork(for: currentTrackID)
+                        self.onUpdate?()
+                    }
+                    return
+                }
+
+                self.artwork = image
                 self.onUpdate?()
             }
         }
-    }
-
-    private static func downscaled(_ image: NSImage, maxDimension: CGFloat) -> NSImage {
-        let size = image.size
-        guard size.width > 1, size.height > 1 else { return image }
-        let factor = min(1, maxDimension / max(size.width, size.height))
-        guard factor < 0.999 else { return image }
-        let target = NSSize(width: size.width * factor, height: size.height * factor)
-        let output = NSImage(size: target)
-        output.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        image.draw(
-            in: NSRect(origin: .zero, size: target),
-            from: NSRect(origin: .zero, size: size),
-            operation: .copy,
-            fraction: 1
-        )
-        output.unlockFocus()
-        return output
     }
 }

@@ -13,6 +13,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     private var needsMenuRebuild = false
     private var enabled = true
     private var hasNotch = false
+    private var currentNotch: NotchScreen?
+    private let gestureHint = GestureHintPresenter()
+    private var hintSchedule: DispatchWorkItem?
+    private static let gestureHintShownKey = "groovie.gestureHintShown"
     private var permissionAlertShown = false
     private var screenObserver: NSObjectProtocol?
 
@@ -39,6 +43,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         setUpStatusItem()
         refreshOverlaySetup()
+        scheduleFirstRunHint()
 
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -56,6 +61,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        hintSchedule?.cancel()
+        gestureHint.dismiss(animated: false)
         controller?.deactivate()
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
@@ -68,6 +75,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     private func refreshOverlaySetup() {
         let notch = NotchScreen.current()
         hasNotch = notch != nil
+        currentNotch = notch
+        gestureHint.dismiss(animated: false)
 
         if let notch {
             if let controller {
@@ -96,7 +105,37 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             music = nil
         }
 
+        controller?.onInteractionStart = { [weak self] in
+            self?.gestureHint.dismiss()
+        }
+
         rebuildMenu()
+    }
+
+    /// Introduce the hidden strip on a display that has no physical notch to
+    /// advertise it. Shown once per install; the status menu can replay it.
+    /// A `--gesture-hint` launch argument forces it for development.
+    private func scheduleFirstRunHint() {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--demo") { return }
+
+        let forced = arguments.contains("--gesture-hint")
+        guard forced || currentNotch?.hasPhysicalNotch == false else { return }
+        guard forced || !UserDefaults.standard.bool(forKey: Self.gestureHintShownKey) else { return }
+
+        hintSchedule?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.showGestureHint(force: forced)
+        }
+        hintSchedule = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
+    }
+
+    private func showGestureHint(force: Bool) {
+        guard enabled, let notch = currentNotch else { return }
+        if !force, UserDefaults.standard.bool(forKey: Self.gestureHintShownKey) { return }
+        UserDefaults.standard.set(true, forKey: Self.gestureHintShownKey)
+        gestureHint.show(on: notch)
     }
 
     private func setEnabled(_ newValue: Bool) {
@@ -104,6 +143,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         if newValue {
             controller?.activate()
         } else {
+            hintSchedule?.cancel()
+            gestureHint.dismiss(animated: false)
             controller?.deactivate()
         }
         rebuildMenu()
@@ -165,6 +206,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         demoItem.target = self
         demoItem.isEnabled = hasNotch && enabled
         menu.addItem(demoItem)
+
+        let hintItem = NSMenuItem(title: L10n.t(.menuGestureTips), action: #selector(showGestureTips), keyEquivalent: "")
+        hintItem.target = self
+        hintItem.isEnabled = hasNotch && enabled
+        menu.addItem(hintItem)
 
         let skinItem = NSMenuItem(title: L10n.t(.menuSkin), action: nil, keyEquivalent: "")
         let skinMenu = NSMenu()
@@ -281,6 +327,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
     @objc private func runDemo() {
         controller?.runDemo()
+    }
+
+    @objc private func showGestureTips() {
+        showGestureHint(force: true)
     }
 
     @objc private func selectSkin(_ sender: NSMenuItem) {
