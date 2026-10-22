@@ -34,12 +34,29 @@ struct TrackSnapshot: Codable, Equatable {
     }
 }
 
-/// Two static presentations of the same snapshot.
+/// The two stored styles. Together with `DesktopRecord.recordOut` they describe
+/// the three desktop presentations: open sleeve, closed sleeve, bare disc.
 enum DesktopRecordStyle: String, Codable, CaseIterable {
     /// The bare vinyl, the same record the notch renders.
     case disc
     /// The album cover with the record tucked into its inner sleeve.
     case sleeve
+
+    /// Option-click order: open sleeve -> closed sleeve -> bare disc -> open.
+    /// A disc ignores `recordOut`; stepping from it always reopens the sleeve.
+    static func next(
+        after style: DesktopRecordStyle,
+        recordOut: Bool
+    ) -> (style: DesktopRecordStyle, recordOut: Bool) {
+        switch (style, recordOut) {
+        case (.sleeve, true):
+            return (.sleeve, false)
+        case (.sleeve, false):
+            return (.disc, true)
+        case (.disc, _):
+            return (.sleeve, true)
+        }
+    }
 }
 
 struct DesktopRecord: Codable, Identifiable, Equatable {

@@ -665,6 +665,27 @@ public enum SelfChecks {
         )
         expect(nextSlot != slot, "repeated package clicks cascade")
 
+        // Option-click cycles open -> closed -> disc -> open. A disc ignores
+        // the recordOut flag, so stepping from it always reopens the sleeve.
+        var presentation = DesktopRecordStyle.next(after: .sleeve, recordOut: true)
+        expect(presentation.style == .sleeve && presentation.recordOut == false,
+               "the first Option-click closes the sleeve")
+        presentation = DesktopRecordStyle.next(
+            after: presentation.style,
+            recordOut: presentation.recordOut
+        )
+        expect(presentation.style == .disc && presentation.recordOut,
+               "the second Option-click turns the closed sleeve into a bare disc")
+        presentation = DesktopRecordStyle.next(
+            after: presentation.style,
+            recordOut: presentation.recordOut
+        )
+        expect(presentation.style == .sleeve && presentation.recordOut,
+               "the third Option-click reopens the sleeve")
+        let discStep = DesktopRecordStyle.next(after: .disc, recordOut: false)
+        expect(discStep.style == .sleeve && discStep.recordOut,
+               "a disc ignores recordOut and always reopens the sleeve")
+
         // Sizes, rects, and anchors are shared by the window, the renderer, and
         // hit testing, so check the concrete numbers rather than just equality.
         let openSleeveSize = DesktopRecordGeometry.itemSize(for: .sleeve, recordOut: true)

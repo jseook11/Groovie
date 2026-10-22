@@ -173,16 +173,16 @@ final class DesktopRecordController {
         draggingID = id
     }
 
-    /// Option-click on a desktop item. A sleeve slides its record in or out; a
-    /// disc becomes an open sleeve. The anchor — the cover centre for a sleeve,
-    /// the disc centre for a disc — stays fixed while the window is rebuilt at
-    /// the new size, so the cover never jumps.
+    /// Option-click cycles the desktop presentation:
+    /// open sleeve -> closed sleeve -> bare disc -> open sleeve.
+    /// The anchor — the cover centre for a sleeve, the disc centre for a disc —
+    /// stays fixed while the window is rebuilt at the new size.
     func handleClick(id: UUID) {
         toggleRecordState(id: id)
     }
 
     /// Kept for the `--desktop-demo-toggle` launch flag, which predates the
-    /// open/closed interaction. New code should call `handleClick(id:)`.
+    /// three-state cycle. New code should call `handleClick(id:)`.
     func toggleStyle(id: UUID) {
         toggleRecordState(id: id)
     }
@@ -197,18 +197,12 @@ final class DesktopRecordController {
 
         guard let record = store.records.first(where: { $0.id == id }) else { return }
 
-        let newStyle: DesktopRecordStyle
-        let newRecordOut: Bool
-        switch record.style {
-        case .disc:
-            // A disc has no sleeve to close, so the first Option-click turns it
-            // into an open album.
-            newStyle = .sleeve
-            newRecordOut = true
-        case .sleeve:
-            newStyle = .sleeve
-            newRecordOut = !record.recordOut
-        }
+        let next = DesktopRecordStyle.next(
+            after: record.style,
+            recordOut: record.recordOut
+        )
+        let newStyle = next.style
+        let newRecordOut = next.recordOut
 
         // Prefer the live window origin: it is the freshest position if a drag
         // has not been persisted yet. The persisted `position` is the anchor.
@@ -465,9 +459,6 @@ final class DesktopRecordController {
         window.onDragBegan = { [weak self] id in self?.beginDrag(id) }
         window.onDragMoved = { [weak self] id, _ in self?.dragMoved(id) }
         window.onDragEnded = { [weak self] id, point in self?.dragEnded(id, pointer: point) }
-        window.onRaise = { [weak self] id in
-            self?.windows[id]?.orderFrontRegardless()
-        }
         window.onClicked = { [weak self] id in
             // Let the mouse-up finish before replacing the window.
             DispatchQueue.main.async {

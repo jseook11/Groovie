@@ -4,8 +4,8 @@ import AppKit
 /// including its transparent shadow margin, and accepts mouse events only on
 /// the object's silhouette.
 ///
-/// Plain clicks raise the item. Option+click toggles the sleeve's record, and
-/// Option+drag moves the item.
+/// Option+click cycles the three desktop presentations; Option+drag moves the
+/// item. Without Option the item does nothing.
 final class DesktopRecordWindow: NSPanel {
     let recordID: UUID
     let style: DesktopRecordStyle
@@ -16,9 +16,6 @@ final class DesktopRecordWindow: NSPanel {
     var onDragMoved: ((UUID, CGPoint) -> Void)?
     var onDragEnded: ((UUID, CGPoint) -> Void)?
     var onClicked: ((UUID) -> Void)?
-    /// A plain click without Option. The controller brings the window forward;
-    /// no drag begins.
-    var onRaise: ((UUID) -> Void)?
 
     private let baseLevel: NSWindow.Level
     private let recordView: DesktopRecordContentView
@@ -72,20 +69,15 @@ final class DesktopRecordWindow: NSPanel {
         animationBehavior = .none
         becomesKeyOnlyIfNeeded = true
         acceptsMouseMovedEvents = true
-        // Always accept events. If the item ignored them unless Option was
-        // already held, pressing Option while the pointer rests on the item
-        // would not take effect until it left and re-entered. The content view
-        // limits hit testing to the silhouette; clicks on the transparent
-        // shadow margin are deliberately still handled by this window for now.
+        // Accept events so Option+click works while the pointer already rests
+        // on the item. Without Option the content view deliberately does
+        // nothing: a plain click neither raises nor reorders the item. True
+        // click-through past the item is a follow-up.
         ignoresMouseEvents = false
         isExcludedFromWindowsMenu = true
         contentView = recordView
 
         recordView.onMouseDown = { [weak self] event in self?.beginDrag(with: event) }
-        recordView.onRaise = { [weak self] in
-            guard let self else { return }
-            self.onRaise?(self.recordID)
-        }
         recordView.onMouseDragged = { [weak self] _ in self?.updateDrag() }
         recordView.onMouseUp = { [weak self] _ in self?.endDrag() }
     }
@@ -198,7 +190,6 @@ final class DesktopRecordWindow: NSPanel {
 /// only with the image, the ring state, or the Option-hover lift.
 final class DesktopRecordContentView: NSView {
     var onMouseDown: ((NSEvent) -> Void)?
-    var onRaise: (() -> Void)?
     var onMouseDragged: ((NSEvent) -> Void)?
     var onMouseUp: ((NSEvent) -> Void)?
 
@@ -348,11 +339,10 @@ final class DesktopRecordContentView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        if event.modifierFlags.contains(.option) {
-            onMouseDown?(event)
-        } else {
-            onRaise?()
-        }
+        // Option is the only interaction gate. Without it the item is inert
+        // and must not raise or reorder itself.
+        guard event.modifierFlags.contains(.option) else { return }
+        onMouseDown?(event)
     }
 
     override func mouseDragged(with event: NSEvent) {

@@ -77,11 +77,11 @@ lip and mouth slit on the cover. A closed sleeve draws no vinyl at all. Opening 
 keeps the cover centre fixed and changes only the window's right edge.
 
 Desktop windows always accept mouse events, so pressing Option while the pointer already rests
-on an item works immediately. There is no polling timer. Option+click on a sleeve slides its
-record out or tucks it back in; on a bare disc it converts the item to an open sleeve. A plain
-click raises the item, and Option+drag moves it. Option-hover scales the item to 1.02 and shows
-an open hand; an active drag scales it to 1.04. The outline ring appears only during a drag or
-while delete-armed.
+on an item works immediately. There is no polling timer. Option+click cycles the three desktop
+presentations: open sleeve → closed sleeve → bare disc → open sleeve. Option+drag moves the
+item. Without Option nothing happens: a plain click neither raises nor reorders the item.
+Option-hover scales the item to 1.02 and shows an open hand; an active drag scales it to 1.04.
+The outline ring appears only during a drag or while delete-armed.
 
 Desktop windows use `CGWindowLevelForKey(.desktopIconWindow) + 1`, above the Finder desktop
 icons but below normal application windows, so they stay clickable when another app is
