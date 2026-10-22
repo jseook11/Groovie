@@ -16,7 +16,6 @@ final class DesktopRecordController {
 
     private var draggingID: UUID?
     private var artworkByID: [UUID: NSImage] = [:]
-    private var hoverMonitors: [Any] = []
     private var ghostPanel: DesktopCopyGhostPanel?
     private var deletePanel: DesktopDeleteTargetPanel?
 
@@ -37,11 +36,9 @@ final class DesktopRecordController {
 
     func start() {
         restoreWindows()
-        startHoverTracking()
     }
 
     func stop() {
-        stopHoverTracking()
         draggingID = nil
         hideCopyGhost()
         hideDeleteTarget()
@@ -61,13 +58,11 @@ final class DesktopRecordController {
             for window in windows.values {
                 window.orderFrontRegardless()
             }
-            startHoverTracking()
         } else {
             for window in windows.values {
                 window.cancelDrag()
                 window.orderOut(nil)
             }
-            stopHoverTracking()
             draggingID = nil
             hideCopyGhost()
             hideDeleteTarget()
@@ -437,64 +432,6 @@ final class DesktopRecordController {
             if clamped != record.position || newScreenID != record.screenID {
                 store.updatePosition(id: id, position: clamped, screenID: newScreenID)
             }
-        }
-    }
-
-    // MARK: - Option hover
-
-    /// Global moves cover the inactive app; local moves cover the active one.
-    /// Only movement drives this, so an idle desktop still does no work.
-    private func startHoverTracking() {
-        guard hoverMonitors.isEmpty, isEnabled else { return }
-
-        let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshOptionHover() }
-        }
-        let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
-            MainActor.assumeIsolated { self?.refreshOptionHover() }
-            return event
-        }
-        if let global { hoverMonitors.append(global) }
-        if let local { hoverMonitors.append(local) }
-        refreshOptionHover()
-    }
-
-    private func stopHoverTracking() {
-        for monitor in hoverMonitors {
-            NSEvent.removeMonitor(monitor)
-        }
-        hoverMonitors.removeAll()
-        for window in windows.values {
-            window.setOptionHover(false)
-        }
-    }
-
-    private func refreshOptionHover() {
-        guard isEnabled else { return }
-
-        let point = NSEvent.mouseLocation
-        let option = NSEvent.modifierFlags.contains(.option)
-        let topWindowNumber = NSWindow.windowNumber(
-            at: point,
-            belowWindowWithWindowNumber: 0
-        )
-
-        // Only the topmost item under the pointer reacts. This keeps a hidden
-        // desktop item from changing the cursor while a normal app window
-        // covers it.
-        let hit = windows.values.first { window in
-            guard window.windowNumber == topWindowNumber else { return false }
-            let item = DesktopRecordGeometry.itemSize(for: window.style)
-            let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
-            return abs(point.x - center.x) <= item.width / 2 + 2
-                && abs(point.y - center.y) <= item.height / 2 + 2
-        }
-
-        for window in windows.values {
-            window.setOptionHover(window === hit && option)
-        }
-        if hit != nil, option {
-            NSCursor.openHand.set()
         }
     }
 

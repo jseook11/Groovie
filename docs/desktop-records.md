@@ -301,10 +301,9 @@ struct TrackSnapshot: Codable {
 | --- | --- |
 | 신규 `Desktop/DesktopRecord.swift` | `DesktopRecord`, `TrackSnapshot`, 위치 클램프/삭제 존 순수 함수 |
 | 신규 `Desktop/DesktopRecordStore.swift` | JSON 저장/복원, 아트워크 PNG 캐시, 손상 복구 |
-| 신규 `Desktop/DesktopRecordController.swift` | 창 생성/제거/표시, Option 상태 폴링, 화면 변경 대응, 삭제 존 |
-| 신규 `Desktop/DesktopRecordWindow.swift` | 데스크탑 레벨 패널, Option+드래그 이동, 클릭 통과 |
-| 신규 `Desktop/DesktopRecordView.swift` | 정적 이미지 뷰(`.disc` / `.sleeve`), 호버 링 + 그림자 |
-| 신규 `Desktop/DesktopCoverTexture.swift` | 정사각형 앨범 커버 렌더러(아트워크 또는 생성 커버), 슬리브 합성 |
+| 신규 `Desktop/DesktopRecordController.swift` | 창 생성/제거/표시, 호버 감지, 화면 변경 대응, 삭제 존, 형태 전환 |
+| 신규 `Desktop/DesktopRecordWindow.swift` | 데스크탑 레벨 패널, 정적 이미지 뷰, Option+드래그/클릭, 호버 링 |
+| 신규 `Desktop/DesktopArtworkRenderer.swift` | 정적 레코드/앨범 커버/슬리브 렌더러 |
 | 신규 `Interaction/CopyDragController.swift` (또는 `OverlayController` 내부) | 복사/포장 세션, 고스트 패널, 드롭 판정 |
 | `Interaction/OverlayController.swift` | `mouseDown`에서 Option 최우선 분기, 복사 세션 라우팅, 스냅샷 제공 |
 | `Notch/OverlayPanel.swift` | `mouseDown`에 `event.modifierFlags` 전달 |
@@ -336,18 +335,18 @@ struct TrackSnapshot: Codable {
    드래그 드롭 시 레코드 판 생성, **단발 클릭 시 포장된 앨범 생성**, 노치 드롭 시 취소.
 4. **바탕화면 사본 조작** — Option+드래그 이동, Option+클릭 형태 전환, 드래그 중 레벨
    상승, 삭제 존 하이라이트와 삭제, 화면 경계 클램프.
-5. **폴리시** — Option 없을 때 클릭 통과, 호버 힌트, 포장 1회성 애니메이션,
+5. **폴리시** — Option hover 게이팅, 호버 힌트, 포장 1회성 애니메이션,
    로컬라이제이션, 데모, 문서(ux-guide/README), 수동 QA, CPU 유휴 측정.
 
-**스파이크(구현 전 0.5일 권장):** `NSWindow`를 데스크탑 레벨에 띄웠을 때
-① Finder 아이콘과의 순서, ② 클릭 수신 여부, ③ 전체 화면/스페이스 전환에서의
-표시, ④ `CGEventSource.flagsState` 기반 Option 감지. 이 네 가지가 4장 설계의
-전제다. 결과에 따라 “항상 위 장식” 또는 “클릭 삼킴”으로 대체한다.
+**스파이크 결과(검증됨):** `CGWindowList`에서 사본 창이 `desktopIcon + 1`
+(-2147483602) 레벨로 생성되는 것을 확인했다. Finder 아이콘 위, 일반 앱 창 아래에
+놓이며, 창은 항상 마우스 이벤트를 받고 Option이 없을 때의 클릭은 아무 동작도 하지
+않는다. 전체 화면/스페이스는 `.canJoinAllSpaces`와 `.fullScreenAuxiliary`로 처리한다.
 
 ## 9. 열린 결정 (기본안 표시)
 
-1. **층**: 데스크탑 레벨(기본, 요청대로 “바탕화면”) vs 항상 위. 스파이크 결과에
-   따라 조정.
+1. **층**: **`desktopIcon + 1`(확정)**. Finder 아이콘 위, 일반 앱 창 아래. 8장에서
+   검증했다.
 2. **회전**: 두 형태 모두 완전 정적(기본). 재생으로 오해될 여지를 없앤다.
 3. **Option 없을 때 클릭**: **사본 영역에서 삼킴(확정)**. 항상 이벤트를 받아
    “커서를 올려둔 채 Option”도 즉시 동작한다. 클릭 통과는 후속.
@@ -362,8 +361,7 @@ struct TrackSnapshot: Codable {
 9. **포장 형태**: 커버만 vs **커버 + 안쪽 슬리브/바이닐 살짝 보임**(기본, 첨부
    이미지 참고). 합성 비율은 시안에서 확정.
 10. **포장 기본 위치**: 화면 상단 중앙 캐스케이드(기본) vs 화면 중앙 vs 포인터.
-11. **포장 연출**: **0.18초 1회성 페이드 인(기본)** vs 즉시 표시. 슬리브 삽입 모션은
-    후속. 어느 쪽이든 끝난 뒤에는 정적.
+11. **포장 연출**: **0.18초 1회성 페이드 인(확정)**. 슬리브 삽입 모션은 후속.
 
 ## 10. 테스트와 QA
 
@@ -397,7 +395,7 @@ struct TrackSnapshot: Codable {
 - 사본 중심을 상단 노치 삭제 존으로 끌어 삭제, 저장소에서도 제거.
 - 바탕화면 사본에서 ⌥+단발 클릭 → 앨범 커버 ↔ 레코드 판 전환, 재실행 후 유지.
 - 커서를 사본 위에 올려둔 채 Option을 누르고 클릭/드래그해도 바로 동작하는지.
-- 일반 클릭/더블클릭이 사본을 통과해 Finder 아이콘에 닿는지(4장 폴리시).
+- 일반 클릭/드래그가 사본 위에서 아무 동작도 하지 않는지(사본 영역은 삼킴; 통과는 후속).
 - 앱 창 아래에 가려지는지(데스크탑 레벨), 전체 화면 앱에서는 보이지 않는지.
 - 여러 디스플레이: 다른 화면에 놓기, 화면 분리 후 재실행.
 - 여러 스페이스: 스페이스를 2개 이상 만들고 전환해도 사본이 모든 스페이스의 같은

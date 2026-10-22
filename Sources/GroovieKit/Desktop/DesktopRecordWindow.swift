@@ -86,10 +86,6 @@ final class DesktopRecordWindow: NSPanel {
         recordView.updateImage(image)
     }
 
-    func setOptionHover(_ hovering: Bool) {
-        recordView.setOptionHover(hovering)
-    }
-
     /// Stop an in-flight drag without reporting a drop. Used when the whole
     /// controller is disabled or shutting down.
     func cancelDrag() {
@@ -182,6 +178,7 @@ final class DesktopRecordContentView: NSView {
     private let ringLayer = CAShapeLayer()
     private let itemRect: CGRect
     private let ringPath: CGPath
+    private var tracking: NSTrackingArea?
     private var hovered = false
     private var deleteArmed = false
     private var dragging = false
@@ -240,6 +237,49 @@ final class DesktopRecordContentView: NSView {
         bounds.contains(point) ? self : nil
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        updateOptionHover(event.modifierFlags)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateOptionHover(event.modifierFlags)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hovered = false
+        updateRing()
+        NSCursor.arrow.set()
+    }
+
+    /// Only Option hover shows the ring; a plain hover leaves the item
+    /// visually still. AppKit only delivers these events while this window is
+    /// the topmost one under the pointer, so a covered item stays quiet.
+    private func updateOptionHover(_ flags: NSEvent.ModifierFlags) {
+        let option = flags.contains(.option)
+        if hovered != option {
+            hovered = option
+            updateRing()
+        }
+        if option {
+            NSCursor.openHand.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
         onMouseDown?(event)
     }
@@ -254,14 +294,6 @@ final class DesktopRecordContentView: NSView {
 
     func updateImage(_ image: NSImage) {
         imageLayer.contents = Self.cgImage(from: image)
-    }
-
-    /// The controller drives this from its mouse-move monitors. Only Option
-    /// hover shows the ring; a plain hover leaves the item visually still.
-    func setOptionHover(_ hovering: Bool) {
-        guard hovered != hovering else { return }
-        hovered = hovering
-        updateRing()
     }
 
     func setDragging(_ dragging: Bool) {
