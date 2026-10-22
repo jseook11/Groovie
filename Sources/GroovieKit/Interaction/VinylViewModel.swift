@@ -13,8 +13,8 @@ final class VinylViewModel: ObservableObject {
     @Published var offsetSeconds: Double = 0
     @Published var confirmProgress: Double = 0
     @Published var showConfirmGauge = false
-    /// Hover feedback while the record is pinned: the label lights up for
-    /// play/pause, the vinyl ring dims for the put-away action.
+    /// Hover feedback while the record is pinned. Only the centre label reacts,
+    /// dimming for the play/pause target; the vinyl stays unchanged.
     @Published var recordHover: RecordHover = .none
 
     @Published var trackTitle: String = ""
