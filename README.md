@@ -52,8 +52,8 @@ it the one piece of screen real estate where a skeuomorphic object can live with
 the desktop. Groovie treats the notch as a record sleeve and the record as the control.
 
 Only the lower half of the record is ever visible. That is a deliberate constraint: the silhouette
-reads as *a record pulled halfway out of a sleeve*, it stays inside the notch column, and it gives
-the interaction an obvious resting place.
+reads as *a record pulled halfway out of a sleeve*, and it gives the interaction an obvious
+resting place.
 
 ## Features
 
@@ -67,8 +67,6 @@ the interaction an obvious resting place.
   or end of the track, and the record stops turning there too.
 - **Pin it.** While grabbed, pull farther — or grab again within a second — and the record stays
   out. A translucent gauge under the record fills as you pull, and a faster pull fills it faster.
-  While pinning, sideways movement is ignored until it is clearly deliberate, so a vertical pull
-  never turns into an accidental seek.
 - **Put it back.** Click the vinyl, drag up, or scroll up. The record springs into the notch and
   playback resumes at the chosen position. If it was paused before, it stays paused.
 - **Wiggle to cancel.** Shake the record — four direction changes within one second — to abandon
@@ -78,12 +76,9 @@ the interaction an obvious resting place.
 ### Playback
 
 - **Click the label.** Once pinned, clicking the centre label toggles play/pause and the record
-  stays out. The record's rotation and the UI update immediately; a short hold keeps a delayed
-  status update from flipping it back.
+  stays out. The record and the menu bar update immediately.
 - **Hover hint.** On a pinned record, hovering the label darkens it, reveals a faint ❚❚ or ▶
-  glyph, and changes the cursor to a pointing hand. The vinyl itself never reacts, so moving the
-  pointer across the record does not make the screen flicker. The label's visible half is small,
-  so the click target reaches a little beyond its printed edge.
+  glyph, and changes the cursor to a pointing hand. The vinyl itself never reacts.
 - **Skip tracks.** A horizontal two-finger swipe over the notch, or over a pinned record's label,
   goes to the next or previous track. On the pinned record, a swipe that starts on the vinyl still
   scrubs.
@@ -183,11 +178,10 @@ Once grabbed, an upward lift puts it away.
 
 Grab the record and move sideways. Moving right rewinds; moving left fast-forwards. Slow movement
 is precise, fast movement covers more ground: the `ScrubEngine` maps pointer speed onto a
-sensitivity curve instead of using a fixed rate. Seeking stops at the beginning or end of the
-track, and the record stops turning there too.
+sensitivity curve instead of using a fixed rate. Seeking stops at either end of the track.
 
-Until the record is pinned, a sideways drag has to be deliberate before it starts scrubbing, so
-the sideways wobble of a pin pull is ignored. A pinned record responds to much smaller movements.
+A record that is still being pulled out waits for a clear sideways drag before it scrubs; once
+pinned, much smaller movements count.
 
 ### Pin and put back
 
@@ -198,8 +192,7 @@ A grabbed record is not pinned yet. It stays out when one of these confirm gestu
 - with a trackpad, keep scrolling down, or pause and scroll down again.
 
 A translucent gauge under the record starts at zero when the record snaps out and fills as you
-confirm. While confirming, horizontal movement has to be deliberate before it scrubs, so the
-sideways wobble of a vertical pull is ignored.
+confirm.
 
 Once pinned, click the label to toggle playback, swipe the label horizontally to change tracks,
 and click the vinyl, drag up, or scroll up to close. Without a confirm gesture, the record waits
@@ -213,8 +206,7 @@ release-based:
 - **Down** pulls the record out; the halfway point snaps it open.
 - **Left / right over the vinyl** scrubs, with the same speed-sensitive mapping as dragging.
 - **Left / right over the notch or a pinned label** changes tracks. A skip needs a long, clearly
-  horizontal gesture; once the gesture locks to an axis it cannot change its mind, and a gesture
-  can skip only once. An unintended skip is worse than a missed one.
+  horizontal gesture, and each gesture skips only once.
 - **Up** puts the record back.
 - **No input for a moment** after opening puts the record back, unless it has been confirmed.
 - Momentum is ignored, so a flick does not keep scrubbing after your fingers leave the trackpad.
@@ -223,15 +215,13 @@ release-based:
 
 While holding the record, shake it left and right — four direction changes within one second. The
 seek is discarded, the position returns to where you grabbed it, and a light haptic confirms the
-cancel. Small jitter or a single change of direction during precise scrubbing does not trigger it.
-If the record was pinned, it stays pinned.
+cancel. If the record was pinned, it stays pinned.
 
 ### Displays without a notch
 
-On an external display, the top-centre strip becomes the interaction area. The record
-emerges from the top edge of the screen and its centre sits on that boundary, exactly as it does
-inside a physical notch. When several displays are connected, the built-in notched display is
-preferred.
+On an external display, the top-centre strip becomes the interaction area. The record emerges
+from the top edge of the screen, just as it does from a physical notch. When several displays are
+connected, the built-in notched display is preferred.
 
 ## How it works
 
