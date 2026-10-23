@@ -186,7 +186,7 @@ public enum SelfChecks {
 
         // MARK: Layout
 
-        let layout = VinylLayout(notchWidth: 179, capHeight: 32, emergenceInset: 32)
+        let layout = VinylLayout(emergenceInset: 32)
         expect(layout.exposure(forPullDistance: 0) == 0, "no pull, no exposure")
         expect(layout.exposure(forPullDistance: -20) == 0, "negative pull cannot expose the disc")
         var lastExposure: CGFloat = -1
@@ -217,7 +217,7 @@ public enum SelfChecks {
         expect(layout.clickSlop == 4,
                "a click may drift 4 points before it counts as a drag")
 
-        let flat = VinylLayout(notchWidth: 179, capHeight: 0, emergenceInset: 0)
+        let flat = VinylLayout(emergenceInset: 0)
         expect(approx(flat.recordCenterY(exposure: flat.fullExposure), 0),
                "on a display without a notch the centre must sit on the screen's top edge")
 

@@ -185,8 +185,9 @@ With the record closed, the notch strip still has its own controls:
 
 ### Pull and grab
 
-The record is rendered as a full circle; the notch cap covers its upper half so only the lower
-semicircle is visible, with its centre exactly on the notch's bottom edge.
+The record is rendered as a plain full circle; the hardware notch (or the top edge of a display
+without one) hides its upper half, so only the lower semicircle is visible, with its centre exactly
+on the notch's bottom edge.
 
 A pull is only recognised when the first movement is vertical and downward. The record follows
 the pointer, then snaps fully out at the detent; releasing before it lets the record spring back.

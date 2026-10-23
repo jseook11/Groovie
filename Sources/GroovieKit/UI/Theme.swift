@@ -1,9 +1,6 @@
 import AppKit
-import SwiftUI
 
 enum VinylTheme {
-    static let hardwareBlack = Color.black
-
     static let accentColors: [NSColor] = [
         NSColor(srgbRed: 0.70, green: 0.33, blue: 0.24, alpha: 1), // rust
         NSColor(srgbRed: 0.25, green: 0.43, blue: 0.42, alpha: 1), // teal

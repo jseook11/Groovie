@@ -36,10 +36,6 @@ enum VinylPhase: Equatable {
 /// half is visible and the upper half disappears behind the edge, which is the
 /// physical reading described in the spec.
 struct VinylLayout {
-    let notchWidth: CGFloat
-    /// Height of the black notch shape drawn over the record. Zero when the
-    /// display has no camera housing.
-    let capHeight: CGFloat
     /// Distance from the top of the window to the emergence line.
     let emergenceInset: CGFloat
     let windowWidth: CGFloat
@@ -92,14 +88,10 @@ struct VinylLayout {
     let collapseMaximumTime: Double = 0.42
 
     init(
-        notchWidth: CGFloat,
-        capHeight: CGFloat,
         emergenceInset: CGFloat,
         windowWidth: CGFloat = 300,
         windowHeight: CGFloat = 190
     ) {
-        self.notchWidth = notchWidth
-        self.capHeight = capHeight
         self.emergenceInset = emergenceInset
         self.windowWidth = windowWidth
         self.windowHeight = windowHeight
@@ -107,8 +99,6 @@ struct VinylLayout {
 
     init(geometry: StageGeometry) {
         self.init(
-            notchWidth: geometry.notchWidth,
-            capHeight: geometry.hasPhysicalNotch ? geometry.notchHeight : 0,
             emergenceInset: geometry.emergenceInset,
             windowWidth: geometry.windowWidth,
             windowHeight: geometry.windowHeight
@@ -146,6 +136,4 @@ struct VinylLayout {
         if distance <= recordRadius { return .vinyl }
         return .none
     }
-
-    var hasNotchCap: Bool { capHeight > 0.5 }
 }

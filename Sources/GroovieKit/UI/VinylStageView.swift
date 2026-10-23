@@ -1,28 +1,5 @@
 import SwiftUI
 
-struct NotchCapShape: Shape {
-    var cornerRadius: CGFloat = 10
-
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let r = min(cornerRadius, rect.width / 2, rect.height)
-        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
-        p.addQuadCurve(
-            to: CGPoint(x: rect.maxX - r, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
-        )
-        p.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        p.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - r),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
-        p.closeSubpath()
-        return p
-    }
-}
-
 struct VinylStageView: View {
     @ObservedObject var model: VinylViewModel
     let hover: RecordHoverModel
@@ -34,10 +11,10 @@ struct VinylStageView: View {
             let center = layout.recordCenter(in: size, exposure: model.exposure)
 
             ZStack(alignment: .topLeading) {
-                // The record is rendered as a full circle. The hardware notch (or
-                // the screen's top edge) hides its upper half. The housing stays
-                // matte black while the disc keeps a separate glossy tone, so the
-                // two materials read as nested objects rather than one silhouette.
+                // The record is rendered as a plain full circle. Nothing is drawn
+                // over it: on a notched Mac the hardware covers the upper half,
+                // and on a display without one the screen's top edge clips it. The
+                // stage also clips the circle, so screenshots show the disc as-is.
                 VinylDiscView(
                     radius: layout.recordRadius,
                     labelRadius: layout.labelRadius,
@@ -59,43 +36,6 @@ struct VinylStageView: View {
                 )
                 hud(center: center)
                 confirmGauge(size: size)
-
-                if layout.hasNotchCap {
-                    NotchCapShape()
-                        .fill(VinylTheme.hardwareBlack)
-                        .frame(width: layout.notchWidth, height: layout.capHeight)
-                        .position(x: size.width / 2, y: layout.capHeight / 2)
-
-                    // A short contact shadow keeps the glossy record from merging
-                    // with the matte cap. It must stay subtle; the record is still
-                    // meant to emerge from the housing.
-                    LinearGradient(
-                        stops: [
-                            .init(color: .black.opacity(0.32), location: 0),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(width: layout.notchWidth * 0.94, height: 9)
-                    .blur(radius: 2)
-                    .position(x: size.width / 2, y: layout.capHeight + 4.5)
-                    .allowsHitTesting(false)
-
-                    // The hardware edge: a hairline that fades at both ends.
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .white.opacity(0.11), location: 0.5),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: max(0, layout.notchWidth - 30), height: 1)
-                    .position(x: size.width / 2, y: layout.capHeight - 0.5)
-                    .allowsHitTesting(false)
-                }
             }
             .frame(width: size.width, height: size.height)
             .clipped()
@@ -176,8 +116,8 @@ struct VinylStageView: View {
 /// Hover feedback on the pinned record. Only the centre label reacts: it dims
 /// while it is the play/pause target, and a faint transport glyph previews what
 /// a click will do. The vinyl itself stays still so the disc does not flicker as
-/// the pointer crosses it. The effect is clipped by the stage and the notch cap,
-/// so only the visible half reacts.
+/// the pointer crosses it. The effect is clipped by the stage, so only the
+/// visible half reacts.
 ///
 /// The overlay is drawn by a CALayer so the fade runs on the render server.
 /// A SwiftUI opacity animation here re-evaluated the overlay every frame while
