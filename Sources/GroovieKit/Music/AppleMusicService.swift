@@ -40,6 +40,10 @@ final class AppleMusicService: MusicProviding {
 
     private var runningObservers: [NSObjectProtocol] = []
     private var permissionObserver: NSObjectProtocol?
+    /// Music posts this on play/pause/track changes. It is only a hint to read
+    /// authoritative state now; the slow cadence remains the safety net.
+    private var playerInfoObserver: NSObjectProtocol?
+    private var lastPlayerInfoPoll = Date.distantPast
 
     /// Only recent covers are kept: the record shows one track at a time, and
     /// the cache exists so skipping back a few tracks does not pay for another
@@ -115,6 +119,10 @@ final class AppleMusicService: MusicProviding {
             NotificationCenter.default.removeObserver(permissionObserver)
             self.permissionObserver = nil
         }
+        if let playerInfoObserver {
+            DistributedNotificationCenter.default().removeObserver(playerInfoObserver)
+            self.playerInfoObserver = nil
+        }
     }
 
     deinit {
@@ -187,6 +195,25 @@ final class AppleMusicService: MusicProviding {
             }
         }
         runningObservers = [launch, terminate, wake]
+
+        playerInfoObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.apple.Music.playerInfo"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handlePlayerInfoNotification() }
+        }
+    }
+
+    /// Music sends both the Music and legacy iTunes variants for one change, so
+    /// throttle the hint. The read itself is authoritative; this only removes
+    /// the wait until the next scheduled poll.
+    private func handlePlayerInfoNotification() {
+        guard started, !permissionDenied else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastPlayerInfoPoll) >= 0.4 else { return }
+        lastPlayerInfoPoll = now
+        pollNow()
     }
 
     private func startPolling() {
