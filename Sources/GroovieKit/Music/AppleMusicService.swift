@@ -14,11 +14,26 @@ final class AppleMusicService: MusicProviding {
     private let bridge = AppleMusicBridge()
     private let log = Logger(subsystem: "com.groovie.app", category: "music")
 
-    private var pollTimer: Timer?
+    private var scheduledPoll: Timer?
+    private var pollActivity: PollActivity = .background
+    private var needsImmediatePoll = false
     private var started = false
     private var readInFlight = false
     private var permissionDenied = false
     private var launchInFlight = false
+
+    private enum PollActivity {
+        case engaged
+        case background
+    }
+    /// Bumped whenever the service starts or stops. Completions from an older
+    /// generation are dropped before they can touch state or re-arm work.
+    private var lifecycleGeneration = 0
+    /// Cached Music.app presence. Refreshed on start/refresh, workspace
+    /// notifications, wake, and at most every 30 s while Music is absent, so a
+    /// missed notification cannot strand polling forever.
+    private var musicIsRunning = false
+    private var lastRunningCheck = Date.distantPast
     /// One-shot: when the first read after starting (or reconnecting) finds no
     /// track, bring Music forward so the user can pick something to play.
     private var presentWhenNoTrack = false
@@ -61,7 +76,9 @@ final class AppleMusicService: MusicProviding {
             return
         }
         started = true
+        lifecycleGeneration += 1
         permissionDenied = false
+        refreshMusicRunning()
         observeWorkspace()
         permissionObserver = NotificationCenter.default.addObserver(
             forName: .groovieMusicPermissionDenied,
@@ -81,9 +98,13 @@ final class AppleMusicService: MusicProviding {
 
     func stop() {
         started = false
-        pollTimer?.invalidate()
-        pollTimer = nil
+        lifecycleGeneration += 1
+        scheduledPoll?.invalidate()
+        scheduledPoll = nil
         readInFlight = false
+        needsImmediatePoll = false
+        musicIsRunning = false
+        lastRunningCheck = Date()
         artworkCache.removeAllObjects()
         noCoverTracks.removeAll()
         artworkRequestTrackID = nil
@@ -97,7 +118,7 @@ final class AppleMusicService: MusicProviding {
     }
 
     deinit {
-        pollTimer?.invalidate()
+        scheduledPoll?.invalidate()
     }
 
     func refresh() {
@@ -106,6 +127,7 @@ final class AppleMusicService: MusicProviding {
             start()
             return
         }
+        refreshMusicRunning()
         startPolling()
         presentWhenNoTrack = true
         launchMusicIfNeeded()
@@ -122,7 +144,11 @@ final class AppleMusicService: MusicProviding {
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.bundleIdentifier == "com.apple.Music"
             else { return }
-            Task { @MainActor in self?.pollNow() }
+            Task { @MainActor in
+                self?.musicIsRunning = true
+                self?.lastRunningCheck = Date()
+                self?.pollNow()
+            }
         }
         let terminate = center.addObserver(
             forName: NSWorkspace.didTerminateApplicationNotification,
@@ -132,35 +158,109 @@ final class AppleMusicService: MusicProviding {
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.bundleIdentifier == "com.apple.Music"
             else { return }
-            Task { @MainActor in self?.applyNotRunning() }
+            Task { @MainActor in
+                guard let self else { return }
+                self.musicIsRunning = false
+                self.lastRunningCheck = Date()
+                // A read that was in flight when Music quit can still return a
+                // track snapshot. Invalidate it before applying the stopped
+                // state, or it would overwrite `applyNotRunning`.
+                self.lifecycleGeneration += 1
+                self.readInFlight = false
+                self.needsImmediatePoll = false
+                // The discarded artwork completion will never clear its marker.
+                self.artworkRequestTrackID = nil
+                self.applyNotRunning()
+                // Keep a slow recovery tick alive; a missed launch
+                // notification must not leave polling permanently off.
+                self.scheduleNextPoll()
+            }
         }
-        runningObservers = [launch, terminate]
+        let wake = center.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshMusicRunning()
+                self?.pollNow()
+            }
+        }
+        runningObservers = [launch, terminate, wake]
     }
 
     private func startPolling() {
-        guard started, pollTimer == nil else { return }
-        // The overlay estimates the playing position locally, so polling only
-        // has to notice track/play-state changes. Every AppleScript read costs
-        // real CPU, and the previous 0.8 s cadence was the app's idle floor.
-        // The block captures the service weakly so the timer cannot keep it
-        // alive after teardown.
-        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.pollNow() }
-        }
-        // Tolerance keeps the poll from competing with animation frames.
-        timer.tolerance = 0.3
-        RunLoop.main.add(timer, forMode: .common)
-        pollTimer = timer
+        guard started else { return }
+        scheduleNextPoll()
     }
 
-    private var isMusicRunning: Bool {
-        // `runningApplications` materialises every app and asks LaunchServices
-        // for static information; the targeted lookup only resolves one bundle.
-        !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty
+    /// Schedules exactly one read. A manual `pollNow()` cancels the pending
+    /// timer, so there is never more than one timer or one read in flight.
+    private func scheduleNextPoll() {
+        scheduledPoll?.invalidate()
+        scheduledPoll = nil
+        guard started, !permissionDenied else { return }
+        let interval = Self.pollInterval(
+            engaged: pollActivity == .engaged,
+            availability: availability,
+            isRunning: musicIsRunning
+        )
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.scheduledPoll = nil
+                self.pollNow()
+            }
+        }
+        // Tolerance lets the run loop coalesce the read with other work.
+        timer.tolerance = min(0.3, interval * 0.2)
+        RunLoop.main.add(timer, forMode: .common)
+        scheduledPoll = timer
+    }
+
+    /// Cadence for the next read. Kept pure so `--self-test` can verify the
+    /// table instead of letting it drift silently.
+    nonisolated static func pollInterval(
+        engaged: Bool,
+        availability: MusicAvailability,
+        isRunning: Bool
+    ) -> TimeInterval {
+        guard isRunning else { return 30 }
+        switch availability {
+        case .playing: return engaged ? 1.5 : 5
+        case .paused: return engaged ? 3 : 10
+        case .noTrack: return engaged ? 10 : 15
+        case .appNotRunning, .permissionDenied: return 30
+        }
+    }
+
+    func setOverlayEngaged(_ engaged: Bool) {
+        let next: PollActivity = engaged ? .engaged : .background
+        guard next != pollActivity else { return }
+        pollActivity = next
+        guard started, !permissionDenied, !readInFlight else { return }
+        if engaged {
+            // The user is about to look at the record; refresh now instead of
+            // waiting out a background interval.
+            pollNow()
+        } else {
+            scheduleNextPoll()
+        }
+    }
+
+    /// `runningApplications` materialises every app and asks LaunchServices for
+    /// static information; the targeted lookup only resolves one bundle. It is
+    /// cached because every poll must not pay for an XPC round trip.
+    private func refreshMusicRunning() {
+        musicIsRunning = !NSRunningApplication
+            .runningApplications(withBundleIdentifier: "com.apple.Music")
+            .isEmpty
+        lastRunningCheck = Date()
     }
 
     private func launchMusicIfNeeded() {
-        guard !isMusicRunning, !launchInFlight else { return }
+        refreshMusicRunning()
+        guard !musicIsRunning, !launchInFlight else { return }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") else {
             return
         }
@@ -169,6 +269,8 @@ final class AppleMusicService: MusicProviding {
             Task { @MainActor in
                 guard let self else { return }
                 self.launchInFlight = false
+                self.musicIsRunning = true
+                self.lastRunningCheck = Date()
                 // The workspace launch observer also polls, but Music can take a
                 // moment to answer AppleScript. This second read covers the case
                 // where the first one arrives too early.
@@ -210,18 +312,57 @@ final class AppleMusicService: MusicProviding {
     // MARK: - Polling
 
     func pollNow() {
-        guard started, !permissionDenied, !readInFlight else { return }
-        guard isMusicRunning else {
-            applyNotRunning()
+        guard started, !permissionDenied else { return }
+        if readInFlight {
+            // A command or engagement change arrived mid-read. Run once more
+            // as soon as this one finishes instead of waiting out the cadence.
+            needsImmediatePoll = true
             return
         }
+        scheduledPoll?.invalidate()
+        scheduledPoll = nil
+        if !musicIsRunning {
+            // Reconcile at most every 30 s in case the launch notification was
+            // missed. When Music is genuinely absent this is the entire tick.
+            if Date().timeIntervalSince(lastRunningCheck) >= 30 {
+                refreshMusicRunning()
+            }
+            guard musicIsRunning else {
+                applyNotRunning()
+                scheduleNextPoll()
+                return
+            }
+        }
+        needsImmediatePoll = false
         readInFlight = true
+        let generation = lifecycleGeneration
         bridge.read { [weak self] result in
             Task { @MainActor in
                 guard let self else { return }
+                // Only the request that still owns the service may clear the
+                // flag or apply state. A stop/start invalidates older reads.
+                guard self.started, generation == self.lifecycleGeneration else { return }
                 self.readInFlight = false
                 self.handle(result)
+                self.finishPollCycle()
             }
+        }
+    }
+
+    private func finishPollCycle() {
+        guard started, !permissionDenied else {
+            scheduledPoll?.invalidate()
+            scheduledPoll = nil
+            needsImmediatePoll = false
+            return
+        }
+        // A read started from inside handle() owns the next cycle.
+        guard !readInFlight else { return }
+        if needsImmediatePoll {
+            needsImmediatePoll = false
+            pollNow()
+        } else {
+            scheduleNextPoll()
         }
     }
 
@@ -287,6 +428,10 @@ final class AppleMusicService: MusicProviding {
 
             if previousTrack != trackID {
                 updateArtwork(for: trackID)
+            } else if artwork == nil {
+                // A stop/start cycle clears the cache but keeps the track; make
+                // sure the cover is fetched again instead of staying blank.
+                updateArtwork(for: trackID)
             }
 
             let meaningfulChange = previousTrack != trackID
@@ -322,6 +467,7 @@ final class AppleMusicService: MusicProviding {
     }
 
     private func applyNotRunning() {
+        musicIsRunning = false
         guard availability != .appNotRunning || nowPlaying != nil else { return }
         availability = .appNotRunning
         nowPlaying = nil
@@ -348,12 +494,18 @@ final class AppleMusicService: MusicProviding {
     private func handlePermissionDenied() {
         guard !permissionDenied else { return }
         permissionDenied = true
+        // A read or artwork request already in flight belongs to the rejected
+        // generation; release its bookkeeping so refresh() can start cleanly.
+        lifecycleGeneration += 1
+        readInFlight = false
+        needsImmediatePoll = false
+        artworkRequestTrackID = nil
         availability = .permissionDenied
         nowPlaying = nil
         artwork = nil
         clearPendingPlayback()
-        pollTimer?.invalidate()
-        pollTimer = nil
+        scheduledPoll?.invalidate()
+        scheduledPoll = nil
         logAvailabilityIfNeeded()
         onUpdate?()
     }
@@ -433,10 +585,15 @@ final class AppleMusicService: MusicProviding {
         guard artworkRequestTrackID == nil else { return }
 
         artworkRequestTrackID = trackID
+        let generation = lifecycleGeneration
 
         bridge.readArtworkThumbnail(maxPixelSize: 320) { [weak self] image in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self,
+                      self.started,
+                      !self.permissionDenied,
+                      generation == self.lifecycleGeneration
+                else { return }
                 // A stop/start cycle can leave an older read in flight; do not
                 // clear the marker belonging to a newer request.
                 if self.artworkRequestTrackID == trackID {

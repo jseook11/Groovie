@@ -174,10 +174,23 @@ private struct HoverLayerRepresentable: NSViewRepresentable {
     }
 }
 
+/// Clears the hover glyph bitmaps when the overlay is disabled.
+func purgeHoverLayerCaches() {
+    HoverLayerView.purgeCache()
+}
+
 private final class HoverLayerView: NSView {
     /// Only play/pause × one geometry are ever needed; the stage is recreated
     /// every time the record is pulled out, so keep the rendered images.
-    private static var imageCache: [String: CGImage] = [:]
+    private static let imageCache: NSCache<NSString, CGImage> = {
+        let cache = NSCache<NSString, CGImage>()
+        cache.countLimit = 2
+        return cache
+    }()
+
+    static func purgeCache() {
+        imageCache.removeAllObjects()
+    }
 
     private let overlay = CALayer()
     private var imageKey: String?
@@ -218,7 +231,7 @@ private final class HoverLayerView: NSView {
         let key = "\(isPlaying)|\(diameter)|\(glyphOffset)"
         if key != imageKey {
             imageKey = key
-            if let cached = Self.imageCache[key] {
+            if let cached = Self.imageCache.object(forKey: key as NSString) {
                 overlay.contents = cached
             } else {
                 let image = Self.makeImage(
@@ -227,7 +240,7 @@ private final class HoverLayerView: NSView {
                     glyphOffset: glyphOffset
                 )
                 if let image {
-                    Self.imageCache[key] = image
+                    Self.imageCache.setObject(image, forKey: key as NSString)
                 }
                 overlay.contents = image
             }

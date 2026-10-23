@@ -344,13 +344,15 @@ final class AppleMusicBridge {
         if it is running then
             set stateText to (player state as string)
             try
-                set currentTrackRef to current track
-                if currentTrackRef is missing value then return "NOTRACK"
-                set trackPersistentID to (persistent ID of currentTrackRef) as text
-                set trackName to (name of currentTrackRef) as text
-                set trackArtist to (artist of currentTrackRef) as text
-                set trackAlbum to (album of currentTrackRef) as text
-                set trackDuration to (duration of currentTrackRef) as real
+                -- One Apple Event for every track property instead of six
+                -- separate `of current track` reads. The output order below is
+                -- unchanged so `parse` stays the same.
+                set trackProperties to properties of current track
+                set trackPersistentID to (persistent ID of trackProperties) as text
+                set trackName to (name of trackProperties) as text
+                set trackArtist to (artist of trackProperties) as text
+                set trackAlbum to (album of trackProperties) as text
+                set trackDuration to (duration of trackProperties) as real
                 set playerPositionSeconds to (player position) as real
             on error
                 return "NOTRACK"

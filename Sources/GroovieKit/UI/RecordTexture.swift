@@ -42,6 +42,13 @@ enum RecordTexture {
         textureCache.object(forKey: key as NSString)
     }
 
+    /// Drops rendered textures when the overlay or desktop records are turned
+    /// off. The next use pays one render instead of keeping up to 32 MB alive.
+    static func purge() {
+        textureCache.removeAllObjects()
+        baseCache.removeAllObjects()
+    }
+
     static func make(
         radius: CGFloat,
         labelRadius: CGFloat,

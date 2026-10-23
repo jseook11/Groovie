@@ -17,6 +17,12 @@ enum DesktopArtworkRenderer {
     /// constant so the cache cost and the rendered pixels cannot drift apart.
     private static let scale: CGFloat = 2
 
+    /// Drops composed record bitmaps. Visible layers keep their own image
+    /// references, so purging only releases entries nothing else is using.
+    static func purge() {
+        cache.removeAllObjects()
+    }
+
     static func image(
         for style: DesktopRecordStyle,
         recordOut: Bool,

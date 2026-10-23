@@ -21,6 +21,10 @@ final class MenuHeaderView: NSView {
 
     private var marqueeTimer: Timer?
     private var progressTimer: Timer?
+    /// True between `setActive(true)` and `setActive(false)`, i.e. while the
+    /// status menu is on screen. Timer reconciliation is keyed to this rather
+    /// than to window attachment alone.
+    private var isActive = false
     private var marqueeStart: TimeInterval = 0
     private var marqueeTextWidth: CGFloat = 0
     private let marqueeSpeed: CGFloat = 20
@@ -95,6 +99,7 @@ final class MenuHeaderView: NSView {
 
         setAccessibilityLabel(accessibilityText(title: text, artist: artist))
         layoutTitle(reset: true)
+        syncTimers()
     }
 
     /// Replace the track rows with an actionable status message.
@@ -117,18 +122,18 @@ final class MenuHeaderView: NSView {
         isPlaying = false
         setAccessibilityLabel(L10n.t(.a11yHeaderStatus, text))
         layoutTitle(reset: true)
-        stopTimers()
+        syncTimers()
     }
 
     /// Start or stop animation while the menu is on screen.
     func setActive(_ active: Bool) {
+        isActive = active
         if active {
             layoutTitle(reset: true)
-            startTimers()
         } else {
-            stopTimers()
             titleContent.frame.origin.x = 0
         }
+        syncTimers()
     }
 
     // MARK: - Layout
@@ -249,13 +254,28 @@ final class MenuHeaderView: NSView {
 
     // MARK: - Timers
 
-    private func startTimers() {
+    /// One place decides whether either timer should exist. A timer may only
+    /// run while the menu is active and attached, so closing the menu or
+    /// detaching the view cannot leave hidden wakeups behind.
+    private func syncTimers() {
+        guard isActive, window != nil else {
+            stopTimers()
+            return
+        }
         startMarqueeIfNeeded()
-        startProgressIfNeeded()
+        if isPlaying, trackDuration > 0 {
+            startProgressIfNeeded()
+        } else {
+            stopProgress()
+        }
     }
 
     private func stopTimers() {
         stopMarquee()
+        stopProgress()
+    }
+
+    private func stopProgress() {
         progressTimer?.invalidate()
         progressTimer = nil
     }
@@ -272,6 +292,7 @@ final class MenuHeaderView: NSView {
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             self?.stepMarquee()
         }
+        timer.tolerance = 0.002
         RunLoop.main.add(timer, forMode: .common)
         marqueeTimer = timer
     }
@@ -292,10 +313,11 @@ final class MenuHeaderView: NSView {
     }
 
     private func startProgressIfNeeded() {
-        guard trackDuration > 0, progressTimer == nil else { return }
+        guard isPlaying, trackDuration > 0, progressTimer == nil else { return }
         let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.updateProgress()
         }
+        timer.tolerance = 0.25
         RunLoop.main.add(timer, forMode: .common)
         progressTimer = timer
     }
@@ -325,10 +347,7 @@ final class MenuHeaderView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil {
-            stopTimers()
-        } else {
-            refreshLayerColors()
-        }
+        refreshLayerColors()
+        syncTimers()
     }
 }

@@ -42,6 +42,9 @@ protocol MusicProviding: AnyObject {
 
     func start()
     func stop()
+    /// Tells a polling provider whether the record is on screen. Providers
+    /// that poll may use a slower cadence while the overlay is closed.
+    func setOverlayEngaged(_ engaged: Bool)
     /// Bring the player to the front so the user can start playback, launching
     /// it first when it is not running.
     func presentPlayer()
@@ -61,6 +64,8 @@ protocol MusicProviding: AnyObject {
 }
 
 extension MusicProviding {
+    func setOverlayEngaged(_ engaged: Bool) {}
+
     func estimatedPosition(at date: Date) -> Double {
         guard let now = nowPlaying else { return 0 }
         guard now.isPlaying else { return now.position }

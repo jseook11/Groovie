@@ -63,8 +63,11 @@ final class OverlayController {
     private var demoGeneration = 0
     private var isDemoActive = false
     private var announcedPermissionDenied = false
-    /// Global and local mouse-move monitors while the record is pinned.
+    /// Global mouse-move monitor while the record is pinned.
     private var hoverMonitors: [Any] = []
+    /// Whether the expanded stage is currently on screen. Used to restore the
+    /// music provider's polling cadence after a demo hands it back.
+    private var stageEngaged = false
 
     /// Horizontal scroll bookkeeping for track changes. The axis is locked at
     /// the start of a gesture so a pull can never turn into a skip.
@@ -171,6 +174,12 @@ final class OverlayController {
         vanishImmediately()
         music.stop()
         panel?.orderOut(nil)
+        // Nothing can draw these while the overlay is off. Keeping them would
+        // leave the texture caches and the last cover resident for the whole
+        // process lifetime.
+        model.artwork = nil
+        RecordTexture.purge()
+        purgeHoverLayerCaches()
     }
 
     func rebuild(for notch: NotchScreen) {
@@ -277,6 +286,8 @@ final class OverlayController {
         if panel.frame != geometry.expandedFrame {
             panel.setFrame(geometry.expandedFrame, display: true)
         }
+        stageEngaged = true
+        music.setOverlayEngaged(true)
         startTicking()
     }
 
@@ -285,6 +296,8 @@ final class OverlayController {
         if panel.frame != geometry.idleFrame {
             panel.setFrame(geometry.idleFrame, display: true)
         }
+        stageEngaged = false
+        music.setOverlayEngaged(false)
     }
 
     private func vanishImmediately() {
@@ -870,20 +883,18 @@ final class OverlayController {
 
     // MARK: - Hover feedback
 
-    /// Hover feedback only matters while the record is pinned. A global monitor
-    /// catches moves the non-activating panel does not receive as window
-    /// events; the local one covers the moves it does.
+    /// Hover feedback only matters while the record is pinned. The panel's
+    /// tracking area covers moves over it; the global monitor is the fallback
+    /// for a non-activating panel that does not receive them as window events.
     private func startHoverTracking() {
         guard hoverMonitors.isEmpty else { return }
+        // Moves inside the panel are already delivered by its `.activeAlways`
+        // tracking area (OverlayPanel.swift), so a local monitor would call
+        // refreshRecordHover twice per event. Only the global fallback remains.
         let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshRecordHover() }
         }
-        let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved]) { [weak self] event in
-            MainActor.assumeIsolated { self?.refreshRecordHover() }
-            return event
-        }
         if let global { hoverMonitors.append(global) }
-        if let local { hoverMonitors.append(local) }
         refreshRecordHover()
     }
 
@@ -1580,6 +1591,9 @@ final class OverlayController {
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        // Spring frames are visually smooth at a slightly looser deadline and
+        // the tolerance lets the run loop coalesce them with other work.
+        timer.tolerance = 1.0 / 240.0
         RunLoop.main.add(timer, forMode: .common)
         tickTimer = timer
     }
@@ -1796,6 +1810,7 @@ final class OverlayController {
         if isEnabled {
             previous.start()
         }
+        previous.setOverlayEngaged(stageEngaged)
         syncFromMusic()
     }
 
@@ -1814,6 +1829,7 @@ final class OverlayController {
         music = demo
         music.onUpdate = { [weak self] in self?.syncFromMusic() }
         music.start()
+        music.setOverlayEngaged(stageEngaged)
         syncFromMusic()
 
         // `endDemo` owns the restore. If a newer demo has superseded this one,

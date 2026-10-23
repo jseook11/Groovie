@@ -58,6 +58,8 @@ final class DesktopRecordController {
         windows.removeAll()
         artworkByID.removeAll()
         pendingRestorePositions.removeAll()
+        DesktopArtworkRenderer.purge()
+        RecordTexture.purge()
     }
 
     func setActive(_ active: Bool) {
@@ -70,14 +72,44 @@ final class DesktopRecordController {
         } else {
             cancelDeferredWork()
             flushRestorePositions()
+            // A drag that was interrupted by disabling the feature would
+            // otherwise jump back to its last persisted anchor on re-enable.
+            persistLivePositions()
             for window in windows.values {
                 window.cancelDrag()
                 window.orderOut(nil)
+                window.close()
             }
+            windows.removeAll()
+            artworkByID.removeAll()
             draggingID = nil
             hideCopyGhost()
             hideDeleteTarget()
+            // Keep no bitmaps alive while the feature is off. Re-enabling
+            // restores incrementally and renders each record once.
+            DesktopArtworkRenderer.purge()
+            RecordTexture.purge()
         }
+    }
+
+    /// Persist the current window origins before tearing the windows down.
+    private func persistLivePositions() {
+        guard !windows.isEmpty else { return }
+        var updates: [(id: UUID, position: CGPoint, screenID: String?)] = []
+        for (id, window) in windows {
+            let anchor = DesktopRecordGeometry.anchor(
+                windowOrigin: window.frame.origin,
+                style: window.style,
+                recordOut: window.recordOut
+            )
+            let targetScreen = screen(containing: anchor) ?? NSScreen.main
+            updates.append((
+                id: id,
+                position: anchor,
+                screenID: DesktopRecordGeometry.screenID(for: targetScreen)
+            ))
+        }
+        store.updatePositions(updates)
     }
 
     private func cancelDeferredWork() {
@@ -93,6 +125,10 @@ final class DesktopRecordController {
     func refreshSkins(_ skin: VinylSkin) {
         guard skin != self.skin else { return }
         self.skin = skin
+        // Every entry is keyed by the old skin; repainting regenerates what
+        // the visible records need.
+        DesktopArtworkRenderer.purge()
+        RecordTexture.purge()
         skinGeneration += 1
         let generation = skinGeneration
         let pending = store.records.filter { windows[$0.id] != nil }
@@ -222,6 +258,9 @@ final class DesktopRecordController {
     }
 
     private func toggleRecordState(id: UUID) {
+        // A click queued before the feature was disabled must not resurrect a
+        // hidden window or repopulate the render cache.
+        guard isEnabled else { return }
         // A click can follow a sub-4pt press that armed the delete halo. Clear
         // the transient drag UI here as well as in dragEnded, or the "drop to
         // remove" panel can be left behind after the window is rebuilt.
@@ -353,6 +392,9 @@ final class DesktopRecordController {
         NSCursor.arrow.set()
         artworkByID.removeValue(forKey: id)
         store.remove(id: id)
+        // Deleting is rare; dropping the whole composite cache avoids tracking
+        // every style/state key a record may have accumulated.
+        DesktopArtworkRenderer.purge()
         onRecordsChanged?()
 
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
@@ -395,6 +437,8 @@ final class DesktopRecordController {
         windows.removeAll()
         artworkByID.removeAll()
         store.removeAll()
+        DesktopArtworkRenderer.purge()
+        RecordTexture.purge()
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
         onRecordsChanged?()
     }

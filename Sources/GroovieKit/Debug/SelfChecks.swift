@@ -1032,6 +1032,28 @@ public enum SelfChecks {
                    "a batched update persists every field")
         }
 
+        // MARK: Music poll cadence
+
+        expect(AppleMusicService.pollInterval(engaged: true, availability: .playing, isRunning: true) == 1.5,
+               "engaged playback must poll at 1.5 s")
+        expect(AppleMusicService.pollInterval(engaged: false, availability: .playing, isRunning: true) == 5,
+               "background playback must slow to 5 s")
+        expect(AppleMusicService.pollInterval(engaged: true, availability: .paused, isRunning: true) == 3,
+               "engaged pause must poll at 3 s")
+        expect(AppleMusicService.pollInterval(engaged: false, availability: .paused, isRunning: true) == 10,
+               "background pause must slow to 10 s")
+        expect(AppleMusicService.pollInterval(engaged: false, availability: .noTrack, isRunning: true) == 15,
+               "background no-track must slow to 15 s")
+        expect(AppleMusicService.pollInterval(engaged: true, availability: .playing, isRunning: false) == 30,
+               "an absent player must use the 30 s recovery cadence")
+        for availability in [MusicAvailability.playing, .paused, .noTrack] {
+            expect(
+                AppleMusicService.pollInterval(engaged: false, availability: availability, isRunning: true)
+                    >= AppleMusicService.pollInterval(engaged: true, availability: availability, isRunning: true),
+                "background cadence must never be faster than engaged for \(availability)"
+            )
+        }
+
         // MARK: Report
 
         if failures.isEmpty {
