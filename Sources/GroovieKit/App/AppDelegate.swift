@@ -45,10 +45,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        // Desktop decorations are independent of Music and of the notch, so
-        // they are restored before the overlay is set up. `--desktop-demo` uses
-        // a throwaway store so the layer can be inspected without touching the
-        // user's saved items.
+        // Desktop decorations are independent of Music and of the notch.
+        // `--desktop-demo` uses a throwaway store so the layer can be inspected
+        // without touching the user's saved items.
         let isDesktopDemo = ProcessInfo.processInfo.arguments.contains("--desktop-demo")
         let demoDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("GroovieDesktopDemo", isDirectory: true)
@@ -60,11 +59,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             : nil
         let records = DesktopRecordController(store: demoStore)
         records.onRecordsChanged = { [weak self] in self?.rebuildMenu() }
-        records.start()
         desktopRecords = records
 
+        // Bring the menu bar up before restoring decorations. The controller
+        // spreads restore across run-loop turns, so a large desktop cannot
+        // delay the app's first usable frame.
         setUpStatusItem()
         refreshOverlaySetup()
+        records.start()
         if isDesktopDemo {
             seedDesktopDemo(records)
         }

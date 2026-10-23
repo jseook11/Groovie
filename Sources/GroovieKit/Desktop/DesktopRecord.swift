@@ -123,6 +123,17 @@ struct DesktopRecord: Codable, Identifiable, Equatable {
     }
 }
 
+/// A document written by a newer build. Loading it as the current version and
+/// writing it back would silently drop the fields this build does not know
+/// about, so the store preserves the file instead.
+struct UnsupportedDocumentVersion: LocalizedError, Equatable {
+    let version: Int
+
+    var errorDescription: String? {
+        "Desktop records use document version \(version); this build supports up to \(DesktopRecordDocument.currentVersion)."
+    }
+}
+
 /// On-disk document. The version field leaves room for a migration without
 /// having to guess the shape of older files.
 ///
@@ -137,10 +148,24 @@ struct DesktopRecordDocument: Codable, Equatable {
 
     var version: Int
     var records: [DesktopRecord]
+    /// Records skipped because they could not be decoded on their own (for
+    /// example a `style` value from a newer build). The rest of the file still
+    /// loads. Not encoded; the store backs up the original before rewriting.
+    private(set) var droppedRecordCount = 0
 
     private enum CodingKeys: String, CodingKey {
         case version
         case records
+    }
+
+    /// Decodes one record in isolation so a single unknown value cannot discard
+    /// every other record in the file.
+    private struct LossyRecord: Decodable {
+        let record: DesktopRecord?
+
+        init(from decoder: Decoder) throws {
+            record = try? DesktopRecord(from: decoder)
+        }
     }
 
     init(version: Int = DesktopRecordDocument.currentVersion, records: [DesktopRecord]) {
@@ -151,7 +176,13 @@ struct DesktopRecordDocument: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let storedVersion = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
-        var decoded = try container.decode([DesktopRecord].self, forKey: .records)
+        guard storedVersion <= Self.currentVersion else {
+            throw UnsupportedDocumentVersion(version: storedVersion)
+        }
+
+        let lossy = try container.decode([LossyRecord].self, forKey: .records)
+        var decoded = lossy.compactMap(\.record)
+        droppedRecordCount = lossy.count - decoded.count
 
         if storedVersion < 2 {
             // v1 sleeve positions were the centre of the whole 270x200 item;

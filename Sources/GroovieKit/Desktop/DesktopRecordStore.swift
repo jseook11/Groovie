@@ -74,6 +74,61 @@ final class DesktopRecordStore {
         save()
     }
 
+    /// Change several fields of one record with a single write.
+    ///
+    /// User-visible transitions touch more than one field at once (the style
+    /// cycle changes style, `recordOut`, and possibly the clamped position), and
+    /// re-encoding the whole document once per field is wasted work.
+    /// `screenID` is only applied together with `position`.
+    func update(
+        id: UUID,
+        style: DesktopRecordStyle? = nil,
+        recordOut: Bool? = nil,
+        position: CGPoint? = nil,
+        screenID: String? = nil
+    ) {
+        guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+        var changed = false
+
+        if let style, records[index].style != style {
+            records[index].style = style
+            changed = true
+        }
+        if let recordOut, records[index].recordOut != recordOut {
+            records[index].recordOut = recordOut
+            changed = true
+        }
+        if let position {
+            if records[index].position != position {
+                records[index].position = position
+                changed = true
+            }
+            if records[index].screenID != screenID {
+                records[index].screenID = screenID
+                changed = true
+            }
+        }
+
+        if changed { save() }
+    }
+
+    /// Apply many position changes with one write (display changes and restore).
+    func updatePositions(_ updates: [(id: UUID, position: CGPoint, screenID: String?)]) {
+        var changed = false
+        for update in updates {
+            guard let index = records.firstIndex(where: { $0.id == update.id }) else { continue }
+            if records[index].position != update.position {
+                records[index].position = update.position
+                changed = true
+            }
+            if records[index].screenID != update.screenID {
+                records[index].screenID = update.screenID
+                changed = true
+            }
+        }
+        if changed { save() }
+    }
+
     func remove(id: UUID) {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return }
         let removed = records.remove(at: index)
@@ -137,34 +192,59 @@ final class DesktopRecordStore {
 
     // MARK: - Disk
 
+    /// Minimal view of the document used to check the version before decoding
+    /// anything else.
+    private struct DocumentHeader: Decodable {
+        let version: Int?
+    }
+
     private func load() {
         guard fileManager.fileExists(atPath: fileURL.path) else { return }
         do {
             let data = try Data(contentsOf: fileURL)
+            let header = try JSONDecoder().decode(DocumentHeader.self, from: data)
+            if let version = header.version,
+               version > DesktopRecordDocument.currentVersion
+            {
+                // Refuse instead of decoding a newer file as this version: the
+                // first save would silently drop fields this build cannot see.
+                log.error("Desktop records were written by a newer version (\(version)); preserving them as a backup")
+                backUpFile(tag: "newer-v\(version)")
+                records = []
+                return
+            }
+
             let document = try JSONDecoder().decode(DesktopRecordDocument.self, from: data)
             // A v1 document has been migrated in memory by the decoder. Write
             // it back once so the shift and the new `recordOut` flag stick.
-            let needsMigration = document.version < DesktopRecordDocument.currentVersion
+            var needsSave = document.version < DesktopRecordDocument.currentVersion
 
-            if document.records.count > DesktopRecordGeometry.maxRecords {
-                // A hand-edited or future file can exceed the cap. Keep the
-                // oldest entries, remove the dropped artwork, and persist the
+            if document.droppedRecordCount > 0 {
+                log.error("Skipped \(document.droppedRecordCount) unreadable desktop record(s)")
+                // Only rewrite the file if the original is safely backed up;
+                // otherwise the skipped entries would be lost.
+                needsSave = backUpFile(tag: "recovered")
+            }
+
+            var loaded = document.records
+            if loaded.count > DesktopRecordGeometry.maxRecords {
+                // A hand-edited file can exceed the cap. Keep the oldest
+                // entries, remove the dropped artwork, and persist the
                 // truncated list so the extra files do not leak.
-                let kept = Array(document.records.prefix(DesktopRecordGeometry.maxRecords))
-                for dropped in document.records.dropFirst(DesktopRecordGeometry.maxRecords) {
+                for dropped in loaded.dropFirst(DesktopRecordGeometry.maxRecords) {
                     deleteArtwork(for: dropped)
                 }
-                records = kept
+                loaded = Array(loaded.prefix(DesktopRecordGeometry.maxRecords))
+                needsSave = true
+            }
+
+            records = loaded
+            if needsSave {
                 save()
-            } else {
-                records = document.records
-                if needsMigration {
-                    save()
-                }
             }
         } catch {
             log.error("Could not read desktop records: \(error.localizedDescription, privacy: .public)")
-            backUpCorruptFile()
+            backUpFile(tag: "corrupt")
             records = []
         }
     }
@@ -182,13 +262,23 @@ final class DesktopRecordStore {
         }
     }
 
-    private func backUpCorruptFile() {
+    @discardableResult
+    private func backUpFile(tag: String) -> Bool {
         let stamp = Int(Date().timeIntervalSince1970)
-        let backup = directory.appendingPathComponent("desktop-records.corrupt-\(stamp).json")
+        var backup = directory.appendingPathComponent("desktop-records.\(tag)-\(stamp).json")
+        var suffix = 1
+        // Two failures in the same second must not leave the bad file in place,
+        // which would repeat the same failure on every launch.
+        while fileManager.fileExists(atPath: backup.path) {
+            backup = directory.appendingPathComponent("desktop-records.\(tag)-\(stamp)-\(suffix).json")
+            suffix += 1
+        }
         do {
             try fileManager.moveItem(at: fileURL, to: backup)
+            return true
         } catch {
-            log.error("Could not back up corrupt records: \(error.localizedDescription, privacy: .public)")
+            log.error("Could not back up desktop records: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 }

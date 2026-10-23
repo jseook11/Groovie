@@ -19,6 +19,13 @@ final class DesktopRecordController {
     private var ghostPanel: DesktopCopyGhostPanel?
     private var deletePanel: DesktopDeleteTargetPanel?
 
+    /// Generation counters cancel deferred work when records, the skin, or
+    /// visibility change. Restoring and skin refresh are spread across
+    /// run-loop turns so a large desktop never blocks the menu bar.
+    private var restoreGeneration = 0
+    private var skinGeneration = 0
+    private var pendingRestorePositions: [UUID: (position: CGPoint, screenID: String?)] = [:]
+
     private let log = Logger(subsystem: "com.groovie.app", category: "desktop-records")
 
     init(
@@ -35,10 +42,11 @@ final class DesktopRecordController {
     // MARK: - Lifecycle
 
     func start() {
-        restoreWindows()
+        scheduleRestore()
     }
 
     func stop() {
+        cancelDeferredWork()
         draggingID = nil
         hideCopyGhost()
         hideDeleteTarget()
@@ -49,16 +57,19 @@ final class DesktopRecordController {
         }
         windows.removeAll()
         artworkByID.removeAll()
+        pendingRestorePositions.removeAll()
     }
 
     func setActive(_ active: Bool) {
         isEnabled = active
         if active {
-            restoreWindows()
+            scheduleRestore()
             for window in windows.values {
                 window.orderFrontRegardless()
             }
         } else {
+            cancelDeferredWork()
+            flushRestorePositions()
             for window in windows.values {
                 window.cancelDrag()
                 window.orderOut(nil)
@@ -69,6 +80,11 @@ final class DesktopRecordController {
         }
     }
 
+    private func cancelDeferredWork() {
+        restoreGeneration += 1
+        skinGeneration += 1
+    }
+
     func updateGeometry(_ geometry: StageGeometry?) {
         self.geometry = geometry
         reclampAll()
@@ -77,11 +93,24 @@ final class DesktopRecordController {
     func refreshSkins(_ skin: VinylSkin) {
         guard skin != self.skin else { return }
         self.skin = skin
-        for (id, window) in windows {
-            guard let record = store.records.first(where: { $0.id == id }) else { continue }
-            let artwork = artworkByID[id] ?? store.artwork(for: record)
-            if let artwork, artworkByID[id] == nil {
-                artworkByID[id] = artwork
+        skinGeneration += 1
+        let generation = skinGeneration
+        let pending = store.records.filter { windows[$0.id] != nil }
+        refreshSkinStep(pending, index: 0, generation: generation)
+    }
+
+    /// Repaint one record per run-loop turn. A skin change misses the render
+    /// cache for every record, so a synchronous loop would freeze the menu for
+    /// hundreds of milliseconds on a full desktop.
+    private func refreshSkinStep(_ pending: [DesktopRecord], index: Int, generation: Int) {
+        guard generation == skinGeneration else { return }
+        guard index < pending.count else { return }
+
+        let record = pending[index]
+        if let window = windows[record.id] {
+            let artwork = artworkByID[record.id] ?? store.artwork(for: record)
+            if let artwork, artworkByID[record.id] == nil {
+                artworkByID[record.id] = artwork
             }
             let image = DesktopArtworkRenderer.image(
                 for: record.style,
@@ -91,6 +120,11 @@ final class DesktopRecordController {
                 skin: skin
             )
             window.updateImage(image)
+        }
+
+        let next = index + 1
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshSkinStep(pending, index: next, generation: generation)
         }
     }
 
@@ -227,9 +261,14 @@ final class DesktopRecordController {
         )
         let newScreenID = DesktopRecordGeometry.screenID(for: targetScreen)
 
-        store.updateStyle(id: id, style: newStyle)
-        store.updateRecordOut(id: id, recordOut: newRecordOut)
-        store.updatePosition(id: id, position: clampedAnchor, screenID: newScreenID)
+        // One document write covers the whole style cycle.
+        store.update(
+            id: id,
+            style: newStyle,
+            recordOut: newRecordOut,
+            position: clampedAnchor,
+            screenID: newScreenID
+        )
 
         var updated = record
         updated.style = newStyle
@@ -436,11 +475,72 @@ final class DesktopRecordController {
 
     // MARK: - Windows
 
-    private func restoreWindows() {
+    /// Restore saved items one run-loop turn at a time. Rendering and decoding
+    /// artwork for a full desktop can take hundreds of milliseconds; doing it
+    /// synchronously would keep the menu-bar item off screen until it finished.
+    private func scheduleRestore() {
         guard isEnabled else { return }
-        for record in store.records where windows[record.id] == nil {
-            addWindow(for: record, artwork: store.artwork(for: record))
+        restoreGeneration += 1
+        let generation = restoreGeneration
+        pendingRestorePositions.removeAll()
+        let pending = store.records.filter { windows[$0.id] == nil }
+        // Start on the next run-loop turn so app launch can finish first.
+        DispatchQueue.main.async { [weak self] in
+            self?.restoreStep(pending, index: 0, generation: generation)
         }
+    }
+
+    private func restoreStep(_ pending: [DesktopRecord], index: Int, generation: Int) {
+        guard generation == restoreGeneration, isEnabled else { return }
+        guard index < pending.count else {
+            flushRestorePositions()
+            return
+        }
+
+        let record = pending[index]
+        // The record may have been deleted while it waited its turn.
+        if windows[record.id] == nil, store.records.contains(where: { $0.id == record.id }) {
+            addRestoredWindow(for: record)
+        }
+
+        let next = index + 1
+        DispatchQueue.main.async { [weak self] in
+            self?.restoreStep(pending, index: next, generation: generation)
+        }
+    }
+
+    private func addRestoredWindow(for record: DesktopRecord) {
+        var record = record
+        // Geometry is set before restoring now, so clamp here rather than
+        // relying on a later reclamp pass that no longer sees these windows.
+        if let targetScreen = screen(withID: record.screenID)
+            ?? screen(containing: record.position)
+            ?? NSScreen.main
+        {
+            let clamped = DesktopRecordGeometry.clamp(
+                anchor: record.position,
+                style: record.style,
+                recordOut: record.recordOut,
+                to: targetScreen.visibleFrame
+            )
+            let screenID = DesktopRecordGeometry.screenID(for: targetScreen)
+            if clamped != record.position || screenID != record.screenID {
+                record.position = clamped
+                record.screenID = screenID
+                pendingRestorePositions[record.id] = (clamped, screenID)
+            }
+        }
+        addWindow(for: record, artwork: store.artwork(for: record))
+    }
+
+    /// Persist every clamp found during restore with a single document write.
+    private func flushRestorePositions() {
+        guard !pendingRestorePositions.isEmpty else { return }
+        let updates = pendingRestorePositions.map {
+            (id: $0.key, position: $0.value.position, screenID: $0.value.screenID)
+        }
+        pendingRestorePositions.removeAll()
+        store.updatePositions(updates)
     }
 
     private func addWindow(
@@ -490,6 +590,7 @@ final class DesktopRecordController {
     }
 
     private func reclampAll() {
+        var updates: [(id: UUID, position: CGPoint, screenID: String?)] = []
         for (id, window) in windows {
             guard let record = store.records.first(where: { $0.id == id }) else { continue }
             guard let targetScreen = screen(withID: record.screenID)
@@ -510,9 +611,11 @@ final class DesktopRecordController {
             ))
             let newScreenID = DesktopRecordGeometry.screenID(for: targetScreen)
             if clamped != record.position || newScreenID != record.screenID {
-                store.updatePosition(id: id, position: clamped, screenID: newScreenID)
+                updates.append((id: id, position: clamped, screenID: newScreenID))
             }
         }
+        // One write for the whole display change instead of one per record.
+        store.updatePositions(updates)
     }
 
     // MARK: - Screen helpers

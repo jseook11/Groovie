@@ -928,6 +928,108 @@ public enum SelfChecks {
             } else {
                 expect(false, "a v1 fixture must serialise")
             }
+
+            // A file written by a newer build must be preserved rather than
+            // decoded as v2 and rewritten (which would drop fields this build
+            // cannot see).
+            let futureDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("GroovieSelfChecks-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: futureDirectory) }
+            try? FileManager.default.createDirectory(
+                at: futureDirectory,
+                withIntermediateDirectories: true
+            )
+            if let futureRecord = jsonObject(disc) {
+                let futureDocument: [String: Any] = [
+                    "version": DesktopRecordDocument.currentVersion + 1,
+                    "records": [futureRecord],
+                ]
+                let futureFile = futureDirectory.appendingPathComponent("desktop-records.json")
+                if let data = try? JSONSerialization.data(withJSONObject: futureDocument) {
+                    try? data.write(to: futureFile)
+                    let futureStore = DesktopRecordStore(baseDirectory: futureDirectory)
+                    expect(futureStore.records.isEmpty,
+                           "a newer document version is not loaded")
+                    let futureFiles = (try? FileManager.default.contentsOfDirectory(
+                        atPath: futureDirectory.path
+                    )) ?? []
+                    expect(futureFiles.contains(where: {
+                        $0.hasPrefix("desktop-records.newer-v")
+                    }), "a newer document is preserved as a backup")
+                } else {
+                    expect(false, "a newer document fixture must encode")
+                }
+            } else {
+                expect(false, "a record must serialise for the version fixture")
+            }
+
+            // One unreadable record (for example an unknown style from a newer
+            // build) must not discard the other records in the file.
+            let lossyDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("GroovieSelfChecks-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: lossyDirectory) }
+            try? FileManager.default.createDirectory(
+                at: lossyDirectory,
+                withIntermediateDirectories: true
+            )
+            if var badRecord = jsonObject(sleeve), let goodRecord = jsonObject(disc) {
+                badRecord["style"] = "hologram"
+                let lossyDocument: [String: Any] = [
+                    "version": DesktopRecordDocument.currentVersion,
+                    "records": [badRecord, goodRecord],
+                ]
+                let lossyFile = lossyDirectory.appendingPathComponent("desktop-records.json")
+                if let data = try? JSONSerialization.data(withJSONObject: lossyDocument) {
+                    try? data.write(to: lossyFile)
+                    let lossyStore = DesktopRecordStore(baseDirectory: lossyDirectory)
+                    expect(lossyStore.records.count == 1,
+                           "an unreadable record does not discard the whole file")
+                    expect(lossyStore.records.first?.id == disc.id,
+                           "readable records survive a partially unreadable file")
+                    let lossyFiles = (try? FileManager.default.contentsOfDirectory(
+                        atPath: lossyDirectory.path
+                    )) ?? []
+                    expect(lossyFiles.contains(where: {
+                        $0.hasPrefix("desktop-records.recovered-")
+                    }), "a lossy recovery preserves the original file")
+                    if let written = try? Data(contentsOf: lossyFile),
+                       let rewritten = try? JSONDecoder().decode(
+                        DesktopRecordDocument.self,
+                        from: written
+                       )
+                    {
+                        expect(rewritten.records.count == 1,
+                               "the recovered file is rewritten without the bad record")
+                    } else {
+                        expect(false, "the recovered file must be readable")
+                    }
+                } else {
+                    expect(false, "a lossy document fixture must encode")
+                }
+            } else {
+                expect(false, "records must serialise for the lossy fixture")
+            }
+
+            // A style cycle changes style, recordOut, and position together;
+            // one call must persist all of them.
+            let batchDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("GroovieSelfChecks-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: batchDirectory) }
+            let batchStore = DesktopRecordStore(baseDirectory: batchDirectory)
+            expect(batchStore.insert(disc), "a record can be inserted for a batched update")
+            batchStore.update(
+                id: disc.id,
+                style: .sleeve,
+                recordOut: false,
+                position: CGPoint(x: 42, y: 84),
+                screenID: "7"
+            )
+            let batched = DesktopRecordStore(baseDirectory: batchDirectory)
+            expect(batched.records.first?.style == .sleeve
+                   && batched.records.first?.recordOut == false
+                   && batched.records.first?.position == CGPoint(x: 42, y: 84)
+                   && batched.records.first?.screenID == "7",
+                   "a batched update persists every field")
         }
 
         // MARK: Report
