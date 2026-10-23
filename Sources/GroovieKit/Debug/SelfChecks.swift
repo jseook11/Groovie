@@ -1034,12 +1034,12 @@ public enum SelfChecks {
 
         // MARK: Music poll cadence
 
-        expect(AppleMusicService.pollInterval(engaged: true, availability: .playing, isRunning: true) == 1.5,
-               "engaged playback must poll at 1.5 s")
+        expect(AppleMusicService.pollInterval(engaged: true, availability: .playing, isRunning: true) == 3,
+               "engaged playback must poll at 3 s")
         expect(AppleMusicService.pollInterval(engaged: false, availability: .playing, isRunning: true) == 5,
                "background playback must slow to 5 s")
-        expect(AppleMusicService.pollInterval(engaged: true, availability: .paused, isRunning: true) == 3,
-               "engaged pause must poll at 3 s")
+        expect(AppleMusicService.pollInterval(engaged: true, availability: .paused, isRunning: true) == 5,
+               "engaged pause must poll at 5 s")
         expect(AppleMusicService.pollInterval(engaged: false, availability: .paused, isRunning: true) == 10,
                "background pause must slow to 10 s")
         expect(AppleMusicService.pollInterval(engaged: false, availability: .noTrack, isRunning: true) == 15,

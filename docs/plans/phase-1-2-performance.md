@@ -139,8 +139,8 @@ Replace the repeating 1.5 s timer (`Music/AppleMusicService.swift:147-153`) with
 
 | Music state | Engaged | Background |
 |---|---|---|
-| playing | 1.5 s | 5 s |
-| paused | 3 s | 10 s |
+| playing | 3 s | 5 s |
+| paused | 5 s | 10 s |
 | noTrack | 10 s | 15 s |
 | appNotRunning / unknown | 30 s | 30 s |
 

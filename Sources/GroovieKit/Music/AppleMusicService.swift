@@ -254,8 +254,12 @@ final class AppleMusicService: MusicProviding {
     ) -> TimeInterval {
         guard isRunning else { return 30 }
         switch availability {
-        case .playing: return engaged ? 1.5 : 5
-        case .paused: return engaged ? 3 : 10
+        // Player-info notifications cover play/pause/track changes, so the
+        // engaged timer only has to recover a missed notification and resync
+        // an external seek. Three seconds keeps that bound tight; five while
+        // paused is enough because nothing is moving.
+        case .playing: return engaged ? 3 : 5
+        case .paused: return engaged ? 5 : 10
         case .noTrack: return engaged ? 10 : 15
         case .appNotRunning, .permissionDenied: return 30
         }
