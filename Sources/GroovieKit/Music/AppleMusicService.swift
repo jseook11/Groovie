@@ -41,9 +41,17 @@ final class AppleMusicService: MusicProviding {
     private var runningObservers: [NSObjectProtocol] = []
     private var permissionObserver: NSObjectProtocol?
     /// Music posts this on play/pause/track changes. It is only a hint to read
-    /// authoritative state now; the slow cadence remains the safety net.
+    /// authoritative state; the slow cadence remains the safety net.
     private var playerInfoObserver: NSObjectProtocol?
-    private var lastPlayerInfoPoll = Date.distantPast
+    /// One user action produces a burst of playerInfo notifications — a
+    /// Stopped/Playing pair, then a few more as Music settles, then the new
+    /// track's metadata — spread over roughly 200 ms. The first notification
+    /// describes the state Music is leaving, and a leading-edge poll (or a
+    /// throttle that drops the rest) can freeze the record on it until the
+    /// next scheduled tick. Restart this one-shot on every notification so
+    /// the single read happens after the burst, on the settled state.
+    private var playerInfoDebounce: Timer?
+    private let playerInfoDebounceInterval: TimeInterval = 0.15
 
     /// Only recent covers are kept: the record shows one track at a time, and
     /// the cache exists so skipping back a few tracks does not pay for another
@@ -123,6 +131,8 @@ final class AppleMusicService: MusicProviding {
             DistributedNotificationCenter.default().removeObserver(playerInfoObserver)
             self.playerInfoObserver = nil
         }
+        playerInfoDebounce?.invalidate()
+        playerInfoDebounce = nil
     }
 
     deinit {
@@ -205,15 +215,24 @@ final class AppleMusicService: MusicProviding {
         }
     }
 
-    /// Music sends both the Music and legacy iTunes variants for one change, so
-    /// throttle the hint. The read itself is authoritative; this only removes
+    /// Coalesce the burst Music sends for one change and read once, after the
+    /// last notification. The read itself is authoritative; this only removes
     /// the wait until the next scheduled poll.
     private func handlePlayerInfoNotification() {
         guard started, !permissionDenied else { return }
-        let now = Date()
-        guard now.timeIntervalSince(lastPlayerInfoPoll) >= 0.4 else { return }
-        lastPlayerInfoPoll = now
-        pollNow()
+        playerInfoDebounce?.invalidate()
+        let timer = Timer(timeInterval: playerInfoDebounceInterval, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.playerInfoDebounce = nil
+                self.pollNow()
+            }
+        }
+        // Coalescing the trailing edge with other run-loop work is fine; the
+        // burst gap is much larger than this tolerance.
+        timer.tolerance = 0.05
+        RunLoop.main.add(timer, forMode: .common)
+        playerInfoDebounce = timer
     }
 
     private func startPolling() {
@@ -531,6 +550,8 @@ final class AppleMusicService: MusicProviding {
         readInFlight = false
         needsImmediatePoll = false
         artworkRequestTrackID = nil
+        playerInfoDebounce?.invalidate()
+        playerInfoDebounce = nil
         availability = .permissionDenied
         nowPlaying = nil
         artwork = nil
