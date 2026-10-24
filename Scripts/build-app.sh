@@ -3,10 +3,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
+UNIVERSAL="${UNIVERSAL:-0}"
 cd "$ROOT"
 
-swift build -c "$CONFIG" --product Groovie
-BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path | tail -n 1)"
+BUILD_ARGS=(-c "$CONFIG")
+if [ "$UNIVERSAL" = "1" ]; then
+    BUILD_ARGS+=(--arch arm64 --arch x86_64)
+fi
+
+swift build "${BUILD_ARGS[@]}" --product Groovie
+BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path | tail -n 1)"
 
 APP="$ROOT/build/Groovie.app"
 rm -rf "$APP"
