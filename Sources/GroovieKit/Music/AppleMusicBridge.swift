@@ -1,49 +1,19 @@
 import AppKit
 import Foundation
-import ImageIO
 import os
 
-/// Result of a single read of Music.app.
-enum AppleMusicRead: Equatable {
-    case notRunning
-    case noTrack
-    case track(
-        state: String,
-        positionMilliseconds: Int,
-        persistentID: String,
-        title: String,
-        artist: String,
-        album: String,
-        durationMilliseconds: Int
-    )
-}
+/// Reads and drives Music.app over AppleScript. The bridge is deliberately
+/// tolerant: Music may not be running, may have no track, or access may be
+/// denied. Results are normalized into `PlayerRead` so the polling service can
+/// stay player-agnostic.
+final class AppleMusicBridge: ScriptedPlayerBridge {
+    let providesEmbeddedArtwork = true
 
-enum AppleMusicBridgeError: Error, Equatable {
-    case permissionDenied
-    case notRunning
-    case scriptError(Int, String)
-
-    var isPermissionDenied: Bool {
-        if case .permissionDenied = self { return true }
-        return false
-    }
-}
-
-/// All AppleScript traffic is funnelled through one serial queue. Finishes are
-/// coalesced so a slow AppleEvent can never build up a backlog.
-final class AppleMusicBridge {
-    private let queue = DispatchQueue(label: "com.groovie.applemusic", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "com.groovie.music.script", qos: .userInitiated)
     /// ImageIO parses and downsamples artwork here, not on the script queue, so
     /// a large cover cannot delay a seek or a transport command.
     private let artworkDecodeQueue = DispatchQueue(label: "com.groovie.artwork", qos: .userInitiated)
     private let log = Logger(subsystem: "com.groovie.app", category: "music")
-
-    /// Covers larger than this are treated as broken rather than materialised
-    /// and decoded. Typical embedded artwork is a few megabytes.
-    private static let maxArtworkBytes = 32 * 1024 * 1024
-    /// Reject pathological dimensions before ImageIO can allocate for them.
-    private static let maxArtworkDimension = 20_000
-    private static let maxArtworkPixels = 100_000_000
 
     private var readScript: NSAppleScript?
     private var readScriptFailed = false
@@ -55,18 +25,18 @@ final class AppleMusicBridge {
     private var pendingFinish: (position: Double, wasPlaying: Bool, completion: (() -> Void)?)?
     private var finishInFlight = false
 
-    private static let delimiter = "\u{1F}"
+    static let delimiter = "\u{1F}"
 
     // MARK: - Reading
 
-    func read(completion: @escaping (Result<AppleMusicRead, AppleMusicBridgeError>) -> Void) {
+    func read(completion: @escaping (Result<PlayerRead, ScriptedBridgeError>) -> Void) {
         queue.async {
             let result = self.performRead()
             DispatchQueue.main.async { completion(result) }
         }
     }
 
-    private func performRead() -> Result<AppleMusicRead, AppleMusicBridgeError> {
+    private func performRead() -> Result<PlayerRead, ScriptedBridgeError> {
         if readScriptFailed {
             return .failure(.scriptError(-1, "read script unavailable"))
         }
@@ -92,9 +62,9 @@ final class AppleMusicBridge {
         return Self.parse(text)
     }
 
-    static func parse(_ text: String) -> Result<AppleMusicRead, AppleMusicBridgeError> {
+    static func parse(_ text: String) -> Result<PlayerRead, ScriptedBridgeError> {
         if text == "NOTRUNNING" { return .success(.notRunning) }
-        if text == "NOTRACK" { return .success(.noTrack) }
+        if text == "NOTTRACK" { return .success(.noTrack) }
 
         let parts = text.components(separatedBy: delimiter)
         guard parts.count >= 7 else {
@@ -106,15 +76,16 @@ final class AppleMusicBridge {
             return .failure(.scriptError(-1, "unexpected numeric result"))
         }
 
-        return .success(.track(
+        return .success(.track(PlayerSnapshot(
             state: parts[0],
-            positionMilliseconds: position,
-            persistentID: parts[2],
+            trackID: parts[2],
             title: parts[3],
             artist: parts[4],
             album: parts[5],
-            durationMilliseconds: duration
-        ))
+            durationMilliseconds: duration,
+            positionMilliseconds: position,
+            artworkURL: nil
+        )))
     }
 
     // MARK: - Seeking
@@ -163,12 +134,7 @@ final class AppleMusicBridge {
         var errorInfo: NSDictionary?
         script?.executeAndReturnError(&errorInfo)
         if let errorInfo {
-            let error = Self.bridgeError(from: errorInfo)
-            if case .permissionDenied = error {
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .groovieMusicPermissionDenied, object: nil)
-                }
-            }
+            self.reportPermissionDenied(Self.bridgeError(from: errorInfo))
         }
         completion()
     }
@@ -203,12 +169,7 @@ final class AppleMusicBridge {
             var errorInfo: NSDictionary?
             script?.executeAndReturnError(&errorInfo)
             if let errorInfo {
-                let error = Self.bridgeError(from: errorInfo)
-                if case .permissionDenied = error {
-                    DispatchQueue.main.async {
-                        NotificationCenter.default.post(name: .groovieMusicPermissionDenied, object: nil)
-                    }
-                }
+                self.reportPermissionDenied(Self.bridgeError(from: errorInfo))
             }
             if let completion {
                 let succeeded = script != nil && errorInfo == nil
@@ -235,12 +196,7 @@ final class AppleMusicBridge {
             var errorInfo: NSDictionary?
             script?.executeAndReturnError(&errorInfo)
             if let errorInfo {
-                let error = Self.bridgeError(from: errorInfo)
-                if case .permissionDenied = error {
-                    DispatchQueue.main.async {
-                        NotificationCenter.default.post(name: .groovieMusicPermissionDenied, object: nil)
-                    }
-                }
+                self.reportPermissionDenied(Self.bridgeError(from: errorInfo))
             }
             if let completion {
                 DispatchQueue.main.async { completion() }
@@ -261,7 +217,7 @@ final class AppleMusicBridge {
                 return
             }
             self.artworkDecodeQueue.async {
-                let image = Self.makeArtworkThumbnail(from: data, maxPixelSize: maxPixelSize)
+                let image = ArtworkThumbnailer.thumbnail(from: data, maxPixelSize: maxPixelSize)
                 DispatchQueue.main.async { completion(image) }
             }
         }
@@ -286,57 +242,29 @@ final class AppleMusicBridge {
         if errorInfo != nil { return nil }
         let data = descriptor.data
         guard !data.isEmpty else { return nil }
-        guard data.count <= Self.maxArtworkBytes else {
+        guard data.count <= ArtworkThumbnailer.maxArtworkBytes else {
             log.debug("Skipping artwork: \(data.count, privacy: .public) bytes exceeds the limit")
             return nil
         }
         return data
     }
 
-    private static func makeArtworkThumbnail(from data: Data, maxPixelSize: Int) -> NSImage? {
-        guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-
-        // The header is cheap to inspect and catches an image whose dimensions
-        // are absurd even when the encoded file is small.
-        if let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any],
-           let width = properties[kCGImagePropertyPixelWidth] as? Int,
-           let height = properties[kCGImagePropertyPixelHeight] as? Int,
-           width > 0,
-           height > 0,
-           width > Self.maxArtworkDimension
-               || height > Self.maxArtworkDimension
-               || width * height > Self.maxArtworkPixels {
-            return nil
-        }
-
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            // Decode now while we are on the artwork queue instead of leaving a
-            // lazy image for the main thread to decode later.
-            kCGImageSourceShouldCacheImmediately: true,
-        ]
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
-            imageSource,
-            0,
-            options as CFDictionary
-        ) else { return nil }
-
-        return NSImage(
-            cgImage: cgImage,
-            size: NSSize(width: cgImage.width, height: cgImage.height)
-        )
-    }
-
     // MARK: - Helpers
 
-    private static func bridgeError(from info: NSDictionary) -> AppleMusicBridgeError {
+    private static func bridgeError(from info: NSDictionary) -> ScriptedBridgeError {
         let number = (info[NSAppleScript.errorNumber] as? NSNumber)?.intValue ?? -1
         let message = (info[NSAppleScript.errorMessage] as? String) ?? "AppleScript error"
         if number == -1743 { return .permissionDenied }
         if number == -600 { return .notRunning }
         return .scriptError(number, message)
+    }
+
+    private func reportPermissionDenied(_ error: ScriptedBridgeError) {
+        guard error.isPermissionDenied else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            NotificationCenter.default.post(name: .grooviePlayerPermissionDenied, object: self)
+        }
     }
 
     private static let readSource = """
@@ -355,7 +283,7 @@ final class AppleMusicBridge {
                 set trackDuration to (duration of trackProperties) as real
                 set playerPositionSeconds to (player position) as real
             on error
-                return "NOTRACK"
+                return "NOTTRACK"
             end try
             set positionMilliseconds to (playerPositionSeconds * 1000) as integer
             set durationMilliseconds to (trackDuration * 1000) as integer
@@ -366,8 +294,4 @@ final class AppleMusicBridge {
         end if
     end tell
     """
-}
-
-extension Notification.Name {
-    static let groovieMusicPermissionDenied = Notification.Name("groovieMusicPermissionDenied")
 }

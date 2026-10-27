@@ -36,6 +36,30 @@ exactly on the emergence line, which is why the visible half never drifts while 
 The magnet snap uses a 320 stiffness and 26 damping in `OverlayController`; the put-back spring
 uses the 260/24 pair above.
 
+## Music providers
+
+`Music/PlayerCoordinator.swift` drives one `ScriptedMusicService` per player. In **auto** mode
+both services run: the selected one uses the normal cadence below, the other a slower probe
+cadence. Pinning a player stops the other service completely, so it costs nothing.
+
+| Availability | Engaged | Background | Probe |
+| --- | ---: | ---: | ---: |
+| playing | 3 s | 5 s | 10 s |
+| paused | 5 s | 10 s | 20 s |
+| no track / stopped | 10 s | 15 s | 20 s |
+| app not running / permission denied | 30 s | 30 s | 30 s |
+
+- Auto ranks `playing > paused > noTrack > permissionDenied > appNotRunning`. A playing tie goes
+  to the most recent playback start, then the current provider, then Music.
+- A probe never downloads artwork. Promotion to active fetches the current cover immediately.
+- When the selected provider leaves playback, the other one is polled once immediately instead
+  of waiting out its probe interval.
+- Artwork: Music embeds raw data in the script; Spotify supplies an HTTPS URL that
+  `Music/ArtworkLoader.swift` downloads (10 s timeout, 32 MB cap, `image/*` only) and downsamples
+  to 320 px with the same ImageIO path.
+- On startup only the provider that is already running — or Music when neither is — may launch
+  its app. Auto never opens both.
+
 ## Notch geometry
 
 `Notch/NotchGeometry.swift` and `StageGeometry`.
@@ -177,4 +201,5 @@ enlarged derivative of the mark.
 | Key | Used by |
 | --- | --- |
 | `groovie.skinID` | Selected record skin. |
+| `groovie.player` | Player preference: `auto`, `music`, or `spotify`. |
 | `groovie.gestureHintShown` | Whether the first-run gesture card has been seen. |

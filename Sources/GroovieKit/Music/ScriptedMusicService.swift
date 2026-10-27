@@ -2,17 +2,35 @@ import AppKit
 import Foundation
 import os
 
-/// Reads and drives Music.app over AppleScript. The service is deliberately
-/// tolerant: Music may not be running, may have no track, or access may be denied.
+/// How often a service polls. `probe` is used for the provider that is running
+/// but is not currently driving the record, so auto selection can notice it
+/// starting without paying the active provider's cadence twice.
+enum PollActivity {
+    case engaged
+    case background
+    case probe
+}
+
+/// Reads and drives one scripted player (Music or Spotify). The service is
+/// deliberately tolerant: the app may not be running, may have no track, or
+/// access may be denied. Player-specific behavior lives in the bridge and the
+/// descriptor; polling, lifecycle guards, artwork caching, and optimistic
+/// playback state are shared.
 @MainActor
-final class AppleMusicService: MusicProviding {
+final class ScriptedMusicService: MusicProviding {
     private(set) var nowPlaying: NowPlaying?
     private(set) var availability: MusicAvailability = .appNotRunning
     private(set) var artwork: NSImage?
     var onUpdate: (() -> Void)?
 
-    private let bridge = AppleMusicBridge()
+    let descriptor: ScriptedPlayerDescriptor
+    private let bridge: any ScriptedPlayerBridge
     private let log = Logger(subsystem: "com.groovie.app", category: "music")
+
+    /// Whether `start()`/`refresh()` may open the app when it is closed. The
+    /// coordinator enables this only for the provider the user is asking for,
+    /// so auto mode never launches Spotify behind the user's back.
+    var launchesWhenClosed = true
 
     private var scheduledPoll: Timer?
     private var pollActivity: PollActivity = .background
@@ -22,48 +40,45 @@ final class AppleMusicService: MusicProviding {
     private var permissionDenied = false
     private var launchInFlight = false
 
-    private enum PollActivity {
-        case engaged
-        case background
-    }
     /// Bumped whenever the service starts or stops. Completions from an older
     /// generation are dropped before they can touch state or re-arm work.
     private var lifecycleGeneration = 0
-    /// Cached Music.app presence. Refreshed on start/refresh, workspace
-    /// notifications, wake, and at most every 30 s while Music is absent, so a
-    /// missed notification cannot strand polling forever.
-    private var musicIsRunning = false
+    /// Cached app presence. Refreshed on start/refresh, workspace
+    /// notifications, wake, and at most every 30 s while the player is absent,
+    /// so a missed notification cannot strand polling forever.
+    private var playerIsRunning = false
     private var lastRunningCheck = Date.distantPast
     /// One-shot: when the first read after starting (or reconnecting) finds no
-    /// track, bring Music forward so the user can pick something to play.
+    /// track, bring the player forward so the user can pick something to play.
     private var presentWhenNoTrack = false
 
     private var runningObservers: [NSObjectProtocol] = []
     private var permissionObserver: NSObjectProtocol?
     /// Music posts this on play/pause/track changes. It is only a hint to read
-    /// authoritative state; the slow cadence remains the safety net.
-    private var playerInfoObserver: NSObjectProtocol?
-    /// One user action produces a burst of playerInfo notifications — a
-    /// Stopped/Playing pair, then a few more as Music settles, then the new
-    /// track's metadata — spread over roughly 200 ms. The first notification
-    /// describes the state Music is leaving, and a leading-edge poll (or a
-    /// throttle that drops the rest) can freeze the record on it until the
-    /// next scheduled tick. Restart this one-shot on every notification so
-    /// the single read happens after the burst, on the settled state.
-    private var playerInfoDebounce: Timer?
-    private let playerInfoDebounceInterval: TimeInterval = 0.15
+    /// authoritative state; the slow cadence remains the safety net. Spotify
+    /// has no equivalent and uses the cadence alone.
+    private var changeObserver: NSObjectProtocol?
+    /// One user action produces a burst of notifications — a Stopped/Playing
+    /// pair, then a few more as the player settles, then the new track's
+    /// metadata — spread over roughly 200 ms. The first notification describes
+    /// the state the player is leaving, and a leading-edge poll (or a throttle
+    /// that drops the rest) can freeze the record on it until the next
+    /// scheduled tick. Restart this one-shot on every notification so the
+    /// single read happens after the burst, on the settled state.
+    private var changeDebounce: Timer?
+    private let changeDebounceInterval: TimeInterval = 0.15
 
     /// Only recent covers are kept: the record shows one track at a time, and
     /// the cache exists so skipping back a few tracks does not pay for another
-    /// AppleScript read. A 320 px thumbnail is at most ~0.39 MB, so eight
-    /// entries stay under ~3 MB.
+    /// read. A 320 px thumbnail is at most ~0.39 MB, so eight entries stay
+    /// under ~3 MB.
     private let artworkCache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
         cache.countLimit = 8
         cache.totalCostLimit = 8 * 1024 * 1024
         return cache
     }()
-    /// Tracks Music has already reported without artwork, bounded so the
+    /// Tracks the player has already reported without artwork, bounded so the
     /// marker cannot grow with listening time. A successful cover is not
     /// recorded here: if its thumbnail is evicted, it should be fetched again.
     private var noCoverTracks = RecentSet<String>(limit: 64)
@@ -71,14 +86,27 @@ final class AppleMusicService: MusicProviding {
     /// arrives while this is set, the new track is picked up when the request
     /// finishes instead of being dropped.
     private var artworkRequestTrackID: String?
+    /// The cover URL of the current track, kept so a retry after a transient
+    /// network failure does not need another read.
+    private var currentArtworkURL: URL?
+    /// A download failed for a reason that may heal (offline, timeout, 5xx).
+    /// Retry the same track after this deadline instead of on every poll.
+    private var artworkRetryTrackID: String?
+    private var artworkRetryDeadline: Date?
+    private let artworkRetryInterval: TimeInterval = 10
     private var lastLoggedAvailability: MusicAvailability?
 
     /// A click on the record flips the UI immediately. Reads that were already
     /// in flight when the command was sent can still report the old state, so
-    /// hold the requested state until Music agrees or this window expires.
+    /// hold the requested state until the player agrees or this window expires.
     private var pendingPlaybackState: Bool?
     private var pendingPlaybackDeadline: Date?
     private let pendingPlaybackWindow: TimeInterval = 2.0
+
+    init(descriptor: ScriptedPlayerDescriptor, bridge: any ScriptedPlayerBridge) {
+        self.descriptor = descriptor
+        self.bridge = bridge
+    }
 
     // MARK: - Lifecycle
 
@@ -90,21 +118,29 @@ final class AppleMusicService: MusicProviding {
         started = true
         lifecycleGeneration += 1
         permissionDenied = false
-        refreshMusicRunning()
+        refreshPlayerRunning()
         observeWorkspace()
         permissionObserver = NotificationCenter.default.addObserver(
-            forName: .groovieMusicPermissionDenied,
+            forName: .grooviePlayerPermissionDenied,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.handlePermissionDenied() }
+        ) { [weak self] note in
+            Task { @MainActor in
+                // Both services are alive in auto mode and the notification is
+                // posted by a bridge, so only the bridge's owner may react.
+                guard let self,
+                      let sender = note.object as AnyObject?,
+                      sender === self.bridge as AnyObject
+                else { return }
+                self.handlePermissionDenied()
+            }
         }
         startPolling()
-        // A Music controller has nothing to drive while Music is closed, and the
-        // overlay would sit inert with no explanation. Open the player instead so
-        // the record works as soon as the app is available.
+        // A controller has nothing to drive while its player is closed, and the
+        // overlay would sit inert with no explanation. Open the player instead
+        // so the record works as soon as the app is available.
         presentWhenNoTrack = true
-        launchMusicIfNeeded()
+        launchPlayerIfNeeded()
         pollNow()
     }
 
@@ -115,11 +151,13 @@ final class AppleMusicService: MusicProviding {
         scheduledPoll = nil
         readInFlight = false
         needsImmediatePoll = false
-        musicIsRunning = false
+        playerIsRunning = false
         lastRunningCheck = Date()
         artworkCache.removeAllObjects()
         noCoverTracks.removeAll()
         artworkRequestTrackID = nil
+        currentArtworkURL = nil
+        clearArtworkRetry()
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         runningObservers.forEach { workspaceCenter.removeObserver($0) }
         runningObservers.removeAll()
@@ -127,12 +165,12 @@ final class AppleMusicService: MusicProviding {
             NotificationCenter.default.removeObserver(permissionObserver)
             self.permissionObserver = nil
         }
-        if let playerInfoObserver {
-            DistributedNotificationCenter.default().removeObserver(playerInfoObserver)
-            self.playerInfoObserver = nil
+        if let changeObserver {
+            DistributedNotificationCenter.default().removeObserver(changeObserver)
+            self.changeObserver = nil
         }
-        playerInfoDebounce?.invalidate()
-        playerInfoDebounce = nil
+        changeDebounce?.invalidate()
+        changeDebounce = nil
     }
 
     deinit {
@@ -145,25 +183,26 @@ final class AppleMusicService: MusicProviding {
             start()
             return
         }
-        refreshMusicRunning()
+        refreshPlayerRunning()
         startPolling()
         presentWhenNoTrack = true
-        launchMusicIfNeeded()
+        launchPlayerIfNeeded()
         pollNow()
     }
 
     private func observeWorkspace() {
         let center = NSWorkspace.shared.notificationCenter
+        let bundleID = descriptor.bundleID
         let launch = center.addObserver(
             forName: NSWorkspace.didLaunchApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] note in
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.bundleIdentifier == "com.apple.Music"
+                  app.bundleIdentifier == bundleID
             else { return }
             Task { @MainActor in
-                self?.musicIsRunning = true
+                self?.playerIsRunning = true
                 self?.lastRunningCheck = Date()
                 self?.pollNow()
             }
@@ -174,15 +213,15 @@ final class AppleMusicService: MusicProviding {
             queue: .main
         ) { [weak self] note in
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.bundleIdentifier == "com.apple.Music"
+                  app.bundleIdentifier == bundleID
             else { return }
             Task { @MainActor in
                 guard let self else { return }
-                self.musicIsRunning = false
+                self.playerIsRunning = false
                 self.lastRunningCheck = Date()
-                // A read that was in flight when Music quit can still return a
-                // track snapshot. Invalidate it before applying the stopped
-                // state, or it would overwrite `applyNotRunning`.
+                // A read that was in flight when the player quit can still
+                // return a track snapshot. Invalidate it before applying the
+                // stopped state, or it would overwrite `applyNotRunning`.
                 self.lifecycleGeneration += 1
                 self.readInFlight = false
                 self.needsImmediatePoll = false
@@ -200,31 +239,33 @@ final class AppleMusicService: MusicProviding {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshMusicRunning()
+                self?.refreshPlayerRunning()
                 self?.pollNow()
             }
         }
         runningObservers = [launch, terminate, wake]
 
-        playerInfoObserver = DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("com.apple.Music.playerInfo"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.handlePlayerInfoNotification() }
+        if let notification = descriptor.changeNotification {
+            changeObserver = DistributedNotificationCenter.default().addObserver(
+                forName: notification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.handleChangeNotification() }
+            }
         }
     }
 
-    /// Coalesce the burst Music sends for one change and read once, after the
-    /// last notification. The read itself is authoritative; this only removes
-    /// the wait until the next scheduled poll.
-    private func handlePlayerInfoNotification() {
+    /// Coalesce the burst the player sends for one change and read once, after
+    /// the last notification. The read itself is authoritative; this only
+    /// removes the wait until the next scheduled poll.
+    private func handleChangeNotification() {
         guard started, !permissionDenied else { return }
-        playerInfoDebounce?.invalidate()
-        let timer = Timer(timeInterval: playerInfoDebounceInterval, repeats: false) { [weak self] _ in
+        changeDebounce?.invalidate()
+        let timer = Timer(timeInterval: changeDebounceInterval, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.playerInfoDebounce = nil
+                self.changeDebounce = nil
                 self.pollNow()
             }
         }
@@ -232,7 +273,7 @@ final class AppleMusicService: MusicProviding {
         // burst gap is much larger than this tolerance.
         timer.tolerance = 0.05
         RunLoop.main.add(timer, forMode: .common)
-        playerInfoDebounce = timer
+        changeDebounce = timer
     }
 
     private func startPolling() {
@@ -247,9 +288,9 @@ final class AppleMusicService: MusicProviding {
         scheduledPoll = nil
         guard started, !permissionDenied else { return }
         let interval = Self.pollInterval(
-            engaged: pollActivity == .engaged,
+            activity: pollActivity,
             availability: availability,
-            isRunning: musicIsRunning
+            isRunning: playerIsRunning
         )
         let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -267,24 +308,38 @@ final class AppleMusicService: MusicProviding {
     /// Cadence for the next read. Kept pure so `--self-test` can verify the
     /// table instead of letting it drift silently.
     nonisolated static func pollInterval(
-        engaged: Bool,
+        activity: PollActivity,
         availability: MusicAvailability,
         isRunning: Bool
     ) -> TimeInterval {
         guard isRunning else { return 30 }
         switch availability {
-        // Player-info notifications cover play/pause/track changes, so the
-        // engaged timer only has to recover a missed notification and resync
-        // an external seek. Three seconds keeps that bound tight; five while
-        // paused is enough because nothing is moving.
-        case .playing: return engaged ? 3 : 5
-        case .paused: return engaged ? 5 : 10
-        case .noTrack: return engaged ? 10 : 15
-        case .appNotRunning, .permissionDenied: return 30
+        case .playing:
+            switch activity {
+            case .engaged: return 3
+            case .background: return 5
+            case .probe: return 10
+            }
+        case .paused:
+            switch activity {
+            case .engaged: return 5
+            case .background: return 10
+            case .probe: return 20
+            }
+        case .noTrack:
+            switch activity {
+            case .engaged: return 10
+            case .background: return 15
+            case .probe: return 20
+            }
+        case .appNotRunning, .permissionDenied:
+            return 30
         }
     }
 
     func setOverlayEngaged(_ engaged: Bool) {
+        // Engagement belongs to the active provider only; a probe never speeds
+        // up because the other player's record is on screen.
         let next: PollActivity = engaged ? .engaged : .background
         guard next != pollActivity else { return }
         pollActivity = next
@@ -298,20 +353,31 @@ final class AppleMusicService: MusicProviding {
         }
     }
 
+    /// Slow the service down to the probe cadence, or return it to the normal
+    /// background cadence. Used for the provider auto selection is not showing.
+    func setProbeMode(_ probing: Bool) {
+        let next: PollActivity = probing ? .probe : .background
+        guard next != pollActivity else { return }
+        pollActivity = next
+        guard started, !permissionDenied else { return }
+        scheduleNextPoll()
+    }
+
     /// `runningApplications` materialises every app and asks LaunchServices for
     /// static information; the targeted lookup only resolves one bundle. It is
     /// cached because every poll must not pay for an XPC round trip.
-    private func refreshMusicRunning() {
-        musicIsRunning = !NSRunningApplication
-            .runningApplications(withBundleIdentifier: "com.apple.Music")
+    private func refreshPlayerRunning() {
+        playerIsRunning = !NSRunningApplication
+            .runningApplications(withBundleIdentifier: descriptor.bundleID)
             .isEmpty
         lastRunningCheck = Date()
     }
 
-    private func launchMusicIfNeeded() {
-        refreshMusicRunning()
-        guard !musicIsRunning, !launchInFlight else { return }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") else {
+    private func launchPlayerIfNeeded(force: Bool = false) {
+        guard force || launchesWhenClosed else { return }
+        refreshPlayerRunning()
+        guard !playerIsRunning, !launchInFlight else { return }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: descriptor.bundleID) else {
             return
         }
         launchInFlight = true
@@ -319,29 +385,29 @@ final class AppleMusicService: MusicProviding {
             Task { @MainActor in
                 guard let self else { return }
                 self.launchInFlight = false
-                self.musicIsRunning = true
+                self.playerIsRunning = true
                 self.lastRunningCheck = Date()
-                // The workspace launch observer also polls, but Music can take a
-                // moment to answer AppleScript. This second read covers the case
-                // where the first one arrives too early.
+                // The workspace launch observer also polls, but the player can
+                // take a moment to answer AppleScript. This second read covers
+                // the case where the first one arrives too early.
                 self.pollNow()
             }
         }
     }
 
-    /// Bring Music forward, launching it when it is closed. The overlay has
-    /// nothing to scrub without a track, so the player is where the user needs
-    /// to be to start one.
+    /// Bring the player forward, launching it when it is closed. The overlay
+    /// has nothing to scrub without a track, so the player is where the user
+    /// needs to be to start one.
     func presentPlayer() {
-        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").first {
+        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: descriptor.bundleID).first {
             app.activate(options: [])
         } else {
-            launchMusicIfNeeded()
+            launchPlayerIfNeeded(force: true)
         }
     }
 
     private func presentForNoTrackIfNeeded() {
-        guard presentWhenNoTrack else { return }
+        guard presentWhenNoTrack, launchesWhenClosed else { return }
         presentWhenNoTrack = false
         presentPlayer()
     }
@@ -351,6 +417,7 @@ final class AppleMusicService: MusicProviding {
         availability = .noTrack
         nowPlaying = nil
         artwork = nil
+        currentArtworkURL = nil
         clearPendingPlayback()
         if changed {
             logAvailabilityIfNeeded()
@@ -371,13 +438,13 @@ final class AppleMusicService: MusicProviding {
         }
         scheduledPoll?.invalidate()
         scheduledPoll = nil
-        if !musicIsRunning {
+        if !playerIsRunning {
             // Reconcile at most every 30 s in case the launch notification was
-            // missed. When Music is genuinely absent this is the entire tick.
+            // missed. When the player is genuinely absent this is the entire tick.
             if Date().timeIntervalSince(lastRunningCheck) >= 30 {
-                refreshMusicRunning()
+                refreshPlayerRunning()
             }
-            guard musicIsRunning else {
+            guard playerIsRunning else {
                 applyNotRunning()
                 scheduleNextPoll()
                 return
@@ -416,7 +483,7 @@ final class AppleMusicService: MusicProviding {
         }
     }
 
-    private func handle(_ result: Result<AppleMusicRead, AppleMusicBridgeError>) {
+    private func handle(_ result: Result<PlayerRead, ScriptedBridgeError>) {
         switch result {
         case .failure(let error):
             switch error {
@@ -425,7 +492,7 @@ final class AppleMusicService: MusicProviding {
             case .notRunning:
                 applyNotRunning()
             case .scriptError(let number, let message):
-                log.error("Music read failed (\(number)): \(message, privacy: .public)")
+                log.error("Read failed (\(number)): \(message, privacy: .public)")
             }
             return
 
@@ -435,23 +502,25 @@ final class AppleMusicService: MusicProviding {
         case .success(.noTrack):
             applyNoTrack()
 
-        case .success(.track(let state, let positionMs, let persistentID, let title, let artist, let album, let durationMs)):
-            let duration = Double(durationMs) / 1000
+        case .success(.track(let reading)):
+            let duration = Double(reading.durationMilliseconds) / 1000
             guard duration > 0.5 else {
                 applyNoTrack()
                 return
             }
 
-            let trackID = persistentID.isEmpty ? "\(title)|\(artist)" : persistentID
-            let resolved = resolvedPlaybackState(reportedPlaying: state == "playing")
+            let trackID = reading.trackID.isEmpty
+                ? "\(reading.title)|\(reading.artist)"
+                : reading.trackID
+            let resolved = resolvedPlaybackState(reportedPlaying: reading.state == "playing")
             let isPlaying = resolved.playing
             let snapshot = NowPlaying(
                 trackID: trackID,
-                title: title,
-                artist: artist,
-                album: album,
+                title: reading.title,
+                artist: reading.artist,
+                album: reading.album,
                 duration: duration,
-                position: Double(positionMs) / 1000,
+                position: Double(reading.positionMilliseconds) / 1000,
                 isPlaying: isPlaying,
                 sampledAt: Date()
             )
@@ -461,9 +530,10 @@ final class AppleMusicService: MusicProviding {
             let previousAvailability = availability
 
             nowPlaying = snapshot
+            currentArtworkURL = reading.artworkURL
             if isPlaying {
                 availability = .playing
-            } else if state == "paused" || resolved.held {
+            } else if reading.state == "paused" || resolved.held {
                 availability = .paused
             } else {
                 availability = .noTrack
@@ -477,11 +547,12 @@ final class AppleMusicService: MusicProviding {
             }
 
             if previousTrack != trackID {
-                updateArtwork(for: trackID)
+                clearArtworkRetry()
+                updateArtwork(for: trackID, url: reading.artworkURL)
             } else if artwork == nil {
                 // A stop/start cycle clears the cache but keeps the track; make
                 // sure the cover is fetched again instead of staying blank.
-                updateArtwork(for: trackID)
+                updateArtwork(for: trackID, url: reading.artworkURL)
             }
 
             let meaningfulChange = previousTrack != trackID
@@ -494,7 +565,7 @@ final class AppleMusicService: MusicProviding {
         }
     }
 
-    /// Resolve Music's reported play state against a click that has not been
+    /// Resolve the reported play state against a click that has not been
     /// confirmed yet. The requested state wins until a read agrees with it or
     /// the window expires, so a stale in-flight read cannot flip the record
     /// back for a moment.
@@ -517,11 +588,12 @@ final class AppleMusicService: MusicProviding {
     }
 
     private func applyNotRunning() {
-        musicIsRunning = false
+        playerIsRunning = false
         guard availability != .appNotRunning || nowPlaying != nil else { return }
         availability = .appNotRunning
         nowPlaying = nil
         artwork = nil
+        currentArtworkURL = nil
         clearPendingPlayback()
         logAvailabilityIfNeeded()
         onUpdate?()
@@ -538,7 +610,7 @@ final class AppleMusicService: MusicProviding {
         case .playing: name = "playing"
         case .permissionDenied: name = "permissionDenied"
         }
-        log.debug("Music availability: \(name, privacy: .public)")
+        log.debug("\(self.descriptor.displayName, privacy: .public) availability: \(name, privacy: .public)")
     }
 
     private func handlePermissionDenied() {
@@ -550,11 +622,12 @@ final class AppleMusicService: MusicProviding {
         readInFlight = false
         needsImmediatePoll = false
         artworkRequestTrackID = nil
-        playerInfoDebounce?.invalidate()
-        playerInfoDebounce = nil
+        changeDebounce?.invalidate()
+        changeDebounce = nil
         availability = .permissionDenied
         nowPlaying = nil
         artwork = nil
+        currentArtworkURL = nil
         clearPendingPlayback()
         scheduledPoll?.invalidate()
         scheduledPoll = nil
@@ -609,8 +682,9 @@ final class AppleMusicService: MusicProviding {
 
     private func skip(forward: Bool) {
         guard nowPlaying != nil else { return }
-        // The next track's metadata is unknown until Music answers, so read it
-        // back as soon as the command completes instead of showing a guess.
+        // The next track's metadata is unknown until the player answers, so
+        // read it back as soon as the command completes instead of showing a
+        // guess.
         bridge.skip(toNext: forward) { [weak self] in
             self?.pollNow()
         }
@@ -618,14 +692,23 @@ final class AppleMusicService: MusicProviding {
 
     // MARK: - Artwork
 
-    private func updateArtwork(for trackID: String) {
+    private func updateArtwork(for trackID: String, url: URL?) {
         guard started else { return }
+        if pollActivity == .probe {
+            // The inactive provider's cover is never on screen, so do not spend
+            // network or decode work on it. Drop a stale one so promotion
+            // cannot show the previous track's art.
+            if nowPlaying?.trackID == trackID, artwork != nil {
+                artwork = nil
+            }
+            return
+        }
         if let cached = artworkCache.object(forKey: trackID as NSString) {
             artwork = cached
             return
         }
         if noCoverTracks.contains(trackID) {
-            // Music already told us this track has no artwork. Drop the
+            // The player already told us this track has no artwork. Drop the
             // previous cover so the texture falls back to the printed label
             // instead of leaving the old album on screen.
             artwork = nil
@@ -635,10 +718,24 @@ final class AppleMusicService: MusicProviding {
         // track is current when it finishes, so a quick double skip cannot
         // leave the second track without its cover.
         guard artworkRequestTrackID == nil else { return }
+        if artworkRetryTrackID == trackID,
+           let deadline = artworkRetryDeadline,
+           Date() < deadline {
+            return
+        }
 
+        if bridge.providesEmbeddedArtwork {
+            requestEmbeddedArtwork(for: trackID)
+        } else if let url {
+            requestDownloadedArtwork(for: trackID, url: url)
+        } else {
+            finishArtwork(for: trackID, image: nil, permanentMiss: true)
+        }
+    }
+
+    private func requestEmbeddedArtwork(for trackID: String) {
         artworkRequestTrackID = trackID
         let generation = lifecycleGeneration
-
         bridge.readArtworkThumbnail(maxPixelSize: 320) { [weak self] image in
             Task { @MainActor in
                 guard let self,
@@ -646,39 +743,94 @@ final class AppleMusicService: MusicProviding {
                       !self.permissionDenied,
                       generation == self.lifecycleGeneration
                 else { return }
-                // A stop/start cycle can leave an older read in flight; do not
-                // clear the marker belonging to a newer request.
-                if self.artworkRequestTrackID == trackID {
-                    self.artworkRequestTrackID = nil
-                }
-                if let image {
-                    self.artworkCache.setObject(
-                        image,
-                        forKey: trackID as NSString,
-                        cost: Self.artworkCost(image)
-                    )
-                } else {
-                    self.noCoverTracks.insert(trackID)
-                }
-
-                let currentTrackID = self.nowPlaying?.trackID
-                guard currentTrackID == trackID else {
-                    // The user moved on while this read was in flight. Keep the
-                    // result for when they come back, and fetch the current
-                    // track's artwork now.
-                    if let currentTrackID,
-                       self.artworkCache.object(forKey: currentTrackID as NSString) == nil,
-                       !self.noCoverTracks.contains(currentTrackID) {
-                        self.updateArtwork(for: currentTrackID)
-                        self.onUpdate?()
-                    }
-                    return
-                }
-
-                self.artwork = image
-                self.onUpdate?()
+                self.finishArtwork(for: trackID, image: image, permanentMiss: true)
             }
         }
+    }
+
+    private func requestDownloadedArtwork(for trackID: String, url: URL) {
+        artworkRequestTrackID = trackID
+        let generation = lifecycleGeneration
+        ArtworkLoader.load(url: url, maxPixelSize: 320) { [weak self] outcome in
+            Task { @MainActor in
+                guard let self,
+                      self.started,
+                      !self.permissionDenied,
+                      generation == self.lifecycleGeneration
+                else { return }
+                switch outcome {
+                case .image(let image):
+                    self.clearArtworkRetry()
+                    self.finishArtwork(for: trackID, image: image, permanentMiss: false)
+                case .permanentMiss:
+                    self.clearArtworkRetry()
+                    self.finishArtwork(for: trackID, image: nil, permanentMiss: true)
+                case .transientFailure:
+                    self.failArtworkTransiently(for: trackID)
+                }
+            }
+        }
+    }
+
+    private func finishArtwork(for trackID: String, image: NSImage?, permanentMiss: Bool) {
+        log.debug("artwork finish track=\(trackID, privacy: .public) image=\(image != nil) permanent=\(permanentMiss)")
+        // A stop/start cycle can leave an older read in flight; do not clear the
+        // marker belonging to a newer request.
+        if artworkRequestTrackID == trackID {
+            artworkRequestTrackID = nil
+        }
+        if let image {
+            artworkCache.setObject(
+                image,
+                forKey: trackID as NSString,
+                cost: Self.artworkCost(image)
+            )
+        } else if permanentMiss {
+            noCoverTracks.insert(trackID)
+        }
+
+        let currentTrackID = nowPlaying?.trackID
+        guard currentTrackID == trackID else {
+            // The user moved on while this read was in flight. Keep the result
+            // for when they come back, and fetch the current track's artwork now.
+            if let currentTrackID,
+               artworkCache.object(forKey: currentTrackID as NSString) == nil,
+               !noCoverTracks.contains(currentTrackID) {
+                updateArtwork(for: currentTrackID, url: currentArtworkURL)
+                onUpdate?()
+            }
+            return
+        }
+
+        artwork = image
+        onUpdate?()
+    }
+
+    /// Promotion from probe to active. The cover was deliberately skipped while
+    /// the record was not on screen, so fetch it now instead of waiting for the
+    /// next poll.
+    func resumeArtworkIfNeeded() {
+        guard started, pollActivity != .probe, artwork == nil, let now = nowPlaying else { return }
+        updateArtwork(for: now.trackID, url: currentArtworkURL)
+    }
+
+    /// Keep the previous cover up, but retry this track after a short pause
+    /// instead of hammering a down network on every poll.
+    private func failArtworkTransiently(for trackID: String) {
+        log.debug("artwork transient failure track=\(trackID, privacy: .public)")
+        if artworkRequestTrackID == trackID {
+            artworkRequestTrackID = nil
+        }
+        artworkRetryTrackID = trackID
+        artworkRetryDeadline = Date().addingTimeInterval(artworkRetryInterval)
+        guard nowPlaying?.trackID == trackID else { return }
+        artwork = nil
+        onUpdate?()
+    }
+
+    private func clearArtworkRetry() {
+        artworkRetryTrackID = nil
+        artworkRetryDeadline = nil
     }
 
     private static func artworkCost(_ image: NSImage) -> Int {

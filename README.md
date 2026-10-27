@@ -16,7 +16,7 @@
 <p align="center">
   <a href="#requirements"><img src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white&style=flat-square" alt="macOS 14 or later"></a>
   <a href="#requirements"><img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white&style=flat-square" alt="Swift 6.0"></a>
-  <a href="#apple-music"><img src="https://img.shields.io/badge/Apple%20Music-driven-FA2D48?logo=applemusic&logoColor=white&style=flat-square" alt="Apple Music"></a>
+  <a href="#apple-music-and-spotify"><img src="https://img.shields.io/badge/Music%20%2B%20Spotify-driven-FA2D48?logo=applemusic&logoColor=white&style=flat-square" alt="Apple Music and Spotify"></a>
   <a href="#how-it-works"><img src="https://img.shields.io/badge/dependencies-none-3DA639?style=flat-square" alt="No dependencies"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4C78A8?style=flat-square" alt="MIT License"></a>
 </p>
@@ -90,7 +90,7 @@ resting place.
   goes to the next or previous track. On the pinned record, a swipe that starts on the vinyl still
   scrubs.
 - **Click the notch.** With the record closed, a single click over the notch toggles play/pause.
-  With no track loaded, it brings Music forward instead.
+  With no track loaded, it brings the active player forward instead.
 
 ### The notch
 
@@ -103,24 +103,25 @@ resting place.
   record. It never takes mouse events, disappears on the first gesture, and can be replayed from
   the status menu.
 - **Status menu.** A fixed-width header with the logo, track, artist, and progress. Long titles
-  scroll; short ones stay still. Only actionable states — Music closed, no track, permission
+  scroll; short ones stay still. Only actionable states — player closed, no track, permission
   needed — are surfaced there.
 - **Five skins.** Classic black, rust, deep teal, smoke, and mono. The label always follows the
   track: album art when available, otherwise a paper label generated from the track's palette.
 - **English and Korean UI**, discovered from JSON files at runtime.
 
-### Apple Music
+### Apple Music and Spotify
 
+- Drives either player, chosen automatically or pinned from the **Player** submenu.
 - Reads the current track, play state, position, duration, and artwork through AppleScript.
 - Seeks with a ~100 ms target.
-- Opens Music when it is not running, and brings it forward when there is no track to play.
+- Opens the active player when it is not running, and brings it forward when there is no track.
 - Provides clear guidance when permissions are missing.
 
 ## Requirements
 
 - macOS 14 Sonoma or later (developed and tested on macOS 26)
 - Swift 6.0+ toolchain — Command Line Tools are enough; there is no Xcode project
-- Apple Music for real playback; the built-in demo mode works without it
+- Apple Music or Spotify for real playback; the built-in demo mode works without either
 
 ## Install
 
@@ -135,7 +136,7 @@ Move `build/Groovie.app` to `/Applications` to keep it around, and add it to
 **System Settings → General → Login Items** if you want it at login.
 
 There is no installer and no notarized binary yet. The app is ad-hoc signed locally, which is
-enough for development and for the Music automation prompt.
+enough for development and for the Automation prompt.
 
 ### Updates
 
@@ -146,9 +147,10 @@ or installed automatically. Use **Check for Updates…** in the status menu to c
 ### First launch
 
 1. Groovie appears in the menu bar. It has no Dock icon and no main window.
-2. The first Music command triggers **“Groovie wants to control Music”**. Choose **Allow**.
+2. The first command triggers **“Groovie wants to control Music”** (or **Spotify**, whichever
+   player is active). Choose **Allow**.
 3. If access was denied, enable it in **System Settings → Privacy & Security → Automation →
-   Groovie → Music**, or use **Reconnect Music** in the status menu.
+   Groovie → Music** (or **Spotify**), or use **Reconnect to Music/Spotify** in the status menu.
 4. On a display without a notch, a one-time gesture card appears under the top-centre strip.
    Choose **Show Gesture Tips** from the status menu to see it again.
 
@@ -277,9 +279,13 @@ Some implementation details that make the physical metaphor work:
   top-left. `contentPoint(forScreenPoint:)` converts before any hit-testing happens.
 - **Hover without a key window.** Global and local `mouseMoved` monitors are combined with the
   panel's tracking area, so the label can react even though the panel never becomes key.
-- **A serial bridge to Music.** Every AppleScript command goes through one queue. The position is
-  estimated locally between polls, and a requested play state is held briefly until Music agrees,
-  so a stale read cannot flip the record back.
+- **A serial bridge to the active player.** Every AppleScript command goes through one queue per
+  player. The position is estimated locally between polls, and a requested play state is held
+  briefly until the player agrees, so a stale read cannot flip the record back.
+- **Automatic player selection.** `PlayerCoordinator` runs both services in auto mode: the one
+  driving the record polls normally, the other at a slow probe cadence, so starting playback in
+  the other app is noticed without doubling the AppleScript cost. Pinning a player stops the
+  other one entirely.
 - **One axis per scroll gesture.** `ScrollAxisLock` decides between horizontal and vertical early
   and keeps that decision until the gesture ends. It is a pure value type, which makes the tricky
   part of track skipping straightforward to test.
@@ -298,8 +304,12 @@ Sources/GroovieKit/
   Interaction/WiggleDetector.swift      shake-to-cancel detection
   Interaction/OverlayController.swift   gesture state machine, windows, springs
   Interaction/VinylViewModel.swift      state published to the UI
-  Music/AppleMusicBridge.swift          AppleScript execution, seek merging, artwork
-  Music/AppleMusicService.swift         polling, availability, artwork cache
+  Music/ScriptedPlayerBridge.swift      shared bridge contract and player descriptor
+  Music/ScriptedMusicService.swift      polling, availability, artwork cache
+  Music/AppleMusicBridge.swift          Music.app AppleScript and embedded artwork
+  Music/SpotifyBridge.swift             Spotify.app AppleScript and artwork URL
+  Music/ArtworkLoader.swift             HTTPS cover download and downsample
+  Music/PlayerCoordinator.swift         auto/pin selection between the two services
   UI/VinylSkin.swift                    record palettes, persistence, track colors
   UI/RecordTexture.swift                grooves, bands, runout, label print
   UI/VinylStageView.swift               SwiftUI stage, hover hint, confirm gauge
@@ -358,6 +368,7 @@ open build/Groovie.app --args --check-updates
 | `--simulate-no-notch` | Shows the no-notch layout on a notched Mac. |
 | `--gesture-hint` | Forces the first-run gesture card, even on a notched display. |
 | `--skin=<id>` | Pins one of `classic`, `rust`, `teal`, `smoke`, `mono` for this run. |
+| `--player=<id>` | Pins `auto`, `music`, or `spotify` for this run without saving the choice. |
 | `--long-title` | Makes the demo title long enough to exercise the menu-header marquee. |
 | `--lang=<code>` | Pins the UI language for this run, e.g. `en` or `ko`. |
 | `--check-updates` | Checks the release feed immediately and shows the result, bypassing the daily limit. |
@@ -395,14 +406,15 @@ Record palettes are in `VinylSkin`; the selected skin is stored under `groovie.s
   rather than when the fingers leave the trackpad.
 - Seeking targets 100 ms, but Apple Music does not guarantee that precision on every track or
   stream.
-- Album art comes from Music's raw artwork data. If that read fails, a generated paper label is
-  used instead.
+- Album art comes from Music's embedded data or Spotify's artwork URL. If that read or download
+  fails, a generated paper label is used instead.
 - On a display without a notch, the open stage covers the top-centre part of the menu bar while
   the record is out.
 - The pointer is not visible over a physical notch. Aim for the top-centre of the screen when
   starting a drag.
-- Apple Music only. Spotify's AppleScript does not expose seek, which the whole interaction
-  depends on.
+- Spotify has no play-state notification, so external changes are noticed on the polling cadence
+  rather than instantly. Auto mode also probes a running player, which can trigger its Automation
+  prompt even if you normally use the other one; pin a player to avoid that.
 - Rebuilding changes the ad-hoc signature, so macOS may ask for Automation permission again during
   development.
 

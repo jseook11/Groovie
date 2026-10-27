@@ -12,8 +12,9 @@ enum LocalizationKey: String, CaseIterable {
     case menuDemo = "menu.demo"
     case menuGestureTips = "menu.gestureTips"
     case menuSkin = "menu.skin"
-    case menuRetryMusic = "menu.retryMusic"
-    case menuOpenMusic = "menu.openMusic"
+    case menuPlayer = "menu.player"
+    case menuRetryPlayer = "menu.retryPlayer"
+    case menuOpenPlayer = "menu.openPlayer"
     case menuAutomationSettings = "menu.automationSettings"
     case menuCheckUpdates = "menu.checkUpdates"
     case menuCheckingUpdates = "menu.checkingUpdates"
@@ -29,12 +30,18 @@ enum LocalizationKey: String, CaseIterable {
     case skinSmoke = "skin.smoke"
     case skinMono = "skin.mono"
 
+    // MARK: Players
+
+    case playerAuto = "player.auto"
+    case playerMusic = "player.music"
+    case playerSpotify = "player.spotify"
+
     // MARK: Status
 
     case statusNoDisplay = "status.noDisplay"
     case statusOverlayInactive = "status.overlayInactive"
     case statusDisabled = "status.disabled"
-    case statusMusicNotRunning = "status.musicNotRunning"
+    case statusPlayerNotRunning = "status.playerNotRunning"
     case statusNoTrack = "status.noTrack"
     case statusPermissionRequired = "status.permissionRequired"
 

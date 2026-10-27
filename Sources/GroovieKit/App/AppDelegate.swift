@@ -6,6 +6,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
     private var controller: OverlayController?
     private var music: MusicProviding?
+    private var playerCoordinator: PlayerCoordinator?
     private var statusItem: NSStatusItem?
     private var menu: NSMenu?
     private var menuHeader: MenuHeaderView?
@@ -114,7 +115,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
                 if enabled { controller.activate() }
             } else {
                 let demoMode = ProcessInfo.processInfo.arguments.contains("--fake-music")
-                let provider: MusicProviding = demoMode ? DemoMusicService() : AppleMusicService()
+                let provider: MusicProviding
+                if demoMode {
+                    provider = DemoMusicService()
+                    playerCoordinator = nil
+                } else {
+                    let coordinator = PlayerCoordinator()
+                    playerCoordinator = coordinator
+                    provider = coordinator
+                }
                 let controller = OverlayController(
                     geometry: StageGeometry(notch: notch),
                     music: provider
@@ -133,6 +142,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             controller?.deactivate()
             controller = nil
             music = nil
+            playerCoordinator = nil
         }
 
         controller?.onInteractionStart = { [weak self] in
@@ -296,6 +306,30 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         skinItem.isEnabled = hasNotch && enabled
         menu.addItem(skinItem)
 
+        let playerItem = NSMenuItem(title: L10n.t(.menuPlayer), action: nil, keyEquivalent: "")
+        let playerMenu = NSMenu()
+        playerMenu.autoenablesItems = false
+        let playerChoices: [(PlayerPreference, LocalizationKey)] = [
+            (.auto, .playerAuto),
+            (.music, .playerMusic),
+            (.spotify, .playerSpotify),
+        ]
+        for (preference, key) in playerChoices {
+            let item = NSMenuItem(
+                title: L10n.t(key),
+                action: #selector(selectPlayer(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = preference.rawValue
+            item.isEnabled = hasNotch && enabled && controller != nil && playerCoordinator != nil
+            item.state = playerCoordinator?.preference == preference ? .on : .off
+            playerMenu.addItem(item)
+        }
+        playerItem.submenu = playerMenu
+        playerItem.isEnabled = hasNotch && enabled && playerCoordinator != nil
+        menu.addItem(playerItem)
+
         let clearDesktopItem = NSMenuItem(
             title: L10n.t(.menuClearDesktopRecords, desktopRecords?.recordCount ?? 0),
             action: #selector(clearDesktopRecords),
@@ -307,14 +341,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         menu.addItem(.separator())
 
-        let retryItem = NSMenuItem(title: L10n.t(.menuRetryMusic), action: #selector(retryMusic), keyEquivalent: "")
+        let retryItem = NSMenuItem(
+            title: L10n.t(.menuRetryPlayer, activePlayerName),
+            action: #selector(retryPlayer),
+            keyEquivalent: ""
+        )
         retryItem.target = self
         retryItem.isEnabled = hasNotch && enabled
         menu.addItem(retryItem)
 
-        let musicItem = NSMenuItem(title: L10n.t(.menuOpenMusic), action: #selector(openMusic), keyEquivalent: "")
-        musicItem.target = self
-        menu.addItem(musicItem)
+        let playerOpenItem = NSMenuItem(
+            title: L10n.t(.menuOpenPlayer, activePlayerName),
+            action: #selector(openPlayer),
+            keyEquivalent: ""
+        )
+        playerOpenItem.target = self
+        menu.addItem(playerOpenItem)
 
         let automationItem = NSMenuItem(
             title: L10n.t(.menuAutomationSettings),
@@ -378,7 +420,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         switch model.availability {
         case .appNotRunning:
-            menuHeader.setStatus(L10n.t(.statusMusicNotRunning))
+            menuHeader.setStatus(L10n.t(.statusPlayerNotRunning, activePlayerName))
         case .noTrack:
             menuHeader.setStatus(L10n.t(.statusNoTrack))
         case .permissionDenied:
@@ -393,6 +435,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
                 isPlaying: model.isPlaying
             )
         }
+    }
+
+    /// The player the menu names in status and prompts. Before the overlay
+    /// exists (or in demo mode) there is no coordinator, so Music is the
+    /// sensible default.
+    private var activePlayerName: String {
+        playerCoordinator?.activePlayerName ?? PlayerID.music.displayName
     }
 
     // MARK: - NSMenuDelegate
@@ -420,7 +469,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         setEnabled(!enabled)
     }
 
-    @objc private func retryMusic() {
+    @objc private func retryPlayer() {
         controller?.refreshMusic()
     }
 
@@ -459,9 +508,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         }
     }
 
-    @objc private func openMusic() {
-        let url = URL(fileURLWithPath: "/System/Applications/Music.app")
-        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
+    @objc private func openPlayer() {
+        music?.presentPlayer()
+    }
+
+    @objc private func selectPlayer(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let preference = PlayerPreference(rawValue: raw)
+        else { return }
+        playerCoordinator?.setPreference(preference)
+        rebuildMenu()
     }
 
     @objc private func openAutomationSettings() {
@@ -579,8 +635,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = L10n.t(.alertPermissionTitle)
-        alert.informativeText = L10n.t(.alertPermissionBody)
+        alert.messageText = L10n.t(.alertPermissionTitle, activePlayerName)
+        alert.informativeText = L10n.t(.alertPermissionBody, activePlayerName)
         alert.addButton(withTitle: L10n.t(.alertOpenSettings))
         alert.addButton(withTitle: L10n.t(.alertLater))
 

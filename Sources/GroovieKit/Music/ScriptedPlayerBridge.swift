@@ -1,0 +1,102 @@
+import AppKit
+import Foundation
+
+/// Which music player a service drives. The raw value is what the
+/// `groovie.player` preference persists.
+enum PlayerID: String, CaseIterable {
+    case music
+    case spotify
+
+    /// Proper nouns: not localized, the player calls itself this in every
+    /// language.
+    var displayName: String {
+        switch self {
+        case .music: return "Music"
+        case .spotify: return "Spotify"
+        }
+    }
+
+    var bundleID: String {
+        switch self {
+        case .music: return "com.apple.Music"
+        case .spotify: return "com.spotify.client"
+        }
+    }
+}
+
+/// The static facts the polling service needs about the player it drives.
+struct ScriptedPlayerDescriptor {
+    let id: PlayerID
+    /// Music posts this on play/pause/track changes. Spotify has no equivalent,
+    /// so its service relies on the polling cadence alone.
+    let changeNotification: Notification.Name?
+
+    var displayName: String { id.displayName }
+    var bundleID: String { id.bundleID }
+}
+
+extension ScriptedPlayerDescriptor {
+    static let music = ScriptedPlayerDescriptor(
+        id: .music,
+        changeNotification: Notification.Name("com.apple.Music.playerInfo")
+    )
+    static let spotify = ScriptedPlayerDescriptor(id: .spotify, changeNotification: nil)
+}
+
+/// One authoritative read of a player. Both bridges normalize into this shape
+/// so the service's state machine stays player-agnostic.
+struct PlayerSnapshot: Equatable {
+    /// The player's own vocabulary: "playing", "paused", or "stopped".
+    var state: String
+    var trackID: String
+    var title: String
+    var artist: String
+    var album: String
+    var durationMilliseconds: Int
+    var positionMilliseconds: Int
+    /// Spotify returns a cover URL; Music embeds the artwork in the script and
+    /// leaves this nil.
+    var artworkURL: URL?
+}
+
+enum PlayerRead: Equatable {
+    case notRunning
+    case noTrack
+    case track(PlayerSnapshot)
+}
+
+enum ScriptedBridgeError: Error, Equatable {
+    case permissionDenied
+    case notRunning
+    case scriptError(Int, String)
+
+    var isPermissionDenied: Bool {
+        if case .permissionDenied = self { return true }
+        return false
+    }
+}
+
+/// Everything the service needs from a player's scripting layer. Commands are
+/// fire-and-report; the service polls afterwards for authoritative state.
+/// Bridges hop to their own serial queue internally; the caller must be on the
+/// main actor, where every completion is delivered.
+protocol ScriptedPlayerBridge: AnyObject {
+    /// Music embeds artwork in the read; Spotify only exposes a URL.
+    var providesEmbeddedArtwork: Bool { get }
+
+    func read(completion: @escaping (Result<PlayerRead, ScriptedBridgeError>) -> Void)
+    /// Seek to the position the scrub ended on, then restore the play/pause
+    /// state from grab time.
+    func finish(position: Double, wasPlaying: Bool, completion: (() -> Void)?)
+    func togglePlayback(completion: ((Bool) -> Void)?)
+    func skip(toNext: Bool, completion: (() -> Void)?)
+    /// Embedded-artwork path only (Music). Spotify supplies `artworkURL` in the
+    /// read and the service downloads it instead.
+    func readArtworkThumbnail(maxPixelSize: Int, completion: @escaping (NSImage?) -> Void)
+}
+
+extension Notification.Name {
+    /// Posted by either bridge when macOS refuses an Apple Event because the
+    /// user has not allowed Automation access for that player.
+    static let grooviePlayerPermissionDenied = Notification.Name("grooviePlayerPermissionDenied")
+}

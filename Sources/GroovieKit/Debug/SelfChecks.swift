@@ -258,19 +258,70 @@ public enum SelfChecks {
         let raw = ["playing", "95432", "ABC123", "Blue in Green", "Miles Davis", "Kind of Blue", "337000"]
             .joined(separator: delimiter)
         switch AppleMusicBridge.parse(raw) {
-        case .success(.track(let state, let position, let id, let title, let artist, let album, let duration)):
-            expect(state == "playing", "state parse")
-            expect(position == 95432, "position parse")
-            expect(id == "ABC123", "id parse")
-            expect(title == "Blue in Green", "title parse")
-            expect(artist == "Miles Davis", "artist parse")
-            expect(album == "Kind of Blue", "album parse")
-            expect(duration == 337000, "duration parse")
+        case .success(.track(let snapshot)):
+            expect(snapshot.state == "playing", "state parse")
+            expect(snapshot.positionMilliseconds == 95432, "position parse")
+            expect(snapshot.trackID == "ABC123", "id parse")
+            expect(snapshot.title == "Blue in Green", "title parse")
+            expect(snapshot.artist == "Miles Davis", "artist parse")
+            expect(snapshot.album == "Kind of Blue", "album parse")
+            expect(snapshot.durationMilliseconds == 337000, "duration parse")
+            expect(snapshot.artworkURL == nil, "Music artwork is embedded, not a URL")
         default:
             expect(false, "track read must parse")
         }
         expect((try? AppleMusicBridge.parse("NOTRUNNING").get()) == .notRunning, "not-running parse")
-        expect((try? AppleMusicBridge.parse("NOTRACK").get()) == .noTrack, "no-track parse")
+        expect((try? AppleMusicBridge.parse("NOTTRACK").get()) == PlayerRead.noTrack,
+               "no-track parse")
+
+        // MARK: Spotify read parsing
+
+        let spotifyRaw = [
+            "playing", "spotify:track:5PvLNQRNRj61y3CU4SFIY4", "NEON",
+            "A2O LITE", "NEON", "208000", "https://i.scdn.co/image/abc", "95432",
+        ].joined(separator: delimiter)
+        switch SpotifyBridge.parse(spotifyRaw) {
+        case .success(.track(let snapshot)):
+            expect(snapshot.state == "playing", "spotify state parse")
+            expect(snapshot.positionMilliseconds == 95432, "spotify position parse")
+            expect(snapshot.trackID == "spotify:track:5PvLNQRNRj61y3CU4SFIY4", "spotify id parse")
+            expect(snapshot.title == "NEON", "spotify title parse")
+            expect(snapshot.artist == "A2O LITE", "spotify artist parse")
+            expect(snapshot.album == "NEON", "spotify album parse")
+            expect(snapshot.durationMilliseconds == 208000, "spotify duration is milliseconds")
+            expect(snapshot.durationMilliseconds / 1000 == 208, "spotify duration seconds")
+            expect(snapshot.artworkURL?.absoluteString == "https://i.scdn.co/image/abc",
+                   "spotify artwork URL")
+        default:
+            expect(false, "spotify track read must parse")
+        }
+        expect((try? SpotifyBridge.parse("NOTRUNNING").get()) == .notRunning,
+               "spotify not-running parse")
+        expect((try? SpotifyBridge.parse("NOTTRACK").get()) == .noTrack,
+               "spotify no-track parse")
+
+        // A paused read can have an empty artwork URL and position 0.
+        let pausedRaw = [
+            "paused", "spotify:track:x", "Track", "Artist", "Album", "1000", "", "0",
+        ].joined(separator: delimiter)
+        switch SpotifyBridge.parse(pausedRaw) {
+        case .success(.track(let snapshot)):
+            expect(snapshot.positionMilliseconds == 0, "spotify missing position parses as 0")
+            expect(snapshot.artworkURL == nil, "empty artwork URL is not a URL")
+        default:
+            expect(false, "paused spotify read must parse")
+        }
+        if case .failure = SpotifyBridge.parse(["playing", "id"].joined(separator: delimiter)) {
+            expect(true, "short spotify rows are rejected")
+        } else {
+            expect(false, "short spotify rows must be rejected")
+        }
+        if case .failure = SpotifyBridge.parse(["playing", "id", "t", "a", "b", "x", "", "0"]
+            .joined(separator: delimiter)) {
+            expect(true, "non-numeric spotify duration is rejected")
+        } else {
+            expect(false, "non-numeric spotify duration must be rejected")
+        }
 
         // MARK: Recent tracking
 
@@ -1034,24 +1085,110 @@ public enum SelfChecks {
 
         // MARK: Music poll cadence
 
-        expect(AppleMusicService.pollInterval(engaged: true, availability: .playing, isRunning: true) == 3,
+        expect(ScriptedMusicService.pollInterval(activity: .engaged, availability: .playing, isRunning: true) == 3,
                "engaged playback must poll at 3 s")
-        expect(AppleMusicService.pollInterval(engaged: false, availability: .playing, isRunning: true) == 5,
+        expect(ScriptedMusicService.pollInterval(activity: .background, availability: .playing, isRunning: true) == 5,
                "background playback must slow to 5 s")
-        expect(AppleMusicService.pollInterval(engaged: true, availability: .paused, isRunning: true) == 5,
+        expect(ScriptedMusicService.pollInterval(activity: .engaged, availability: .paused, isRunning: true) == 5,
                "engaged pause must poll at 5 s")
-        expect(AppleMusicService.pollInterval(engaged: false, availability: .paused, isRunning: true) == 10,
+        expect(ScriptedMusicService.pollInterval(activity: .background, availability: .paused, isRunning: true) == 10,
                "background pause must slow to 10 s")
-        expect(AppleMusicService.pollInterval(engaged: false, availability: .noTrack, isRunning: true) == 15,
+        expect(ScriptedMusicService.pollInterval(activity: .background, availability: .noTrack, isRunning: true) == 15,
                "background no-track must slow to 15 s")
-        expect(AppleMusicService.pollInterval(engaged: true, availability: .playing, isRunning: false) == 30,
+        expect(ScriptedMusicService.pollInterval(activity: .engaged, availability: .playing, isRunning: false) == 30,
                "an absent player must use the 30 s recovery cadence")
+        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .playing, isRunning: true) == 10,
+               "a probe must poll a playing player at 10 s")
+        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .paused, isRunning: true) == 20,
+               "a probe must poll a paused player at 20 s")
+        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .noTrack, isRunning: true) == 20,
+               "a probe must poll an empty player at 20 s")
         for availability in [MusicAvailability.playing, .paused, .noTrack] {
             expect(
-                AppleMusicService.pollInterval(engaged: false, availability: availability, isRunning: true)
-                    >= AppleMusicService.pollInterval(engaged: true, availability: availability, isRunning: true),
+                ScriptedMusicService.pollInterval(activity: .background, availability: availability, isRunning: true)
+                    >= ScriptedMusicService.pollInterval(activity: .engaged, availability: availability, isRunning: true),
                 "background cadence must never be faster than engaged for \(availability)"
             )
+            expect(
+                ScriptedMusicService.pollInterval(activity: .probe, availability: availability, isRunning: true)
+                    >= ScriptedMusicService.pollInterval(activity: .background, availability: availability, isRunning: true),
+                "probe cadence must never be faster than background for \(availability)"
+            )
+        }
+
+        // MARK: Player selection
+
+        typealias SelectionStatus = PlayerSelection.Status
+        func status(_ availability: MusicAvailability, _ since: Date? = nil) -> SelectionStatus {
+            SelectionStatus(availability: availability, lastStartedPlaying: since)
+        }
+        func preferred(
+            _ music: SelectionStatus,
+            _ spotify: SelectionStatus,
+            current: PlayerID? = nil,
+            preference: PlayerPreference = .auto
+        ) -> PlayerID? {
+            PlayerSelection.preferred(
+                [.music: music, .spotify: spotify],
+                current: current,
+                preference: preference
+            )
+        }
+
+        let earlier = Date(timeIntervalSinceReferenceDate: 100)
+        let later = Date(timeIntervalSinceReferenceDate: 200)
+
+        expect(preferred(status(.playing), status(.paused)) == .music,
+               "playing beats paused")
+        expect(preferred(status(.paused), status(.playing)) == .spotify,
+               "a playing provider wins regardless of order")
+        expect(preferred(status(.noTrack), status(.appNotRunning)) == .music,
+               "a running player beats a closed one")
+        expect(preferred(status(.appNotRunning), status(.noTrack)) == .spotify,
+               "a closed player never wins over a running one")
+        expect(preferred(status(.permissionDenied), status(.appNotRunning)) == .music,
+               "a denied provider is selected so the permission alert can surface")
+        expect(preferred(status(.permissionDenied), status(.noTrack)) == .spotify,
+               "a usable running provider beats a denied one")
+        expect(preferred(status(.playing, earlier), status(.playing, later)) == .spotify,
+               "the most recently started playback wins a playing tie")
+        expect(preferred(status(.playing, later), status(.playing, earlier)) == .music,
+               "a later playback start wins regardless of order")
+        expect(preferred(status(.playing), status(.playing), current: .spotify) == .spotify,
+               "an even playing tie keeps the current provider")
+        expect(preferred(status(.paused), status(.paused), current: nil) == .music,
+               "a paused tie falls back to Music")
+        expect(preferred(status(.appNotRunning), status(.appNotRunning), current: .spotify) == .spotify,
+               "a cold tie keeps the current provider")
+        expect(preferred(status(.appNotRunning), status(.appNotRunning), preference: .spotify) == .spotify,
+               "a pinned provider wins whatever its state")
+        expect(preferred(status(.playing), status(.playing), preference: .spotify) == .spotify,
+               "pinning overrides auto ranking")
+        expect(PlayerSelection.preferred([:], current: nil, preference: .auto) == nil,
+               "an empty candidate set has no preference")
+
+        // MARK: Player preference
+
+        expect(PlayerPreference(rawValue: "music") == .music, "preference parses music")
+        expect(PlayerPreference(rawValue: "spotify") == .spotify, "preference parses spotify")
+        expect(PlayerPreference(rawValue: "auto") == .auto, "preference parses auto")
+        expect(PlayerPreference(rawValue: "AUTO") == nil, "unknown preferences are rejected")
+        if let suite = UserDefaults(suiteName: "com.groovie.selfchecks.player") {
+            suite.removePersistentDomain(forName: "com.groovie.selfchecks.player")
+            expect(PlayerPreference.stored(defaults: suite) == .auto,
+                   "an absent preference is auto")
+            suite.set("spotify", forKey: PlayerPreference.defaultsKey)
+            expect(PlayerPreference.stored(defaults: suite) == .spotify,
+                   "a saved preference is read back")
+            suite.set("bogus", forKey: PlayerPreference.defaultsKey)
+            expect(PlayerPreference.stored(defaults: suite) == .auto,
+                   "an unknown saved preference falls back to auto")
+            PlayerPreference.music.persist(defaults: suite)
+            expect(PlayerPreference.stored(defaults: suite) == .music,
+                   "a preference persists")
+            suite.removePersistentDomain(forName: "com.groovie.selfchecks.player")
+        } else {
+            expect(false, "could not create a defaults suite for the preference check")
         }
 
         // MARK: Report

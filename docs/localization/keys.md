@@ -8,8 +8,9 @@ only the value in your language file.
 | `menu.enable` | Enable | Status menu toggle |
 | `menu.demo` | Play Demo | Status menu |
 | `menu.skin` | Record Skin | Status menu submenu title |
-| `menu.retryMusic` | Reconnect to Music | Status menu |
-| `menu.openMusic` | Open Music | Status menu |
+| `menu.player` | Player | Status menu submenu title |
+| `menu.retryPlayer` | Reconnect to %1$@ | Status menu (active player name) |
+| `menu.openPlayer` | Open %1$@ | Status menu (active player name) |
 | `menu.automationSettings` | Automation Settings… | Status menu |
 | `menu.checkUpdates` | Check for Updates… | Status menu, when up to date |
 | `menu.checkingUpdates` | Checking for Updates… | Status menu, while a check is running |
@@ -20,16 +21,19 @@ only the value in your language file.
 | `skin.teal` | Deep Teal | Record Skin submenu |
 | `skin.smoke` | Smoke | Record Skin submenu |
 | `skin.mono` | Mono | Record Skin submenu |
+| `player.auto` | Auto | Player submenu |
+| `player.music` | Music | Player submenu |
+| `player.spotify` | Spotify | Player submenu |
 | `status.noDisplay` | No available display | Menu header status |
 | `status.overlayInactive` | Overlay inactive | Menu header status |
 | `status.disabled` | Disabled | Menu header status |
-| `status.musicNotRunning` | Music isn't running | Menu header status |
+| `status.playerNotRunning` | %1$@ isn't running | Menu header status (active player name) |
 | `status.noTrack` | Nothing to play | Menu header status |
 | `status.permissionRequired` | Automation permission required | Menu header status (warning) |
-| `header.noTrack` | Nothing playing | Menu header title when Music has no track |
+| `header.noTrack` | Nothing playing | Menu header title when the player has no track |
 | `overlay.pullToLock` | Pull further to lock | Confirm gauge under the record |
-| `alert.permissionTitle` | Groovie can't control Music | Automation permission alert title |
-| `alert.permissionBody` | Allow Groovie to control Music in System Settings → Privacy & Security → Automation. | Permission alert body |
+| `alert.permissionTitle` | Groovie can't control %1$@ | Automation permission alert title (player name) |
+| `alert.permissionBody` | Allow Groovie to control %1$@ in System Settings → Privacy & Security → Automation. | Permission alert body (player name) |
 | `alert.openSettings` | Open Settings | Permission alert button |
 | `alert.later` | Later | Permission and update alert button |
 | `alert.ok` | OK | Update check alerts |
@@ -44,7 +48,7 @@ only the value in your language file.
 | `a11y.headerTitle` | Groovie, %1$@ | Header accessibility label (title only) |
 | `a11y.headerTitleArtist` | Groovie, %1$@, %2$@ | Header accessibility label (title and artist) |
 | `a11y.headerStatus` | Groovie, %1$@ | Header accessibility label in status mode |
-| `info.appleEventsUsageDescription` | Groovie controls Music to seek through the current track by turning the record in the notch. | macOS Automation permission prompt (`InfoPlist.strings`) |
+| `info.appleEventsUsageDescription` | Groovie controls Music and Spotify to seek through the current track by turning the record in the notch. | macOS Automation permission prompt (`InfoPlist.strings`) |
 
 ## Placeholders
 
