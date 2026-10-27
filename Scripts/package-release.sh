@@ -44,10 +44,17 @@ rm -f "$ZIP"
 
 if [ -n "$NOTARY_PROFILE" ]; then
     # Catch a missing/incorrect identity before spending time on a submission.
-    if ! codesign -dv --verbose=4 "$APP" 2>&1 | grep -q 'Authority=Developer ID Application'; then
-        echo "error: notarization requires a Developer ID Application signature" >&2
-        exit 1
-    fi
+    # Match in the shell rather than piping into `grep -q`: under pipefail an
+    # early grep exit can SIGPIPE codesign and turn a valid signature into a
+    # false failure.
+    SIGN_INFO="$(codesign -dv --verbose=4 "$APP" 2>&1 || true)"
+    case "$SIGN_INFO" in
+        *"Authority=Developer ID Application"*) ;;
+        *)
+            echo "error: notarization requires a Developer ID Application signature" >&2
+            exit 1
+            ;;
+    esac
 
     STAGE="$ROOT/build/notarize"
     TMP_ZIP="$STAGE/Umak-$VERSION-notarize.zip"
