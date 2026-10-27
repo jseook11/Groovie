@@ -11,7 +11,7 @@
 
 <p align="center"><em>맥북 노치 속에 숨은 턴테이블.</em></p>
 
-<p align="center"><strong>클릭으로 멈추고, 스와이프로 넘기고, 당겨서 탐색하세요.</strong></p>
+<p align="center"><strong>클릭으로 멈추고, 스와이프로 넘기고, 당겨서 탐색하세요. 앨범은 바탕화면에 남겨 두세요.</strong></p>
 
 <p align="center">
   <a href="#요구-사항"><img src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white&style=flat-square" alt="macOS 14 이상"></a>
@@ -43,8 +43,13 @@ Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 
 천천히 움직이면 정밀하게, 빠르게 움직이면 크게 이동합니다. 한 번 더 당기면 밖에 고정되어
 재생/일시정지와 곡 넘기기를 할 수 있고, 놓으면 다시 노치로 들어갑니다.
 
-복잡한 슬라이더도, 팝오버도, 정리해야 할 창도 없습니다. 레코드처럼 동작하는 바이닐 한
-장으로 모든 조작을 끝낼 수 있습니다.
+재생을 바꾸는 데 레코드를 꺼낼 필요는 없습니다. 닫힌 노치 자체가 컨트롤입니다. 노치를
+클릭하면 재생/일시정지, 가로로 스와이프하면 곡 넘기기입니다. 더 하고 싶으면 레코드를
+꺼내고, 지금 곡을 간직하고 싶으면 ⌥+드래그로 열린 레코드를 바탕화면에 남기거나
+⌥+클릭으로 앨범 아트를 슬리브로 바탕화면에 놓으세요.
+
+슬라이더도 팝오버도 없습니다. 인터페이스는 레코드 하나이고, 바탕화면은 앨범을 남겨 두는
+선반입니다.
 
 <p align="center">
   <picture>
@@ -57,7 +62,8 @@ Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 
 
 노치는 언제나 검은색이고, 화면 최상단 중앙에 자리하며, 하던 작업 위에 늘 떠 있습니다.
 그래서 다른 창과 경쟁하지 않으면서 아날로그적인 오브젝트가 자연스럽게 머물 수 있는 유일한
-화면 영역입니다. Groovie는 노치를 레코드 슬리브로, 레코드를 컨트롤로 사용합니다.
+화면 영역입니다. Groovie는 노치를 레코드 슬리브로, 레코드를 컨트롤로, 바탕화면을 앨범을
+남겨 두는 선반으로 사용합니다.
 
 레코드는 항상 아래쪽 반원만 보입니다. 의도된 제약입니다. 실루엣이 *슬리브에서 반쯤
 나온 레코드*로 자연스럽게 연상되고, 상호작용에 명확한 휴식 지점을 줍니다.
@@ -95,6 +101,19 @@ Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 
 - **노치 클릭.** 레코드가 닫힌 상태에서 노치를 한 번 클릭하면 재생/일시정지가 토글됩니다.
   재생할 트랙이 없으면 대신 활성 플레이어를 앞으로 가져옵니다.
 
+### 바탕화면
+
+- **레코드를 데려가기.** 레코드가 완전히 열린 상태에서 ⌥를 누른 채 바탕화면으로
+  드래그하면 바이닐의 정적 사본이 그 자리에 남습니다.
+- **앨범 아트 두기.** 대신 ⌥+클릭하면 같은 곡이 앨범 슬리브로 놓입니다. 커버에서
+  레코드가 살짝 나온 모습이며, 트랙의 앨범 아트를 사용하고 없으면 생성한 종이 레이블을
+  사용합니다.
+- **형태 바꾸기.** 사본을 ⌥+클릭할 때마다 열린 슬리브 → 닫힌 슬리브 → 레코드 판 →
+  열린 슬리브 순으로 바뀝니다. 레코드가 드나들어도 커버는 제자리에 있습니다.
+- **놓은 자리에 그대로.** 사본은 스냅샷이라 회전하지 않고 재생 상태와 동기화되지도
+  않습니다. 앱을 다시 실행해도 남고, 놓았던 디스플레이에 복원되며, 상태 메뉴에서 한 번에
+  정리할 수 있습니다.
+
 ### 노치
 
 - **방해하지 않기.** 오버레이는 테두리 없는 비활성 패널로, 상태 바보다 한 단계 위에
@@ -115,6 +134,8 @@ Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 
 ### Apple Music과 Spotify
 
 - 두 플레이어를 모두 제어하며, **플레이어** 하위 메뉴에서 자동 선택 또는 고정을 고릅니다.
+- 일반적인 Apple Music 또는 Spotify 설치만 있으면 됩니다. 계정 설정이나 API 키가 필요
+  없고, 자동화 권한 외에 추가 권한도 요구하지 않습니다.
 - AppleScript로 현재 트랙, 재생 상태, 위치, 길이, 앨범 아트를 읽습니다.
 - 약 100ms를 목표로 재생 위치를 이동합니다.
 - 활성 플레이어가 실행 중이 아니면 열고, 재생할 트랙이 없으면 앞으로 가져옵니다.
@@ -174,10 +195,10 @@ Groovie는 하루에 한 번 공개 GitHub 릴리스 피드를 확인합니다. 
 | 재생 / 일시정지 | 레이블(고정) 또는 노치(닫힘) 클릭 | 레이블 또는 노치 클릭 |
 | 다음 / 이전 곡 | — | 오른쪽 / 왼쪽으로 스와이프 |
 | 레코드 닫기 | 바이닐 클릭, 또는 위로 드래그 | 위로 스크롤 |
-| 바탕화면으로 복사 | 완전히 열린 레코드에서 ⌥+드래그 | ⌥+드래그 |
-| 앨범 포장 | 완전히 열린 레코드에서 ⌥+클릭 | ⌥+클릭 |
+| 레코드를 바탕화면으로 복사 | 완전히 열린 레코드에서 ⌥+드래그 | ⌥+드래그 |
+| 앨범 아트를 바탕화면에 두기 | 완전히 열린 레코드에서 ⌥+클릭 | ⌥+클릭 |
 | 바탕화면 사본 이동 | 사본에서 ⌥+드래그 | ⌥+드래그 |
-| 앨범 커버 ↔ 바이닐 전환 | 사본에서 ⌥+클릭 | ⌥+클릭 |
+| 사본 형태 전환 | 사본에서 ⌥+클릭 (열린 슬리브 → 닫힌 슬리브 → 레코드 판) | ⌥+클릭 |
 | 바탕화면 사본 삭제 | 사본 중심을 상단 노치 영역으로 드래그 | 같음 |
 | 탐색 취소 | 1초 안에 네 번 흔들기 | — |
 
@@ -223,12 +244,18 @@ Groovie는 하루에 한 번 공개 GitHub 릴리스 피드를 확인합니다. 
 
 ### 바탕화면 장식
 
-레코드가 완전히 나온 상태에서 ⌥를 누른 채 드래그하면 바탕화면에 정적 사본이 남습니다.
-드래그 없이 ⌥+클릭하면 같은 곡이 앨범 커버로 포장됩니다. 바탕화면 사본은 순수 장식이며
-재생·탐색·곡 넘기기와 무관합니다. 사본은 ⌥+드래그로만 옮길 수 있고, ⌥+클릭으로 앨범
-커버와 바이닐을 전환하며, 사본 중심을 상단 노치 영역으로 끌어다 놓으면 삭제됩니다. 상태
-메뉴에서 한 번에 정리할 수 있습니다. 사본은 앱을 다시 실행해도 남고, 놓았던 디스플레이에
-유지됩니다.
+레코드가 완전히 열려 있으면 고정 여부와 상관없이 ⌥를 누른 채 드래그해 바이닐의 정적
+사본을 바탕화면에 남길 수 있습니다. 드래그 없이 ⌥+클릭하면 같은 곡이 앨범 슬리브로
+놓입니다. 커버에서 레코드가 살짝 나온 모습입니다.
+
+사본은 트랙의 앨범 아트를 사용하고, 아트가 없으면 생성한 종이 레이블을 사용합니다.
+⌥+클릭할 때마다 **열린 슬리브 → 닫힌 슬리브 → 레코드 판 → 열린 슬리브** 순으로
+바뀌며, 레코드가 드나들어도 커버는 제자리에 있습니다.
+
+사본은 장식용 스냅샷입니다. 재생·탐색·곡 넘기기와 무관하고, 회전하지 않으며, 곡이
+바뀌어도 따라가지 않습니다. ⌥+드래그로 옮기고, 사본 중심을 상단 노치 영역으로 끌어다
+놓으면 삭제됩니다. 앱을 다시 실행해도 남고, 놓았던 디스플레이에 유지되며, 상태 메뉴에서
+한 번에 정리할 수 있습니다.
 
 ### 트랙패드
 
@@ -318,15 +345,28 @@ Sources/GroovieKit/
   Music/ScriptedPlayerBridge.swift      공통 브리지 계약과 플레이어 설명자
   Music/ScriptedMusicService.swift      폴링, 가용성, 아트워크 캐시
   Music/ArtworkLoader.swift             HTTPS 커버 다운로드와 다운샘플
+  Music/ArtworkThumbnailer.swift        공용 아트워크 썸네일과 다운샘플
+  Music/NowPlaying.swift                플레이어 독립적인 트랙 스냅샷
   Music/PlayerCoordinator.swift         두 서비스 사이의 자동/고정 선택
+  Desktop/DesktopRecord.swift           사본 스냅샷과 버전 문서
+  Desktop/DesktopRecordStore.swift      JSON 저장소, 아트워크 파일, 복원
+  Desktop/DesktopRecordWindow.swift     테두리 없는 사본 창과 히트 테스트
+  Desktop/DesktopRecordController.swift 드래그, 형태 순환, 삭제, 다중 디스플레이
+  Desktop/DesktopArtworkRenderer.swift  정적 슬리브/레코드 렌더링과 캐시
   UI/VinylSkin.swift                    레코드 팔레트, 저장/복원, 트랙 색
   UI/RecordTexture.swift                홈, 밴드, 런아웃, 레이블 인쇄
   UI/VinylStageView.swift               SwiftUI 스테이지, 호버 힌트, 고정 게이지
+  UI/VinylRootView.swift                스테이지 구성
+  UI/VinylDiscView.swift                레코드 드로잉
+  UI/RotatingDiscView.swift             Core Animation 기반 레코드 회전
+  UI/Theme.swift                        공용 색상과 치수
   UI/GestureHintView.swift              첫 실행 제스처 카드와 패널
   UI/BrandMark.swift                    노치+레코드 메뉴 바 템플릿 마크
   UI/MenuHeaderView.swift               고정 폭 헤더, 마퀴, 진행 바
   Localization/                         언어 탐색과 타입 안전 문자열 키
   Resources/Localization/               en.json, ko.json
+  Support/RecentSet.swift               작은 최근 항목 집합
+  Support/UpdateChecker.swift           일일 GitHub 릴리스 확인
   Debug/                                데모 플레이어와 자기 검사
 Resources/Info.plist                    LSUIElement, 자동화 설명, 아이콘
 Resources/AppIcon.icns                  패키징된 macOS 앱 아이콘
@@ -335,7 +375,8 @@ docs/design/                            앱 아이콘 마스터 시안
 docs/localization/                     번역 가이드, JSON 스키마, 키 문맥
 docs/ux-guide.md                       전체 인터랙션 가이드
 docs/tuning.md                         상수·기본값·구현 메모
-docs/desktop-records.md                설계 노트: 바탕화면 장식 레코드 (미구현)
+docs/menu-ui-spec.md                   상태 메뉴 레이아웃과 동작
+docs/desktop-records.md                설계 노트: 바탕화면 장식 레코드
 docs/record-crate.md                   설계 노트: 레코드 상자 / 플레이리스트 (미구현)
 docs/record-break.md                   채택하지 않은 대안: 레코드 떼어내기
 Scripts/                                앱 번들링, 아이콘 생성, 로컬라이제이션 검사
@@ -366,6 +407,7 @@ open build/Groovie.app --args --fake-music
 open build/Groovie.app --args --fake-music --demo
 open build/Groovie.app --args --fake-music --simulate-no-notch
 open build/Groovie.app --args --fake-music --demo --skin=rust
+open build/Groovie.app --args --desktop-demo --fake-music
 open build/Groovie.app --args --gesture-hint
 open build/Groovie.app --args --check-updates
 ```
@@ -374,6 +416,8 @@ open build/Groovie.app --args --check-updates
 | --- | --- |
 | `--fake-music` | Music 대신 세 트랙짜리 데모 플레이어를 사용합니다. |
 | `--demo` | 당기기 → 되감기 → 앞으로 감기 → 놓기 시퀀스를 자동으로 재생합니다. |
+| `--desktop-demo` | 바탕화면 레코드 사본에 영향을 주지 않도록 임시 저장소에 레코드 판과 앨범 슬리브를 하나씩 놓습니다. |
+| `--desktop-demo-toggle` | 놓아 둔 레코드 판의 형태를 한 번 순환해 ⌥+클릭과 같은 경로를 확인합니다. |
 | `--simulate-no-notch` | 노치가 있는 Mac에서 노치 없는 레이아웃을 보여 줍니다. |
 | `--gesture-hint` | 첫 실행 제스처 카드를 노치 화면에서도 강제로 표시합니다. |
 | `--skin=<id>` | 이번 실행의 스킨을 `classic`, `rust`, `teal`, `smoke`, `mono` 중 하나로 고정합니다. |
@@ -417,6 +461,8 @@ open build/Groovie.app --args --lang=ja
   보장하지는 않습니다.
 - 앨범 아트는 Music의 내장 데이터 또는 Spotify의 아트워크 URL을 사용합니다. 읽기나
   다운로드에 실패하면 생성한 종이 레이블로 대체합니다.
+- 바탕화면 사본은 스냅샷입니다. 나중에 곡이나 아트워크, 스킨이 바뀌어도 기존 사본은
+  갱신되지 않으므로, 바뀐 모습을 원하면 새로 만들어야 합니다.
 - 노치가 없는 디스플레이에서는 레코드가 나와 있는 동안 화면 상단 중앙의 메뉴 바 일부를
   가립니다.
 - 물리 노치 위에서는 포인터가 보이지 않습니다. 드래그를 시작할 때 화면 상단 중앙을
