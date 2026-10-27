@@ -156,8 +156,10 @@ open build/Umak.app
 Move `build/Umak.app` to `/Applications` to keep it around, and add it to
 **System Settings → General → Login Items** if you want it at login.
 
-There is no installer and no notarized binary yet. The app is ad-hoc signed locally, which is
-enough for development and for the Automation prompt.
+Releases on the [releases page](https://github.com/jseook11/Umak/releases) are signed with a
+Developer ID and notarized, so they open without a Gatekeeper warning. Building from source
+produces an ad-hoc signed app instead, which is enough for development and for the Automation
+prompt.
 
 ### Updates
 
@@ -470,8 +472,8 @@ Record palettes are in `VinylSkin`; the selected skin is stored under `umak.skin
   start. Probing a running player can still trigger its Automation prompt even if you normally use
   the other one, and a denied probe is not selected over a usable player; pin a player to avoid
   the prompt entirely.
-- Rebuilding changes the ad-hoc signature, so macOS may ask for Automation permission again during
-  development.
+- Rebuilding from source changes the ad-hoc signature, so macOS may ask for Automation permission
+  again during development.
 
 ## Contributing
 

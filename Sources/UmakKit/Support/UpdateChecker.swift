@@ -3,9 +3,9 @@ import os
 
 /// Watches the public GitHub release feed and reports newer versions.
 ///
-/// Umak ships as an ad-hoc signed zip, so Sparkle-style in-place updates are
-/// not possible yet. This checker only reads release metadata; it never
-/// downloads or installs anything. The UI is expected to open the release page.
+/// Umak has no in-place updater: it ships as a signed zip and this checker
+/// only reads release metadata. It never downloads or installs anything; the
+/// UI opens the release page.
 final class UpdateChecker {
     struct Release: Equatable, Sendable {
         let version: String
