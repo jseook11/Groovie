@@ -279,9 +279,11 @@ Some implementation details that make the physical metaphor work:
   top-left. `contentPoint(forScreenPoint:)` converts before any hit-testing happens.
 - **Hover without a key window.** Global and local `mouseMoved` monitors are combined with the
   panel's tracking area, so the label can react even though the panel never becomes key.
-- **A serial bridge to the active player.** Every AppleScript command goes through one queue per
-  player. The position is estimated locally between polls, and a requested play state is held
-  briefly until the player agrees, so a stale read cannot flip the record back.
+- **One serial bridge for every player.** AppleScript is process-global and not thread-safe, so
+  every command from either player goes through the same serial queue; player-specific queues let
+  one player's reply arrive for the other. The position is estimated locally between polls, and a
+  requested play state is held briefly until the player agrees, so a stale read cannot flip the
+  record back.
 - **Automatic player selection.** `PlayerCoordinator` runs every installed player's service in
   auto mode: the one driving the record polls normally, the other at a 30 s safety-net probe, so
   starting playback in the other app is noticed without doubling the AppleScript cost. A

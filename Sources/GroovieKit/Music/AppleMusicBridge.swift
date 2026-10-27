@@ -9,7 +9,7 @@ import os
 final class AppleMusicBridge: ScriptedPlayerBridge {
     let providesEmbeddedArtwork = true
 
-    private let queue = DispatchQueue(label: "com.groovie.music.script", qos: .userInitiated)
+    private let queue = ScriptedPlayerQueue.shared
     /// ImageIO parses and downsamples artwork here, not on the script queue, so
     /// a large cover cannot delay a seek or a transport command.
     private let artworkDecodeQueue = DispatchQueue(label: "com.groovie.artwork", qos: .userInitiated)

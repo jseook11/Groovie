@@ -61,9 +61,14 @@ probe that receives the notification polls immediately, which is why probe mode 
   are excluded. A playing tie goes to the most recent playback start, then the current provider,
   then Music when it is a candidate.
 - A probe never downloads artwork. Promotion to active fetches the current cover immediately.
+- **One AppleScript queue for the whole process.** AppleScript is process-global and
+  `NSAppleScript` is not thread-safe; per-player queues let a Music reply arrive for a Spotify
+  read, which then fails to parse. `ScriptedPlayerQueue.shared` serializes every read and command
+  from both bridges.
 - AppleScript commands carry a 5 s timeout. Notification-driven reads are throttled to one per
-  0.5 s, and three consecutive read failures drop the stale snapshot instead of leaving the
-  record spinning on a phantom track.
+  0.5 s, and a notification that arrives inside that window schedules one follow-up read when it
+  closes rather than being dropped. Three consecutive read failures drop the stale snapshot
+  instead of leaving the record spinning on a phantom track.
 - When the selected provider leaves playback, the other one is polled once immediately instead
   of waiting out its probe interval.
 - While the record is out, a better candidate is queued instead of applied. Switching mid-gesture

@@ -77,6 +77,11 @@ final class ScriptedMusicService: MusicProviding {
     /// single read happens after the burst, on the settled state.
     private var changeDebounce: Timer?
     private let changeDebounceInterval: TimeInterval = 0.15
+    /// A notification arrived inside the read-throttle window. The read that
+    /// just started may have sampled the pre-change state, so run one more when
+    /// the window closes instead of dropping the hint until the next cadence
+    /// (30 s away for a probe).
+    private var throttledNotificationPoll: Timer?
 
     /// Only recent covers are kept: the record shows one track at a time, and
     /// the cache exists so skipping back a few tracks does not pay for another
@@ -139,6 +144,7 @@ final class ScriptedMusicService: MusicProviding {
                 // Both services are alive in auto mode and the notification is
                 // posted by a bridge, so only the bridge's owner may react.
                 guard let self,
+                      self.started,
                       let sender = note.object as AnyObject?,
                       sender === self.bridge as AnyObject
                 else { return }
@@ -164,6 +170,10 @@ final class ScriptedMusicService: MusicProviding {
         launchInFlight = false
         consecutiveReadFailures = 0
         lastReadStartedAt = .distantPast
+        // A stopped service owns no permission state. Leaving this set let an
+        // observer callback that was already queued re-enter `refresh()` and
+        // start polling again after the coordinator had stopped the service.
+        permissionDenied = false
         playerIsRunning = false
         lastRunningCheck = Date()
         // A stopped service must not keep publishing the track it last read:
@@ -191,6 +201,8 @@ final class ScriptedMusicService: MusicProviding {
         }
         changeDebounce?.invalidate()
         changeDebounce = nil
+        throttledNotificationPoll?.invalidate()
+        throttledNotificationPoll = nil
     }
 
     deinit {
@@ -239,9 +251,10 @@ final class ScriptedMusicService: MusicProviding {
                   app.bundleIdentifier == bundleID
             else { return }
             Task { @MainActor in
-                self?.playerIsRunning = true
-                self?.lastRunningCheck = Date()
-                self?.pollNow()
+                guard let self, self.started else { return }
+                self.playerIsRunning = true
+                self.lastRunningCheck = Date()
+                self.pollNow()
             }
         }
         let terminate = center.addObserver(
@@ -253,7 +266,7 @@ final class ScriptedMusicService: MusicProviding {
                   app.bundleIdentifier == bundleID
             else { return }
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.started else { return }
                 self.playerIsRunning = false
                 self.lastRunningCheck = Date()
                 // A read that was in flight when the player quit can still
@@ -276,8 +289,9 @@ final class ScriptedMusicService: MusicProviding {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshPlayerRunning()
-                self?.pollNow()
+                guard let self, self.started else { return }
+                self.refreshPlayerRunning()
+                self.pollNow()
             }
         }
         let activate = center.addObserver(
@@ -289,7 +303,7 @@ final class ScriptedMusicService: MusicProviding {
                   app.bundleIdentifier == bundleID
             else { return }
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.started else { return }
                 self.playerIsRunning = true
                 self.lastRunningCheck = Date()
                 self.retryPermissionIfNeeded()
@@ -324,11 +338,16 @@ final class ScriptedMusicService: MusicProviding {
                     return
                 }
                 // Do not let a chatty undocumented notification turn into a
-                // read per event. A read from the last half second is fresh.
-                guard Date().timeIntervalSince(self.lastReadStartedAt)
-                    >= self.notificationReadThrottle
-                else { return }
-                self.pollNow()
+                // read per event, but do not drop the change either: a read
+                // that started inside the window may predate it.
+                let elapsed = Date().timeIntervalSince(self.lastReadStartedAt)
+                if elapsed >= self.notificationReadThrottle {
+                    self.pollNow()
+                } else {
+                    self.scheduleThrottledNotificationPoll(
+                        after: self.notificationReadThrottle - elapsed
+                    )
+                }
             }
         }
         // Coalescing the trailing edge with other run-loop work is fine; the
@@ -336,6 +355,23 @@ final class ScriptedMusicService: MusicProviding {
         timer.tolerance = 0.05
         RunLoop.main.add(timer, forMode: .common)
         changeDebounce = timer
+    }
+
+    /// Run the read the throttle deferred once its window closes. Coalesced
+    /// with any other deferred notification.
+    private func scheduleThrottledNotificationPoll(after delay: TimeInterval) {
+        throttledNotificationPoll?.invalidate()
+        let timer = Timer(timeInterval: max(0.01, delay), repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.throttledNotificationPoll = nil
+                guard self.started, !self.permissionDenied else { return }
+                self.pollNow()
+            }
+        }
+        timer.tolerance = 0.05
+        RunLoop.main.add(timer, forMode: .common)
+        throttledNotificationPoll = timer
     }
 
     private func startPolling() {
@@ -560,7 +596,7 @@ final class ScriptedMusicService: MusicProviding {
                 applyNotRunning()
             case .scriptError(let number, let message):
                 consecutiveReadFailures += 1
-                log.error("Read failed (\(number)): \(message, privacy: .public)")
+                log.error("\(self.descriptor.displayName, privacy: .public) read failed (\(number)): \(message, privacy: .public)")
                 // Do not leave the record spinning on a snapshot that will
                 // never update. A player behind a modal/hung Apple Event
                 // source gets a few chances, then the UI stops lying.
@@ -703,6 +739,8 @@ final class ScriptedMusicService: MusicProviding {
         artworkRequestTrackID = nil
         changeDebounce?.invalidate()
         changeDebounce = nil
+        throttledNotificationPoll?.invalidate()
+        throttledNotificationPoll = nil
         availability = .permissionDenied
         nowPlaying = nil
         artwork = nil
@@ -922,7 +960,16 @@ final class ScriptedMusicService: MusicProviding {
         }
         artworkRetryTrackID = trackID
         artworkRetryDeadline = Date().addingTimeInterval(artworkRetryInterval)
-        guard nowPlaying?.trackID == trackID else { return }
+        guard nowPlaying?.trackID == trackID else {
+            // The user moved on while this download was in flight. The marker
+            // was cleared above, so fetch the current track's cover now; the
+            // next poll will not, because it only asks while `artwork` is nil.
+            if let currentTrackID = nowPlaying?.trackID {
+                updateArtwork(for: currentTrackID, url: currentArtworkURL)
+                onUpdate?()
+            }
+            return
+        }
         artwork = nil
         onUpdate?()
     }

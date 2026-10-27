@@ -111,7 +111,7 @@ enum ScriptedBridgeError: Error, Equatable {
 
 /// Everything the service needs from a player's scripting layer. Commands are
 /// fire-and-report; the service polls afterwards for authoritative state.
-/// Bridges hop to their own serial queue internally; the caller must be on the
+/// Bridges hop to `ScriptedPlayerQueue` internally; the caller must be on the
 /// main actor, where every completion is delivered.
 protocol ScriptedPlayerBridge: AnyObject {
     /// Music embeds artwork in the read; Spotify only exposes a URL.
@@ -126,6 +126,15 @@ protocol ScriptedPlayerBridge: AnyObject {
     /// Embedded-artwork path only (Music). Spotify supplies `artworkURL` in the
     /// read and the service downloads it instead.
     func readArtworkThumbnail(maxPixelSize: Int, completion: @escaping (NSImage?) -> Void)
+}
+
+/// AppleScript is process-global and NSAppleScript is not thread-safe: two
+/// `executeAndReturnError` calls running at once can deliver one player's reply
+/// to the other (a Music answer arriving for a Spotify read, which then fails
+/// to parse). Every bridge shares this one serial queue so only one AppleScript
+/// runs at a time, however many players are being polled.
+enum ScriptedPlayerQueue {
+    static let shared = DispatchQueue(label: "com.groovie.applescript", qos: .userInitiated)
 }
 
 extension Notification.Name {

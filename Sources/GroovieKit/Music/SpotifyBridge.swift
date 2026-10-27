@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import os
 
 /// Reads and drives Spotify.app over AppleScript. Spotify's dictionary differs
 /// from Music's in three ways that shape this bridge: `properties of current
@@ -10,8 +9,7 @@ import os
 final class SpotifyBridge: ScriptedPlayerBridge {
     let providesEmbeddedArtwork = false
 
-    private let queue = DispatchQueue(label: "com.groovie.spotify.script", qos: .userInitiated)
-    private let log = Logger(subsystem: "com.groovie.app", category: "music")
+    private let queue = ScriptedPlayerQueue.shared
 
     private var readScript: NSAppleScript?
 

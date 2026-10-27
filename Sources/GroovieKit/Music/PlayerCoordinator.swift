@@ -496,6 +496,9 @@ final class PlayerCoordinator: MusicProviding {
     // MARK: - Updates
 
     private func serviceDidUpdate(_ id: PlayerID) {
+        // A callback queued just before `stop()` must not drive selection or
+        // reporting while the coordinator is inactive.
+        guard running else { return }
         let previousAvailability = lastAvailability[id]
         updateStatus(for: id)
         lastAvailability[id] = services[id]?.availability
