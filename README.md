@@ -11,7 +11,7 @@
 
 <p align="center"><em>A turntable hidden in the MacBook notch.</em></p>
 
-<p align="center"><strong>Click to pause. Swipe to skip. Pull to explore.</strong></p>
+<p align="center"><strong>Click to pause. Swipe to skip. Pull to explore. Keep the album on your desktop.</strong></p>
 
 <p align="center">
   <a href="#requirements"><img src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white&style=flat-square" alt="macOS 14 or later"></a>
@@ -42,8 +42,13 @@ notch: pull it far enough and it snaps out with a magnetic detent. Grab it and t
 seek — slowly for precision, quickly to jump. Pull once more and it stays out, ready for play/pause
 and track changes. Let go and it drops back into the notch.
 
-Everything is one physical object. There is no slider, no popover, and no window to arrange:
-just a record that behaves like a record.
+You do not need the record to change what is playing. The closed notch is a control of its own:
+click it to pause or resume, and swipe across it to change tracks. When you want more, pull the
+record out. When you love what is playing, keep it: ⌥-drag the open record onto the desktop to
+leave the vinyl there, or ⌥-click to place the album artwork as a sleeve on the desktop.
+
+Nothing here is a slider or a popover: the record is the interface, and the desktop is where an
+album can stay.
 
 <p align="center">
   <picture>
@@ -56,7 +61,8 @@ just a record that behaves like a record.
 
 The notch is always black, always top-centre, and always above whatever you are doing. That makes
 it the one piece of screen real estate where a skeuomorphic object can live without competing with
-the desktop. Groovie treats the notch as a record sleeve and the record as the control.
+the desktop. Groovie treats the notch as a record sleeve, the record as the control, and the
+desktop as the shelf where an album can stay.
 
 Only the lower half of the record is ever visible. That is a deliberate constraint: the silhouette
 reads as *a record pulled halfway out of a sleeve*, and it gives the interaction an obvious
@@ -92,6 +98,19 @@ resting place.
 - **Click the notch.** With the record closed, a single click over the notch toggles play/pause.
   With no track loaded, it brings the active player forward instead.
 
+### The desktop
+
+- **Take the record with you.** With a fully opened record, hold ⌥ and drag it onto the desktop
+  to leave a still copy of the vinyl there.
+- **Put the cover on the desktop.** ⌥-click instead to place the same track as an album sleeve:
+  the cover with the record sliding out. The copy uses the track's album artwork, or the
+  generated paper label when there is none.
+- **Turn it in your hands.** ⌥-click a copy to cycle open sleeve → closed sleeve → bare disc →
+  open sleeve. The cover stays put while the record slides in and out.
+- **It stays where you left it.** Copies are snapshots: they never rotate, sync, or react to
+  playback. They survive a relaunch, stay on the display where they were placed, and can be
+  cleared from the status menu.
+
 ### The notch
 
 - **Out of the way.** The overlay is a borderless panel that sits above the status bar without
@@ -112,6 +131,8 @@ resting place.
 ### Apple Music and Spotify
 
 - Drives either player, chosen automatically or pinned from the **Player** submenu.
+- Works with a normal Apple Music or Spotify install: no account setup or API keys, and no extra
+  permission beyond Automation.
 - Reads the current track, play state, position, duration, and artwork through AppleScript.
 - Seeks with a ~100 ms target.
 - Opens the active player when it is not running, and brings it forward when there is no track.
@@ -172,10 +193,10 @@ For a full walkthrough of every gesture, threshold, and edge case, see the
 | Play / pause | Click the label (pinned) or the notch (closed) | Click the label or the notch |
 | Next / previous track | — | Swipe right / left |
 | Put it back | Click the vinyl, or drag up | Scroll up |
-| Copy to the desktop | ⌥-drag a fully opened record | ⌥-drag |
-| Package the album | ⌥-click a fully opened record | ⌥-click |
+| Copy the record to the desktop | ⌥-drag a fully opened record | ⌥-drag |
+| Put the album on the desktop | ⌥-click a fully opened record | ⌥-click |
 | Move a desktop copy | ⌥-drag it | ⌥-drag |
-| Switch cover / vinyl | ⌥-click a desktop copy | ⌥-click |
+| Cycle open sleeve → closed sleeve → disc | ⌥-click a desktop copy | ⌥-click |
 | Remove a desktop copy | Drag its centre into the top notch area | Same |
 | Cancel a seek | Shake four times in one second | — |
 
@@ -221,11 +242,17 @@ briefly after release and then springs back.
 
 ### Desktop copies
 
-Once the record is fully out, hold ⌥ and drag it to leave a static copy on the desktop.
-⌥-click without dragging packages the album as a cover instead. Desktop copies are decorative:
-they never play, scrub, or skip. Hold ⌥ to move one, ⌥-click to switch between the bare record
-and its album cover, and drop its centre on the top notch area to remove it. The status menu can
-clear them all. Copies survive a relaunch and stay on the display where they were placed.
+Once the record is fully out — pinned or not — hold ⌥ and drag it to leave a still copy of the
+vinyl on the desktop. ⌥-click without dragging places the same track as an album sleeve instead:
+the cover with the record sliding out.
+
+A copy uses the track's album artwork, or the generated paper label when artwork is unavailable.
+⌥-click it to cycle through **open sleeve → closed sleeve → bare disc → open sleeve**; the cover
+never moves while the record slides in and out.
+
+Copies are decorative snapshots. They never play, scrub, skip, rotate, or follow track changes.
+⌥-drag to move one, and drop its centre on the top notch area to remove it. They survive a
+relaunch, stay on the display where they were placed, and the status menu can clear them all.
 
 ### Trackpad
 
@@ -314,15 +341,28 @@ Sources/GroovieKit/
   Music/AppleMusicBridge.swift          Music.app AppleScript and embedded artwork
   Music/SpotifyBridge.swift             Spotify.app AppleScript and artwork URL
   Music/ArtworkLoader.swift             HTTPS cover download and downsample
+  Music/ArtworkThumbnailer.swift        shared artwork thumbnail and downsample
+  Music/NowPlaying.swift                player-agnostic track snapshot
   Music/PlayerCoordinator.swift         auto/pin selection between the two services
+  Desktop/DesktopRecord.swift           copy snapshot and versioned document
+  Desktop/DesktopRecordStore.swift      JSON store, artwork files, restore
+  Desktop/DesktopRecordWindow.swift     borderless copy window and hit testing
+  Desktop/DesktopRecordController.swift drag, style cycle, delete, multi-display
+  Desktop/DesktopArtworkRenderer.swift  still sleeve/disc rendering and cache
   UI/VinylSkin.swift                    record palettes, persistence, track colors
   UI/RecordTexture.swift                grooves, bands, runout, label print
   UI/VinylStageView.swift               SwiftUI stage, hover hint, confirm gauge
+  UI/VinylRootView.swift                stage composition
+  UI/VinylDiscView.swift                record drawing
+  UI/RotatingDiscView.swift             Core Animation-backed record rotation
+  UI/Theme.swift                        shared colors and metrics
   UI/GestureHintView.swift              first-run gesture card and its panel
   UI/BrandMark.swift                    notch + record menu-bar template mark
   UI/MenuHeaderView.swift               fixed-width header, marquee, progress
   Localization/                         language discovery and typed string keys
   Resources/Localization/               en.json, ko.json
+  Support/RecentSet.swift               small bounded recency set
+  Support/UpdateChecker.swift           daily GitHub release check
   Debug/                                demo player and self-checks
 Resources/Info.plist                    LSUIElement, automation description, icon
 Resources/AppIcon.icns                  packaged macOS app icon
@@ -331,7 +371,8 @@ docs/design/                            app-icon master art
 docs/localization/                     translation guide, JSON schema, key context
 docs/ux-guide.md                       full interaction guide (Korean)
 docs/tuning.md                         constants, defaults, and implementation notes
-docs/desktop-records.md                design note: decorative desktop records (unbuilt)
+docs/menu-ui-spec.md                   status menu layout and behavior
+docs/desktop-records.md                design note: decorative desktop records
 docs/record-crate.md                   design note: record crate / playlists (unbuilt)
 docs/record-break.md                   rejected alternative: breaking the record
 Scripts/                                app bundling, icon generation, localization checks
@@ -362,6 +403,7 @@ open build/Groovie.app --args --fake-music
 open build/Groovie.app --args --fake-music --demo
 open build/Groovie.app --args --fake-music --simulate-no-notch
 open build/Groovie.app --args --fake-music --demo --skin=rust
+open build/Groovie.app --args --desktop-demo --fake-music
 open build/Groovie.app --args --gesture-hint
 open build/Groovie.app --args --check-updates
 ```
@@ -370,6 +412,8 @@ open build/Groovie.app --args --check-updates
 | --- | --- |
 | `--fake-music` | Uses a demo player with three tracks instead of Music. |
 | `--demo` | Plays a pull → rewind → fast-forward → release sequence automatically. |
+| `--desktop-demo` | Seeds a bare disc and an album sleeve in a throwaway store, without touching your real desktop copies. |
+| `--desktop-demo-toggle` | Cycles the seeded disc once, exercising the same path as an ⌥-click. |
 | `--simulate-no-notch` | Shows the no-notch layout on a notched Mac. |
 | `--gesture-hint` | Forces the first-run gesture card, even on a notched display. |
 | `--skin=<id>` | Pins one of `classic`, `rust`, `teal`, `smoke`, `mono` for this run. |
@@ -413,6 +457,8 @@ Record palettes are in `VinylSkin`; the selected skin is stored under `groovie.s
   stream.
 - Album art comes from Music's embedded data or Spotify's artwork URL. If that read or download
   fails, a generated paper label is used instead.
+- Desktop copies are snapshots: changing the track, artwork, or skin later does not update an
+  existing copy. Create a new one to pick up the change.
 - On a display without a notch, the open stage covers the top-centre part of the menu bar while
   the record is out.
 - The pointer is not visible over a physical notch. Aim for the top-centre of the screen when
