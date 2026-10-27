@@ -186,6 +186,11 @@ final class SpotifyBridge: ScriptedPlayerBridge {
 
     func skip(toNext: Bool, completion: (() -> Void)? = nil) {
         queue.async {
+            // Spotify's `previous track` follows the player's contextual rule:
+            // after a few seconds it restarts the current track instead of
+            // moving back. Send the same single command its transport button
+            // does; forcing a second one can skip two tracks when a previous
+            // item does exist, and no AppleScript property exposes the context.
             let command = toNext ? "next track" : "previous track"
             let source = """
             if application "Spotify" is running then

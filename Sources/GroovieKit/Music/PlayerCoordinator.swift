@@ -311,7 +311,7 @@ final class PlayerCoordinator: MusicProviding {
 
         // The player driving the record just left playback. Check the other
         // provider now instead of waiting out its probe interval, so takeover
-        // is a round trip rather than up to 20 seconds.
+        // is a round trip rather than up to 30 seconds.
         if preference == .auto,
            id == activeID,
            previousAvailability == .playing,

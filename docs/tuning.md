@@ -44,10 +44,15 @@ cadence. Pinning a player stops the other service completely, so it costs nothin
 
 | Availability | Engaged | Background | Probe |
 | --- | ---: | ---: | ---: |
-| playing | 3 s | 5 s | 10 s |
-| paused | 5 s | 10 s | 20 s |
-| no track / stopped | 10 s | 15 s | 20 s |
+| playing | 3 s | 5 s | 30 s |
+| paused | 5 s | 10 s | 30 s |
+| no track / stopped | 10 s | 15 s | 30 s |
 | app not running / permission denied | 30 s | 30 s | 30 s |
+
+Both players post a distributed playback-change notification (`com.apple.Music.playerInfo` and
+the undocumented `com.spotify.client.PlaybackStateChanged`). The service debounces it for 150 ms
+and reads authoritative state, so the table above is a safety net, not the primary trigger. A
+probe that receives the notification polls immediately, which is why probe mode can sit at 30 s.
 
 - Auto ranks `playing > paused > noTrack > permissionDenied > appNotRunning`. A playing tie goes
   to the most recent playback start, then the current provider, then Music.

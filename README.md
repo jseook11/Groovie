@@ -412,9 +412,11 @@ Record palettes are in `VinylSkin`; the selected skin is stored under `groovie.s
   the record is out.
 - The pointer is not visible over a physical notch. Aim for the top-centre of the screen when
   starting a drag.
-- Spotify has no play-state notification, so external changes are noticed on the polling cadence
-  rather than instantly. Auto mode also probes a running player, which can trigger its Automation
-  prompt even if you normally use the other one; pin a player to avoid that.
+- Spotify's playback-state notification is undocumented. Groovie only treats it as a hint and
+  keeps polling, so if a future Spotify stops posting it, updates merely slow to the polling
+  cadence. Seeks and a contextual "previous" do not post it.
+- Auto mode probes a running player, which can trigger its Automation prompt even if you normally
+  use the other one; pin a player to avoid that.
 - Rebuilding changes the ad-hoc signature, so macOS may ask for Automation permission again during
   development.
 

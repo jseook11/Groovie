@@ -27,8 +27,9 @@ enum PlayerID: String, CaseIterable {
 /// The static facts the polling service needs about the player it drives.
 struct ScriptedPlayerDescriptor {
     let id: PlayerID
-    /// Music posts this on play/pause/track changes. Spotify has no equivalent,
-    /// so its service relies on the polling cadence alone.
+    /// Distributed notification posted on play/pause/track changes. Both
+    /// players have one; it is only a hint to read authoritative state, so a
+    /// removed or renamed notification degrades to the polling cadence.
     let changeNotification: Notification.Name?
 
     var displayName: String { id.displayName }
@@ -40,7 +41,13 @@ extension ScriptedPlayerDescriptor {
         id: .music,
         changeNotification: Notification.Name("com.apple.Music.playerInfo")
     )
-    static let spotify = ScriptedPlayerDescriptor(id: .spotify, changeNotification: nil)
+    /// Spotify does not document this notification in its AppleScript
+    /// dictionary, but the desktop app posts it (verified on 1.3.6.1921) with
+    /// state, track metadata, duration, and position.
+    static let spotify = ScriptedPlayerDescriptor(
+        id: .spotify,
+        changeNotification: Notification.Name("com.spotify.client.PlaybackStateChanged")
+    )
 }
 
 /// One authoritative read of a player. Both bridges normalize into this shape

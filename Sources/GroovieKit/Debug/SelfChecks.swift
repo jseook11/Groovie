@@ -300,6 +300,15 @@ public enum SelfChecks {
         expect((try? SpotifyBridge.parse("NOTTRACK").get()) == .noTrack,
                "spotify no-track parse")
 
+        // Spotify posts this undocumented notification on play/pause/track
+        // changes; the service uses it only as a hint to read state.
+        expect(ScriptedPlayerDescriptor.spotify.changeNotification?.rawValue
+            == "com.spotify.client.PlaybackStateChanged",
+               "spotify change notification name")
+        expect(ScriptedPlayerDescriptor.music.changeNotification?.rawValue
+            == "com.apple.Music.playerInfo",
+               "music change notification name")
+
         // A paused read can have an empty artwork URL and position 0.
         let pausedRaw = [
             "paused", "spotify:track:x", "Track", "Artist", "Album", "1000", "", "0",
@@ -1097,12 +1106,12 @@ public enum SelfChecks {
                "background no-track must slow to 15 s")
         expect(ScriptedMusicService.pollInterval(activity: .engaged, availability: .playing, isRunning: false) == 30,
                "an absent player must use the 30 s recovery cadence")
-        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .playing, isRunning: true) == 10,
-               "a probe must poll a playing player at 10 s")
-        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .paused, isRunning: true) == 20,
-               "a probe must poll a paused player at 20 s")
-        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .noTrack, isRunning: true) == 20,
-               "a probe must poll an empty player at 20 s")
+        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .playing, isRunning: true) == 30,
+               "a probe must poll a playing player at 30 s")
+        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .paused, isRunning: true) == 30,
+               "a probe must poll a paused player at 30 s")
+        expect(ScriptedMusicService.pollInterval(activity: .probe, availability: .noTrack, isRunning: true) == 30,
+               "a probe must poll an empty player at 30 s")
         for availability in [MusicAvailability.playing, .paused, .noTrack] {
             expect(
                 ScriptedMusicService.pollInterval(activity: .background, availability: availability, isRunning: true)

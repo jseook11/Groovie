@@ -54,9 +54,8 @@ final class ScriptedMusicService: MusicProviding {
 
     private var runningObservers: [NSObjectProtocol] = []
     private var permissionObserver: NSObjectProtocol?
-    /// Music posts this on play/pause/track changes. It is only a hint to read
-    /// authoritative state; the slow cadence remains the safety net. Spotify
-    /// has no equivalent and uses the cadence alone.
+    /// The player posts this on play/pause/track changes. It is only a hint to
+    /// read authoritative state; the slow cadence remains the safety net.
     private var changeObserver: NSObjectProtocol?
     /// One user action produces a burst of notifications — a Stopped/Playing
     /// pair, then a few more as the player settles, then the new track's
@@ -318,19 +317,21 @@ final class ScriptedMusicService: MusicProviding {
             switch activity {
             case .engaged: return 3
             case .background: return 5
-            case .probe: return 10
+            // A change notification makes an active probe read immediately,
+            // so the timer only has to recover a missed notification.
+            case .probe: return 30
             }
         case .paused:
             switch activity {
             case .engaged: return 5
             case .background: return 10
-            case .probe: return 20
+            case .probe: return 30
             }
         case .noTrack:
             switch activity {
             case .engaged: return 10
             case .background: return 15
-            case .probe: return 20
+            case .probe: return 30
             }
         case .appNotRunning, .permissionDenied:
             return 30
