@@ -75,12 +75,31 @@ final class OverlayContentView: NSView {
         bounds.insetBy(dx: -1, dy: -1).contains(point) ? self : nil
     }
 
+    /// Mouse-move delivery is only useful while a latched record is under the
+    /// pointer (label vs vinyl hover feedback). Asking for `.mouseMoved` on the
+    /// closed notch made every pointer move across the strip wake the app for a
+    /// callback that immediately bailed out. Enter/exit is enough to show the
+    /// hover cue.
+    private var wantsMouseMoved = false
+
+    func setWantsMouseMoved(_ wants: Bool) {
+        guard wants != wantsMouseMoved else { return }
+        wantsMouseMoved = wants
+        rebuildTrackingArea()
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
+        rebuildTrackingArea()
+    }
+
+    private func rebuildTrackingArea() {
         if let tracking { removeTrackingArea(tracking) }
+        var options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeAlways, .inVisibleRect]
+        if wantsMouseMoved { options.insert(.mouseMoved) }
         let area = NSTrackingArea(
             rect: .zero,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            options: options,
             owner: self,
             userInfo: nil
         )

@@ -888,6 +888,10 @@ final class OverlayController {
     /// for a non-activating panel that does not receive them as window events.
     private func startHoverTracking() {
         guard hoverMonitors.isEmpty else { return }
+        // Label/vinyl hover feedback needs per-move delivery, but only while
+        // the record is pinned. Enable it here instead of leaving the closed
+        // notch waking the app on every pointer move that crosses it.
+        contentView?.setWantsMouseMoved(true)
         // Moves inside the panel are already delivered by its `.activeAlways`
         // tracking area (OverlayPanel.swift), so a local monitor would call
         // refreshRecordHover twice per event. Only the global fallback remains.
@@ -899,6 +903,7 @@ final class OverlayController {
     }
 
     private func stopHoverTracking() {
+        contentView?.setWantsMouseMoved(false)
         for monitor in hoverMonitors {
             NSEvent.removeMonitor(monitor)
         }
