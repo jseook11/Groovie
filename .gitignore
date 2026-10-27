@@ -19,3 +19,6 @@ build/
 *.provisionprofile
 xcuserdata/
 DerivedData/
+
+# Local-only runbooks (personal identifiers, machine-specific state)
+SIGNING.local.md
