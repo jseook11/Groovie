@@ -7,12 +7,12 @@ app:
 	./Scripts/build-app.sh
 
 run: app
-	open build/Groovie.app
+	open build/Umak.app
 
 test:
 	swift build
-	.build/debug/Groovie --self-test
-	swift Scripts/check-localizations.swift Sources/GroovieKit/Resources/Localization
+	.build/debug/Umak --self-test
+	swift Scripts/check-localizations.swift Sources/UmakKit/Resources/Localization
 
 demo: app
 	./Scripts/capture-demo.sh
@@ -21,7 +21,7 @@ icon:
 	./Scripts/make-app-icon.sh
 
 l10n-check:
-	swift Scripts/check-localizations.swift Sources/GroovieKit/Resources/Localization
+	swift Scripts/check-localizations.swift Sources/UmakKit/Resources/Localization
 
 clean:
 	rm -rf .build build

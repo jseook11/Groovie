@@ -2,22 +2,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "Groovie",
+    name: "Umak",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "Groovie", targets: ["Groovie"]),
+        .executable(name: "Umak", targets: ["Umak"]),
     ],
     targets: [
         .target(
-            name: "GroovieKit",
-            path: "Sources/GroovieKit",
+            name: "UmakKit",
+            path: "Sources/UmakKit",
             resources: [.copy("Resources/Localization")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "Groovie",
-            dependencies: ["GroovieKit"],
-            path: "Sources/Groovie",
+            name: "Umak",
+            dependencies: ["UmakKit"],
+            path: "Sources/Umak",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ],

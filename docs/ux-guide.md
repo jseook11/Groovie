@@ -1,4 +1,4 @@
-# Groovie 인터랙션 가이드
+# Umak 인터랙션 가이드
 
 노치에 숨은 레코드를 손으로 다루는 방법을 정리한 문서입니다.
 빠르게 훑을 수 있는 표에서 시작해, 각 제스처의 의도와 경계 동작까지 설명합니다.
@@ -28,7 +28,7 @@
 
 ## 2. 기본 구조
 
-Groovie에는 컨트롤이 하나뿐입니다. 노치 속에서 반쯤 나온 **레코드** 한 장입니다.
+Umak에는 컨트롤이 하나뿐입니다. 노치 속에서 반쯤 나온 **레코드** 한 장입니다.
 
 - **노치** — 레코드가 들어 있는 슬리브입니다. 맥북 카메라 하우징이거나, 노치가 없는
   화면에서는 화면 상단 중앙의 179pt 영역입니다.
@@ -254,7 +254,7 @@ Groovie에는 컨트롤이 하나뿐입니다. 노치 속에서 반쯤 나온 **
 
 ## 11. 상태별 요약
 
-| 상태 | 사용자가 하는 일 | Groovie가 하는 일 |
+| 상태 | 사용자가 하는 일 | Umak이 하는 일 |
 | --- | --- | --- |
 | 닫힘(idle) | 포인터를 올림 | 1px 표시, 입력 대기 |
 | 깨어남(armed) | 클릭, 스와이프, 아래로 당김 | 클릭이면 재생 토글, 스와이프면 곡 넘김 |
@@ -305,12 +305,12 @@ Groovie에는 컨트롤이 하나뿐입니다. 노치 속에서 반쯤 나온 **
 | `UI/GestureHintView.swift` | 첫 실행 제스처 안내 카드 |
 | `App/AppDelegate.swift` | 안내 카드 노출 시점과 메뉴 항목 |
 
-첫 실행 안내를 다시 테스트하려면 `UserDefaults`의 `groovie.gestureHintShown` 값을 지우고
+첫 실행 안내를 다시 테스트하려면 `UserDefaults`의 `umak.gestureHintShown` 값을 지우고
 앱을 다시 실행하거나, `--gesture-hint` 인자로 강제로 표시할 수 있습니다.
 
 ```sh
-defaults delete com.groovie.app groovie.gestureHintShown
-open build/Groovie.app --args --gesture-hint
+defaults delete com.umak.app umak.gestureHintShown
+open build/Umak.app --args --gesture-hint
 ```
 
 `--gesture-hint`는 노치가 있는 화면에서도 카드를 표시하므로 레이아웃 확인에 유용합니다.

@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-<h1 align="center">Groovie</h1>
+<h1 align="center">Umak</h1>
 
 <p align="center"><em>A turntable hidden in the MacBook notch.</em></p>
 
@@ -36,7 +36,7 @@
 
 ---
 
-Groovie turns the MacBook camera notch into a control surface for Apple Music and Spotify. Click the notch to
+Umak turns the MacBook camera notch into a control surface for Apple Music and Spotify. Click the notch to
 pause, swipe across it to skip, or pull the record down to explore. The record lives inside the
 notch: pull it far enough and it snaps out with a magnetic detent. Grab it and turn it sideways to
 seek — slowly for precision, quickly to jump. Pull once more and it stays out, ready for play/pause
@@ -52,8 +52,8 @@ album can stay.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/groovie-demo-dark.gif">
-    <img src="docs/assets/groovie-demo.gif" alt="The record sliding out of the notch, spinning to scrub the track time, then retracting" width="880">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/umak-demo-dark.gif">
+    <img src="docs/assets/umak-demo.gif" alt="The record sliding out of the notch, spinning to scrub the track time, then retracting" width="880">
   </picture>
 </p>
 
@@ -61,7 +61,7 @@ album can stay.
 
 The notch is always black, always top-centre, and always above whatever you are doing. That makes
 it the one piece of screen real estate where a skeuomorphic object can live without competing with
-the desktop. Groovie treats the notch as a record sleeve, the record as the control, and the
+the desktop. Umak treats the notch as a record sleeve, the record as the control, and the
 desktop as the shelf where an album can stay.
 
 Only the lower half of the record is ever visible. That is a deliberate constraint: the silhouette
@@ -147,13 +147,13 @@ resting place.
 ## Install
 
 ```sh
-git clone https://github.com/jseook11/Groovie.git
-cd Groovie
+git clone https://github.com/jseook11/Umak.git
+cd Umak
 make app
-open build/Groovie.app
+open build/Umak.app
 ```
 
-Move `build/Groovie.app` to `/Applications` to keep it around, and add it to
+Move `build/Umak.app` to `/Applications` to keep it around, and add it to
 **System Settings → General → Login Items** if you want it at login.
 
 There is no installer and no notarized binary yet. The app is ad-hoc signed locally, which is
@@ -161,17 +161,17 @@ enough for development and for the Automation prompt.
 
 ### Updates
 
-Groovie checks the public GitHub release feed once a day. When a newer version exists, the status
-menu shows **Groovie X.Y.Z Available**; choosing it opens the release page. Nothing is downloaded
+Umak checks the public GitHub release feed once a day. When a newer version exists, the status
+menu shows **Umak X.Y.Z Available**; choosing it opens the release page. Nothing is downloaded
 or installed automatically. Use **Check for Updates…** in the status menu to check immediately.
 
 ### First launch
 
-1. Groovie appears in the menu bar. It has no Dock icon and no main window.
-2. The first command triggers **“Groovie wants to control Music”** (or **Spotify**, whichever
+1. Umak appears in the menu bar. It has no Dock icon and no main window.
+2. The first command triggers **“Umak wants to control Music”** (or **Spotify**, whichever
    player is active). Choose **Allow**.
 3. If access was denied, enable it in **System Settings → Privacy & Security → Automation →
-   Groovie → Music** (or **Spotify**), or use **Reconnect to Music/Spotify** in the status menu.
+   Umak → Music** (or **Spotify**), or use **Reconnect to Music/Spotify** in the status menu.
 4. On a display without a notch, a one-time gesture card appears under the top-centre strip.
    Choose **Show Gesture Tips** from the status menu to see it again.
 
@@ -297,7 +297,7 @@ idle ── hover ──► armed ── pull ──► pulling ── detent �
 Some implementation details that make the physical metaphor work:
 
 - **A panel that does not activate.** `OverlayPanel` is a borderless `NSPanel` with
-  `.nonactivatingPanel`, sitting at `.statusBar + 1`. Clicking the record does not bring Groovie
+  `.nonactivatingPanel`, sitting at `.statusBar + 1`. Clicking the record does not bring Umak
   forward or change the frontmost app.
 - **Input below the views.** The SwiftUI hosting view returns `nil` from `hitTest`; a transparent
   `NSView` receives every mouse event. This keeps gesture handling away from SwiftUI's layout and
@@ -325,7 +325,7 @@ Some implementation details that make the physical metaphor work:
 ### Project layout
 
 ```
-Sources/GroovieKit/
+Sources/UmakKit/
   App/AppDelegate.swift                 menu-bar app, status menu, permissions
   Notch/NotchGeometry.swift             notch/no-notch detection, window frames
   Notch/OverlayPanel.swift              non-activating overlay panel and input view
@@ -384,7 +384,7 @@ No third-party packages. The app is a SwiftPM executable plus a library target, 
 ## Development
 
 ```sh
-make app        # build build/Groovie.app (release)
+make app        # build build/Umak.app (release)
 make run        # build and launch
 make test       # headless interaction checks
 make demo       # run the demo sequence and capture build/demo.png
@@ -399,13 +399,13 @@ values and are checked directly, which keeps the tests fast and independent of t
 ### Development flags
 
 ```sh
-open build/Groovie.app --args --fake-music
-open build/Groovie.app --args --fake-music --demo
-open build/Groovie.app --args --fake-music --simulate-no-notch
-open build/Groovie.app --args --fake-music --demo --skin=rust
-open build/Groovie.app --args --desktop-demo --fake-music
-open build/Groovie.app --args --gesture-hint
-open build/Groovie.app --args --check-updates
+open build/Umak.app --args --fake-music
+open build/Umak.app --args --fake-music --demo
+open build/Umak.app --args --fake-music --simulate-no-notch
+open build/Umak.app --args --fake-music --demo --skin=rust
+open build/Umak.app --args --desktop-demo --fake-music
+open build/Umak.app --args --gesture-hint
+open build/Umak.app --args --check-updates
 ```
 
 | Flag | What it does |
@@ -426,14 +426,14 @@ open build/Groovie.app --args --check-updates
 ### Localization
 
 The UI follows the system language. English and Korean ship by default, and each language is a
-single JSON file in `Sources/GroovieKit/Resources/Localization/`. Adding a file is enough to make
+single JSON file in `Sources/UmakKit/Resources/Localization/`. Adding a file is enough to make
 a language discoverable.
 
 ```sh
 swift Scripts/new-language.swift ja "日本語"
 make l10n-check
 make app
-open build/Groovie.app --args --lang=ja
+open build/Umak.app --args --lang=ja
 ```
 
 See [docs/localization/README.md](docs/localization/README.md) for the translation rules and
@@ -446,7 +446,7 @@ The feel is defined by a small set of constants in `VinylLayout`, `OverlayContro
 `ScrollAxisLock`, and `ScrubEngine.ScrubTuning`. The full table, defaults, and the reasoning
 behind them live in [docs/tuning.md](docs/tuning.md).
 
-Record palettes are in `VinylSkin`; the selected skin is stored under `groovie.skinID` in
+Record palettes are in `VinylSkin`; the selected skin is stored under `umak.skinID` in
 `UserDefaults`.
 
 ## Known limitations
@@ -463,7 +463,7 @@ Record palettes are in `VinylSkin`; the selected skin is stored under `groovie.s
   the record is out.
 - The pointer is not visible over a physical notch. Aim for the top-centre of the screen when
   starting a drag.
-- Spotify's playback-state notification is undocumented. Groovie only treats it as a hint and
+- Spotify's playback-state notification is undocumented. Umak only treats it as a hint and
   keeps polling, so if a future Spotify stops posting it, updates merely slow to the polling
   cadence. Seeks and a contextual "previous" do not post it.
 - Auto mode probes only installed players, and with no launch history it opens nothing on a cold
@@ -484,7 +484,7 @@ makes it testable without a window server.
 
 ## License
 
-[MIT](LICENSE) © Groovie contributors.
+[MIT](LICENSE) © Umak contributors.
 
-Groovie is an independent project and is not affiliated with Apple Inc. Apple Music is a trademark
+Umak is an independent project and is not affiliated with Apple Inc. Apple Music is a trademark
 of Apple Inc.

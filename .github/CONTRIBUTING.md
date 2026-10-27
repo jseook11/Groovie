@@ -1,6 +1,6 @@
-# Contributing to Groovie
+# Contributing to Umak
 
-Thanks for taking the time to help. Groovie is a small macOS app, so the most useful
+Thanks for taking the time to help. Umak is a small macOS app, so the most useful
 contributions are reproducible bug reports, feedback on how the interaction feels, and
 localization improvements.
 
@@ -13,8 +13,8 @@ localization improvements.
 ## Getting started
 
 ```sh
-git clone https://github.com/jseook11/Groovie.git
-cd Groovie
+git clone https://github.com/jseook11/Umak.git
+cd Umak
 make test
 make run
 ```
@@ -29,7 +29,7 @@ the [README](../README.md#development-flags).
 
 1. `make test` must pass.
 2. If you add or change a user-facing string, update every file in
-   `Sources/GroovieKit/Resources/Localization/` and run `make l10n-check`.
+   `Sources/UmakKit/Resources/Localization/` and run `make l10n-check`.
 3. If you change timing, thresholds, or defaults, update `docs/tuning.md`.
 4. UI changes: attach a screenshot or a short screen recording to the pull request.
 5. Keep interaction logic in the pure types (`ScrubEngine`, `ScrollAxisLock`,

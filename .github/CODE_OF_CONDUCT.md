@@ -25,7 +25,7 @@ representing the project.
 ## Enforcement
 
 Report problems to the maintainer through GitHub (@jseook11) or with a private report at
-<https://github.com/jseook11/Groovie/security/advisories/new>. Reports are reviewed
+<https://github.com/jseook11/Umak/security/advisories/new>. Reports are reviewed
 confidentially. The maintainer may warn, edit or remove content, or block an account,
 depending on severity and repetition.
 

@@ -11,13 +11,13 @@ Please report security issues privately, not in a public issue.
 
 Use GitHub's private vulnerability reporting:
 
-<https://github.com/jseook11/Groovie/security/advisories/new>
+<https://github.com/jseook11/Umak/security/advisories/new>
 
 Include the affected version or commit, your macOS version, and steps to reproduce.
 
 ## Scope
 
-Groovie runs locally and contains no network code. The areas most worth scrutiny are:
+Umak runs locally and contains no network code. The areas most worth scrutiny are:
 
 - the AppleScript/Automation bridge to Music (`AppleMusicBridge`)
 - parsing of track metadata and artwork returned by Music

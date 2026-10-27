@@ -1,4 +1,4 @@
-# Groovie Phase 1–2 performance patch plan (rev. 2)
+# Umak Phase 1–2 performance patch plan (rev. 2)
 
 Status: revised after two adversarial codex reviews (rev.1 "reject as written"; rev.2 "approve with changes"). The five rev.2 corrections are incorporated. Do not implement until approved.
 

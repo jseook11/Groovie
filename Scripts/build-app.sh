@@ -14,14 +14,14 @@ if [ "$UNIVERSAL" = "1" ]; then
     BUILD_ARGS+=(--arch arm64 --arch x86_64)
 fi
 
-swift build "${BUILD_ARGS[@]}" --product Groovie
+swift build "${BUILD_ARGS[@]}" --product Umak
 BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path | tail -n 1)"
 
-APP="$ROOT/build/Groovie.app"
+APP="$ROOT/build/Umak.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BIN_DIR/Groovie" "$APP/Contents/MacOS/Groovie"
+cp "$BIN_DIR/Umak" "$APP/Contents/MacOS/Umak"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
     cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
@@ -36,7 +36,7 @@ shopt -u nullglob
 
 # Ship language files as loose data as well, so a translation can be tested by
 # dropping a JSON file into the built app without rebuilding.
-LOCALIZATION_DIR="$ROOT/Sources/GroovieKit/Resources/Localization"
+LOCALIZATION_DIR="$ROOT/Sources/UmakKit/Resources/Localization"
 if [ -d "$LOCALIZATION_DIR" ]; then
     mkdir -p "$APP/Contents/Resources/Localization"
     cp "$LOCALIZATION_DIR"/*.json "$APP/Contents/Resources/Localization/"
@@ -48,12 +48,12 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # Ad-hoc signature: stable enough for local use and Automation permission prompts.
 if [ -z "$SIGN_IDENTITY" ]; then
-    codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/Groovie" >/dev/null 2>&1 || true
+    codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/Umak" >/dev/null 2>&1 || true
     codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || true
 else
     # Developer ID: notarization requires the hardened runtime. Under it, Apple
     # Events are blocked unless the automation entitlement is embedded.
-    ENTITLEMENTS="$ROOT/Resources/Groovie.entitlements"
+    ENTITLEMENTS="$ROOT/Resources/Umak.entitlements"
     if [ ! -f "$ENTITLEMENTS" ]; then
         echo "error: missing entitlements: $ENTITLEMENTS" >&2
         exit 1

@@ -312,7 +312,7 @@ struct TrackSnapshot: Codable {
 - `.disc`와 `.sleeve`는 같은 사본 모델을 공유하고 `style`과 `recordOut`만 다르다.
   이동/삭제/저장 규칙은 동일하다.
 
-- 저장 위치: `~/Library/Application Support/Groovie/desktop-records.json`
+- 저장 위치: `~/Library/Application Support/Umak/desktop-records.json`
   - 아트워크: 같은 폴더의 `artwork/<recordID>.png` (최대 512px, PNG)
 - 최상위에 `version`을 두어 마이그레이션 여지를 남긴다.
 - 쓰기는 원자적(`Data.write(options: .atomic)`). 드래그 중에는 저장하지 않고

@@ -22,12 +22,12 @@ if [ -n "$NOTARY_PROFILE" ] && [ -z "$SIGN_IDENTITY" ]; then
 fi
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-APP="$ROOT/build/Groovie.app"
-ZIP="$ROOT/build/Groovie-$VERSION-macos-universal.zip"
+APP="$ROOT/build/Umak.app"
+ZIP="$ROOT/build/Umak-$VERSION-macos-universal.zip"
 
 UNIVERSAL=1 CONFIG=release "$ROOT/Scripts/build-app.sh"
 
-ARCHS="$(lipo -archs "$APP/Contents/MacOS/Groovie")"
+ARCHS="$(lipo -archs "$APP/Contents/MacOS/Umak")"
 case "$ARCHS" in
     *arm64*x86_64*|*x86_64*arm64*) ;;
     *)
@@ -50,7 +50,7 @@ if [ -n "$NOTARY_PROFILE" ]; then
     fi
 
     STAGE="$ROOT/build/notarize"
-    TMP_ZIP="$STAGE/Groovie-$VERSION-notarize.zip"
+    TMP_ZIP="$STAGE/Umak-$VERSION-notarize.zip"
     NOTARY_LOG="$STAGE/notarytool.log"
     rm -rf "$STAGE"
     mkdir -p "$STAGE"

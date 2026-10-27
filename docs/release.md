@@ -21,7 +21,7 @@ that should open without a Gatekeeper warning.
 3. Store notary credentials in the keychain:
 
    ```sh
-   xcrun notarytool store-credentials "groovie-notary" \
+   xcrun notarytool store-credentials "umak-notary" \
        --apple-id "<apple-id>" \
        --team-id "<team-id>" \
        --password "<app-specific-password>"
@@ -34,14 +34,14 @@ that should open without a Gatekeeper warning.
 
 ```sh
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
-NOTARY_PROFILE="groovie-notary" \
+NOTARY_PROFILE="umak-notary" \
 ./Scripts/package-release.sh
 ```
 
 `package-release.sh` builds a universal app, signs it with the hardened runtime
-and `Resources/Groovie.entitlements`, submits a temporary zip to the notary
+and `Resources/Umak.entitlements`, submits a temporary zip to the notary
 service, staples the ticket to the app, and only then writes and hashes
-`build/Groovie-<version>-macos-universal.zip`.
+`build/Umak-<version>-macos-universal.zip`.
 
 Set only `SIGN_IDENTITY` to sign without notarizing. Setting `NOTARY_PROFILE`
 without `SIGN_IDENTITY` is an error. Running the script with neither variable

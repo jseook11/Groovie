@@ -1,16 +1,16 @@
 # Localization
 
-Groovie ships with English and Korean. Each language is a single JSON file, and
+Umak ships with English and Korean. Each language is a single JSON file, and
 adding one requires no Swift changes:
 
 ```
-Sources/GroovieKit/Resources/Localization/
+Sources/UmakKit/Resources/Localization/
   en.json   ← reference language
   ko.json
   xx.json   ← your language
 ```
 
-At launch Groovie scans the directory, matches the system language list, and
+At launch Umak scans the directory, matches the system language list, and
 falls back to English for any missing key. `en.json` is the source of truth.
 
 ## Add a language
@@ -28,7 +28,7 @@ The script copies `en.json`, sets `language`, `name`, `fallback`, and
 4. Build and try it:
    ```sh
    make app
-   open build/Groovie.app --args --lang=ja
+   open build/Umak.app --args --lang=ja
    ```
 5. When every key is translated, set `"complete": true`.
 
@@ -45,7 +45,7 @@ match (`pt-BR.json` contains `"language": "pt-BR"`).
   "complete": true,
   "strings": {
     "menu.enable": "활성화",
-    "a11y.headerTitleArtist": "Groovie, %1$@, %2$@"
+    "a11y.headerTitleArtist": "Umak, %1$@, %2$@"
   }
 }
 ```
@@ -61,7 +61,7 @@ match (`pt-BR.json` contains `"language": "pt-BR"`).
 - **Keys are stable.** Never translate or rename a key; only change values.
 - **Placeholders are positional.** Use `%1$@`, `%2$@` so word order can differ.
   The number and order must match `en.json`.
-- **Do not translate:** the brand name `Groovie`, skin IDs, track titles or
+- **Do not translate:** the brand name `Umak`, skin IDs, track titles or
   artist names, and the names of other apps (leave `Music` as the platform
   calls it, or use your language's name for it consistently).
 - Newlines are allowed (`\n`).
@@ -72,8 +72,8 @@ match (`pt-BR.json` contains `"language": "pt-BR"`).
 `Scripts/build-app.sh` copies the language files into the app twice:
 
 ```
-Groovie.app/Contents/Resources/Groovie_GroovieKit.bundle/Contents/Resources/Localization/
-Groovie.app/Contents/Resources/Localization/
+Umak.app/Contents/Resources/Umak_UmakKit.bundle/Contents/Resources/Localization/
+Umak.app/Contents/Resources/Localization/
 ```
 
 The loose `Contents/Resources/Localization/` copy is checked first. For quick
@@ -91,8 +91,8 @@ how the macOS Automation permission prompt is localized.
 make l10n-check     # key parity, placeholders, metadata
 make test           # --self-test also checks bundled en/ko
 make app
-open build/Groovie.app --args --lang=en
-open build/Groovie.app --args --lang=ko
+open build/Umak.app --args --lang=en
+open build/Umak.app --args --lang=ko
 ```
 
 `make l10n-check` reports missing keys in incomplete languages as warnings. Run
@@ -100,7 +100,7 @@ it with `--strict` if you want warnings to fail, for example in CI:
 
 ```sh
 swift Scripts/check-localizations.swift \
-  Sources/GroovieKit/Resources/Localization --strict
+  Sources/UmakKit/Resources/Localization --strict
 ```
 
 Layout note: the status menu header is a fixed 252 pt wide (188 pt of text).

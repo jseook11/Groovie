@@ -1,6 +1,6 @@
 # String keys
 
-Every user-facing string in Groovie. Keep the key column unchanged; translate
+Every user-facing string in Umak. Keep the key column unchanged; translate
 only the value in your language file.
 
 | Key | English (reference) | Where it appears |
@@ -16,8 +16,8 @@ only the value in your language file.
 | `menu.automationSettings` | Automation Settings… | Status menu |
 | `menu.checkUpdates` | Check for Updates… | Status menu, when up to date |
 | `menu.checkingUpdates` | Checking for Updates… | Status menu, while a check is running |
-| `menu.updateAvailable` | Groovie %1$@ Available | Status menu, when a newer release exists |
-| `menu.quit` | Quit Groovie | Status menu |
+| `menu.updateAvailable` | Umak %1$@ Available | Status menu, when a newer release exists |
+| `menu.quit` | Quit Umak | Status menu |
 | `skin.classic` | Classic Black | Record Skin submenu |
 | `skin.rust` | Rust | Record Skin submenu |
 | `skin.teal` | Deep Teal | Record Skin submenu |
@@ -44,27 +44,27 @@ only the value in your language file.
 | `alert.clearDesktopRecordsTitle` | Clear desktop records? | Clear-desktop confirmation title |
 | `alert.clearDesktopRecordsBody` | %1$d records on your desktop will be removed. The record in the notch and playback are not affected. | Clear-desktop confirmation body (record count) |
 | `alert.clear` | Clear | Clear-desktop confirmation button |
-| `alert.permissionTitle` | Groovie can't control %1$@ | Automation permission alert title (player name) |
-| `alert.permissionBody` | Allow Groovie to control %1$@ in System Settings → Privacy & Security → Automation. | Permission alert body (player name) |
+| `alert.permissionTitle` | Umak can't control %1$@ | Automation permission alert title (player name) |
+| `alert.permissionBody` | Allow Umak to control %1$@ in System Settings → Privacy & Security → Automation. | Permission alert body (player name) |
 | `alert.openSettings` | Open Settings | Permission alert button |
 | `alert.later` | Later | Permission and update alert button |
 | `alert.ok` | OK | Update check alerts |
 | `alert.updateTitle` | Update Available | Update alert title |
-| `alert.updateBody` | Groovie %1$@ is available. You're using %2$@. | Update alert body (latest, then current) |
+| `alert.updateBody` | Umak %1$@ is available. You're using %2$@. | Update alert body (latest, then current) |
 | `alert.openRelease` | Open Release Page | Update alert button |
 | `alert.upToDateTitle` | You're Up to Date | Manual check title when current |
-| `alert.upToDateBody` | Groovie %1$@ is the latest version. | Manual check body |
+| `alert.upToDateBody` | Umak %1$@ is the latest version. | Manual check body |
 | `alert.updateFailedTitle` | Couldn't Check for Updates | Manual check failure title |
 | `alert.updateFailedBody` | Check your internet connection and try again. | Manual check failure body |
-| `a11y.app` | Groovie | Menu bar item, header accessibility label |
-| `a11y.headerTitle` | Groovie, %1$@ | Header accessibility label (title only) |
-| `a11y.headerTitleArtist` | Groovie, %1$@, %2$@ | Header accessibility label (title and artist) |
-| `a11y.headerStatus` | Groovie, %1$@ | Header accessibility label in status mode |
-| `info.appleEventsUsageDescription` | Groovie controls Music and Spotify to seek through the current track by turning the record in the notch. | macOS Automation permission prompt (`InfoPlist.strings`) |
+| `a11y.app` | Umak | Menu bar item, header accessibility label |
+| `a11y.headerTitle` | Umak, %1$@ | Header accessibility label (title only) |
+| `a11y.headerTitleArtist` | Umak, %1$@, %2$@ | Header accessibility label (title and artist) |
+| `a11y.headerStatus` | Umak, %1$@ | Header accessibility label in status mode |
+| `info.appleEventsUsageDescription` | Umak controls Music and Spotify to seek through the current track by turning the record in the notch. | macOS Automation permission prompt (`InfoPlist.strings`) |
 
 ## Placeholders
 
 - `%1$@` — first argument, `%2$@` — second argument.
 - `%1$d` — first integer argument (record counts).
 - Use the same placeholders as `en.json`; you may reorder them in the sentence.
-- Do not translate `Groovie`; it is the app name.
+- Do not translate `Umak`; it is the app name.

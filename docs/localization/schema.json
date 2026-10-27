@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/jseook11/groovie/docs/localization/schema.json",
-  "title": "Groovie language file",
+  "$id": "https://github.com/jseook11/Umak/docs/localization/schema.json",
+  "title": "Umak language file",
   "description": "One file per language. Add a language by adding <code>.json; no Swift changes are required.",
   "type": "object",
   "required": ["language", "name", "strings"],

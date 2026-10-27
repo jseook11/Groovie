@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-<h1 align="center">Groovie</h1>
+<h1 align="center">Umak</h1>
 
 <p align="center"><em>맥북 노치 속에 숨은 턴테이블.</em></p>
 
@@ -36,7 +36,7 @@
 
 ---
 
-Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 작은 아날로그 덱으로 바꿔 줍니다.
+Umak은 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 작은 아날로그 덱으로 바꿔 줍니다.
 레코드를 꺼내지 않고도 노치를 클릭해 재생을 멈추거나 시작하고, 스와이프해 곡을 넘기고,
 레코드를 아래로 당겨 탐색할 수 있습니다. 레코드는 평소 노치 속에 숨어 있다가, 충분히
 당기면 자석처럼 경쾌하게 모습을 드러냅니다. 잡고 좌우로 돌리면 재생 위치를 탐색합니다.
@@ -53,8 +53,8 @@ Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/groovie-demo-dark.gif">
-    <img src="docs/assets/groovie-demo.gif" alt="노치에서 레코드가 나와 회전하며 재생 위치를 탐색한 뒤 다시 들어가는 모습" width="880">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/umak-demo-dark.gif">
+    <img src="docs/assets/umak-demo.gif" alt="노치에서 레코드가 나와 회전하며 재생 위치를 탐색한 뒤 다시 들어가는 모습" width="880">
   </picture>
 </p>
 
@@ -62,7 +62,7 @@ Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 
 
 노치는 언제나 검은색이고, 화면 최상단 중앙에 자리하며, 하던 작업 위에 늘 떠 있습니다.
 그래서 다른 창과 경쟁하지 않으면서 아날로그적인 오브젝트가 자연스럽게 머물 수 있는 유일한
-화면 영역입니다. Groovie는 노치를 레코드 슬리브로, 레코드를 컨트롤로, 바탕화면을 앨범을
+화면 영역입니다. Umak은 노치를 레코드 슬리브로, 레코드를 컨트롤로, 바탕화면을 앨범을
 남겨 두는 선반으로 사용합니다.
 
 레코드는 항상 아래쪽 반원만 보입니다. 의도된 제약입니다. 실루엣이 *슬리브에서 반쯤
@@ -150,13 +150,13 @@ Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 
 ## 설치
 
 ```sh
-git clone https://github.com/jseook11/Groovie.git
-cd Groovie
+git clone https://github.com/jseook11/Umak.git
+cd Umak
 make app
-open build/Groovie.app
+open build/Umak.app
 ```
 
-`build/Groovie.app`을 `/Applications`로 옮기면 계속 사용할 수 있습니다. 로그인할 때
+`build/Umak.app`을 `/Applications`로 옮기면 계속 사용할 수 있습니다. 로그인할 때
 자동으로 띄우려면 **시스템 설정 → 일반 → 로그인 항목**에 추가하세요.
 
 아직 설치 프로그램이나 공증된 바이너리는 없습니다. 앱은 로컬에서 ad-hoc 서명되며,
@@ -164,16 +164,16 @@ open build/Groovie.app
 
 ### 업데이트
 
-Groovie는 하루에 한 번 공개 GitHub 릴리스 피드를 확인합니다. 새 버전이 있으면 상태 메뉴에
-**Groovie X.Y.Z 사용 가능** 항목이 나타나고, 선택하면 릴리스 페이지가 열립니다. 자동으로
+Umak은 하루에 한 번 공개 GitHub 릴리스 피드를 확인합니다. 새 버전이 있으면 상태 메뉴에
+**Umak X.Y.Z 사용 가능** 항목이 나타나고, 선택하면 릴리스 페이지가 열립니다. 자동으로
 내려받거나 설치하지는 않습니다. 상태 메뉴의 **업데이트 확인…**으로 즉시 확인할 수 있습니다.
 
 ### 첫 실행
 
-1. Groovie가 메뉴 바에 나타납니다. Dock 아이콘과 메인 창은 없습니다.
-2. 첫 명령에서 **“Groovie wants to control Music”**(또는 **Spotify**) 요청이 뜨면
+1. Umak이 메뉴 바에 나타납니다. Dock 아이콘과 메인 창은 없습니다.
+2. 첫 명령에서 **“Umak wants to control Music”**(또는 **Spotify**) 요청이 뜨면
    **허용**을 선택합니다.
-3. 거부했다면 **시스템 설정 → 개인정보 보호 및 보안 → 자동화 → Groovie → Music**(또는
+3. 거부했다면 **시스템 설정 → 개인정보 보호 및 보안 → 자동화 → Umak → Music**(또는
    **Spotify**)을 켜거나, 상태 메뉴의 **Music/Spotify 연결 다시 시도**를 사용하세요.
 4. 노치가 없는 디스플레이에서는 상단 중앙 스트립 아래에 일회성 제스처 카드가 나타납니다.
    상태 메뉴의 **제스처 안내 보기**로 다시 볼 수 있습니다.
@@ -301,7 +301,7 @@ idle ── hover ──► armed ── pull ──► pulling ── detent �
 이 아날로그 경험이 자연스럽게 동작하도록 받쳐 주는 구현 세부 내용입니다.
 
 - **활성화되지 않는 패널.** `OverlayPanel`은 `.nonactivatingPanel`을 사용하는 테두리 없는
-  `NSPanel`이며 `.statusBar + 1` 레벨에 놓입니다. 레코드를 클릭해도 Groovie가 앞으로
+  `NSPanel`이며 `.statusBar + 1` 레벨에 놓입니다. 레코드를 클릭해도 Umak이 앞으로
   나오거나 현재 앱이 바뀌지 않습니다.
 - **뷰 아래의 입력.** SwiftUI 호스팅 뷰의 `hitTest`는 `nil`을 반환하고, 투명한 `NSView`가
   모든 마우스 이벤트를 받습니다. 제스처 처리가 SwiftUI 레이아웃과 애니메이션에서
@@ -329,7 +329,7 @@ idle ── hover ──► armed ── pull ──► pulling ── detent �
 ### 프로젝트 구조
 
 ```
-Sources/GroovieKit/
+Sources/UmakKit/
   App/AppDelegate.swift                 메뉴 바 앱, 상태 메뉴, 권한
   Notch/NotchGeometry.swift             노치/비노치 감지, 창 프레임
   Notch/OverlayPanel.swift              비활성 오버레이 패널과 입력 뷰
@@ -388,7 +388,7 @@ Scripts/                                앱 번들링, 아이콘 생성, 로컬�
 ## 개발
 
 ```sh
-make app        # build/Groovie.app 빌드 (release)
+make app        # build/Umak.app 빌드 (release)
 make run        # 빌드 후 실행
 make test       # 헤드리스 상호작용 검사
 make demo       # 데모 시퀀스를 실행하고 build/demo.png 캡처
@@ -403,13 +403,13 @@ make l10n-check # 언어 파일 검증
 ### 개발용 플래그
 
 ```sh
-open build/Groovie.app --args --fake-music
-open build/Groovie.app --args --fake-music --demo
-open build/Groovie.app --args --fake-music --simulate-no-notch
-open build/Groovie.app --args --fake-music --demo --skin=rust
-open build/Groovie.app --args --desktop-demo --fake-music
-open build/Groovie.app --args --gesture-hint
-open build/Groovie.app --args --check-updates
+open build/Umak.app --args --fake-music
+open build/Umak.app --args --fake-music --demo
+open build/Umak.app --args --fake-music --simulate-no-notch
+open build/Umak.app --args --fake-music --demo --skin=rust
+open build/Umak.app --args --desktop-demo --fake-music
+open build/Umak.app --args --gesture-hint
+open build/Umak.app --args --check-updates
 ```
 
 | 플래그 | 동작 |
@@ -430,14 +430,14 @@ open build/Groovie.app --args --check-updates
 ### 언어
 
 UI는 시스템 언어를 따릅니다. 영어와 한국어가 기본 포함되어 있고, 언어별 문자열은
-`Sources/GroovieKit/Resources/Localization/`의 JSON 파일 하나로 정의됩니다. 파일을
+`Sources/UmakKit/Resources/Localization/`의 JSON 파일 하나로 정의됩니다. 파일을
 추가하면 코드 수정 없이 언어가 자동으로 발견됩니다.
 
 ```sh
 swift Scripts/new-language.swift ja "日本語"
 make l10n-check
 make app
-open build/Groovie.app --args --lang=ja
+open build/Umak.app --args --lang=ja
 ```
 
 번역 규칙은 [docs/localization/README.md](docs/localization/README.md), 키별 문맥은
@@ -450,7 +450,7 @@ open build/Groovie.app --args --lang=ja
 상수 집합으로 결정됩니다. 전체 표와 기본값, 값의 이유는 기술 문서(영문)
 [docs/tuning.md](docs/tuning.md)에 정리되어 있습니다.
 
-레코드 팔레트는 `VinylSkin`에 있고, 선택한 스킨은 `UserDefaults`의 `groovie.skinID`에
+레코드 팔레트는 `VinylSkin`에 있고, 선택한 스킨은 `UserDefaults`의 `umak.skinID`에
 저장됩니다.
 
 ## 알려진 제한
@@ -467,7 +467,7 @@ open build/Groovie.app --args --lang=ja
   가립니다.
 - 물리 노치 위에서는 포인터가 보이지 않습니다. 드래그를 시작할 때 화면 상단 중앙을
   겨냥하세요.
-- Spotify의 재생 상태 알림은 비공식입니다. Groovie는 이를 힌트로만 쓰고 폴링을 계속하므로,
+- Spotify의 재생 상태 알림은 비공식입니다. Umak은 이를 힌트로만 쓰고 폴링을 계속하므로,
   나중에 Spotify가 알림을 보내지 않아도 폴링 주기로만 느려집니다. 탐색과 문맥형
   "이전 곡"은 알림을 보내지 않습니다.
 - 자동 모드는 설치된 플레이어만 확인하고, 실행 기록이 없으면 콜드 스타트에서 아무 것도
@@ -488,7 +488,7 @@ open build/Groovie.app --args --lang=ja
 
 ## 라이선스
 
-[MIT](LICENSE) © Groovie 기여자.
+[MIT](LICENSE) © Umak 기여자.
 
-Groovie는 독립 프로젝트이며 Apple Inc.와 제휴하지 않습니다. Apple Music은 Apple Inc.의
+Umak은 독립 프로젝트이며 Apple Inc.와 제휴하지 않습니다. Apple Music은 Apple Inc.의
 상표입니다.

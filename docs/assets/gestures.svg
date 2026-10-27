@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" role="img" aria-labelledby="title desc">
-  <title id="title">The Groovie gesture map</title>
+  <title id="title">The Umak gesture map</title>
   <desc id="desc">Four steps: hover the notch, pull down to grab the record, spin it sideways to seek, and pull once more to pin it.</desc>
 
   <rect x="0.5" y="0.5" width="999" height="299" rx="24" fill="#F2E9D8" stroke="#E0D2B8"/>

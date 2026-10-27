@@ -47,9 +47,9 @@ body:
     validations:
       required: false
   - type: input
-    id: groovie
+    id: umak
     attributes:
-      label: Groovie version or commit
+      label: Umak version or commit
       placeholder: "0.1.0 / 6bbff9c"
     validations:
       required: true

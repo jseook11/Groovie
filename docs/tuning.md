@@ -1,6 +1,6 @@
 # Tuning
 
-The feel of Groovie comes from a small set of numbers. Most of them live in pure types, so they
+The feel of Umak comes from a small set of numbers. Most of them live in pure types, so they
 can be changed without touching the window or the renderer. This page collects the defaults and
 the reasoning behind them; the interaction guide explains what each gesture does.
 
@@ -78,7 +78,7 @@ probe that receives the notification polls immediately, which is why probe mode 
   `Music/ArtworkLoader.swift` downloads (10 s timeout, 32 MB cap, `image/*` only) and downsamples
   to 320 px with the same ImageIO path.
 - On startup at most one app may launch. A player that is already running is used as-is; when
-  none is running, the last player Groovie actually drove (`groovie.player.lastActive`) is
+  none is running, the last player Umak actually drove (`umak.player.lastActive`) is
   reopened if installed. With no history, auto launches nothing.
 
 ## Notch geometry
@@ -134,7 +134,7 @@ frontmost. During a drag the item is temporarily raised to `statusBar + 2`; the 
 `statusBar + 1`, and the copy ghost is `statusBar + 3`. Items opt into `.canJoinAllSpaces` so
 they appear on every Space.
 
-State lives in `~/Library/Application Support/Groovie/desktop-records.json` (document version
+State lives in `~/Library/Application Support/Umak/desktop-records.json` (document version
 2, one `recordOut` flag per item), with artwork in `artwork/<uuid>.png` next to it. Loading a
 version 1 file shifts each sleeve 35 pt left to the new anchor, defaults `recordOut` to true,
 and rewrites the document as version 2.
@@ -197,7 +197,7 @@ Haptics are throttled to one every 50 ms.
 | Delay after launch | 1.2 s | Lets the menu bar and overlay settle. |
 | Visible duration | 7.5 s | Auto-dismiss timeout. |
 | Panel size | 440 × 70 pt | Clamped to the screen width. |
-| Seen flag | `groovie.gestureHintShown` | Set the first time the card is shown. |
+| Seen flag | `umak.gestureHintShown` | Set the first time the card is shown. |
 
 The card ignores mouse events entirely and dismisses on the first pointer or scroll gesture.
 `--gesture-hint` forces it for development.
@@ -221,7 +221,7 @@ enlarged derivative of the mark.
 
 | Key | Used by |
 | --- | --- |
-| `groovie.skinID` | Selected record skin. |
-| `groovie.player` | Player preference: `auto`, `music`, or `spotify`. |
-| `groovie.player.lastActive` | Last player Groovie drove; the only auto cold-start launch target. |
-| `groovie.gestureHintShown` | Whether the first-run gesture card has been seen. |
+| `umak.skinID` | Selected record skin. |
+| `umak.player` | Player preference: `auto`, `music`, or `spotify`. |
+| `umak.player.lastActive` | Last player Umak drove; the only auto cold-start launch target. |
+| `umak.gestureHintShown` | Whether the first-run gesture card has been seen. |
