@@ -26,6 +26,10 @@ All values are in `Interaction/VinylLayout.swift` unless noted.
 | `labelRadius` | 30 pt | Printed label size. |
 | `labelHitSlop` | 12 pt | Extra play/pause hit area around the label (42 pt total radius). |
 | `playbackDegreesPerSecond` | 200 | 33⅓ RPM. |
+| `SpinDownCurve.timeConstant` | 0.28 s | Pause coast: velocity falls to ~37 % in this time. |
+| `SpinDownCurve.settleTime` | 1.4 s | The platter is at rest by this point (≈56° of travel). |
+| `SpinUpCurve.timeConstant` | 0.22 s | Launch: the speed deficit falls to ~37 % in this time. |
+| `SpinUpCurve.settleTime` | 1.0 s | Hand-off to constant-speed rotation (deficit under 1 %). |
 | `collapseStiffness` | 260 | Spring constant for putting the record away. |
 | `collapseDamping` | 24 | Damping for the put-back spring. |
 | `collapseMaximumTime` | 0.42 s | Longest collapse animation. |
@@ -35,6 +39,14 @@ exactly on the emergence line, which is why the visible half never drifts while 
 
 The magnet snap uses a 320 stiffness and 26 damping in `OverlayController`; the put-back spring
 uses the 260/24 pair above.
+
+The spin-up and pause coast live in `Interaction/DiscSpin.swift`. Both are exponential
+approaches rather than fixed-duration eases: the brake loses most of its speed in the first
+fraction of a second and the launch gains most of it there. Both curves carry the speed at the
+moment they begin, so pausing during a launch or resuming during a coast continues from the
+current velocity instead of dipping to zero. Because the layer animation and the controller's
+angle sampling derive from the same reference and time constants, grabbing the record mid-motion
+continues from the angle on screen.
 
 ## Notch geometry
 

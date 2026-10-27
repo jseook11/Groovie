@@ -22,11 +22,6 @@ final class OverlayController {
     private var contentView: OverlayContentView?
     private var tickTimer: Timer?
     private var lastTick: CFTimeInterval = CACurrentMediaTime()
-    /// Playback rotation is handed to Core Animation: the model stores the
-    /// angle the spin started from and when, instead of changing `model.angle`
-    /// every frame and forcing SwiftUI to redraw the whole stage.
-    private var spinBaseAngle: Double = 0
-    private var spinBaseTime: CFTimeInterval = 0
 
     private var session: Session?
     private var copySession: CopySession?
@@ -68,6 +63,22 @@ final class OverlayController {
     /// Whether the expanded stage is currently on screen. Used to restore the
     /// music provider's polling cadence after a demo hands it back.
     private var stageEngaged = false
+
+    /// What the disc is showing. Music reports no current track for a moment
+    /// while it swaps songs; holding the record that is playing out across that
+    /// gap lets the cover cross-fade straight to the next one instead of
+    /// flashing the empty label.
+    private var displayedTrack: DisplayedTrack?
+    private var displayHoldExpiry: Timer?
+    /// Long enough to cover Music's swap gap (a few hundred ms), short enough
+    /// that a real stop still clears the record promptly.
+    private let displayHoldInterval: TimeInterval = 1.0
+
+    private struct DisplayedTrack {
+        var title: String
+        var artist: String
+        var artwork: NSImage?
+    }
 
     /// Horizontal scroll bookkeeping for track changes. The axis is locked at
     /// the start of a gesture so a pull can never turn into a skip.
@@ -177,6 +188,8 @@ final class OverlayController {
         // Nothing can draw these while the overlay is off. Keeping them would
         // leave the texture caches and the last cover resident for the whole
         // process lifetime.
+        cancelDisplayHold()
+        displayedTrack = nil
         model.artwork = nil
         RecordTexture.purge()
         purgeHoverLayerCaches()
@@ -270,11 +283,9 @@ final class OverlayController {
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
-        model.isSpinning = false
+        model.spin = .stopped
         hover.region = .none
         resetSkipGesture()
-        spinBaseAngle = 0
-        spinBaseTime = CACurrentMediaTime()
 
         if isEnabled {
             contentView?.window?.invalidateCursorRects(for: content)
@@ -319,7 +330,7 @@ final class OverlayController {
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
-        model.isSpinning = false
+        model.spin = .stopped
         hideStage()
         NSCursor.arrow.set()
     }
@@ -328,11 +339,9 @@ final class OverlayController {
 
     private func syncFromMusic() {
         let nowPlaying = music.nowPlaying
-        model.trackTitle = nowPlaying?.title ?? ""
-        model.trackArtist = nowPlaying?.artist ?? ""
-        model.isPlaying = nowPlaying?.isPlaying ?? false
+        updateDisplayedTrack(for: nowPlaying)
+        updatePlaybackState(for: nowPlaying)
         syncSpin()
-        model.artwork = music.artwork
         model.availability = music.availability
         model.permissionDenied = music.availability == .permissionDenied
 
@@ -364,6 +373,70 @@ final class OverlayController {
         }
 
         onStateChange?()
+    }
+
+    /// Keep the disc on the last real track across the no-track gap Music
+    /// reports while swapping songs. Without the hold the stage flashes the
+    /// empty "Groovie" label between two covers.
+    private func updateDisplayedTrack(for nowPlaying: NowPlaying?) {
+        if let nowPlaying, !nowPlaying.title.isEmpty {
+            cancelDisplayHold()
+            let display = DisplayedTrack(
+                title: nowPlaying.title,
+                artist: nowPlaying.artist,
+                artwork: music.artwork
+            )
+            displayedTrack = display
+            model.trackTitle = display.title
+            model.trackArtist = display.artist
+            model.artwork = display.artwork
+            return
+        }
+
+        guard displayedTrack != nil else {
+            clearDisplayedTrack()
+            return
+        }
+        guard displayHoldExpiry == nil else { return }
+
+        let timer = Timer(timeInterval: displayHoldInterval, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.displayHoldExpiry = nil
+                self.displayedTrack = nil
+                self.clearDisplayedTrack()
+                self.model.isPlaying = false
+                self.syncSpin()
+            }
+        }
+        // The hold is short; a little slack only helps it coalesce with the
+        // next poll that usually ends it early.
+        timer.tolerance = 0.1
+        RunLoop.main.add(timer, forMode: .common)
+        displayHoldExpiry = timer
+    }
+
+    /// Keep the platter turning through the same brief gap. A no-track read in
+    /// the middle of a swap must not brake the record and spin it up again a
+    /// moment later; a real stop ends the hold and coasts below.
+    private func updatePlaybackState(for nowPlaying: NowPlaying?) {
+        if let nowPlaying {
+            model.isPlaying = nowPlaying.isPlaying
+            return
+        }
+        guard displayHoldExpiry == nil else { return }
+        model.isPlaying = false
+    }
+
+    private func clearDisplayedTrack() {
+        model.trackTitle = ""
+        model.trackArtist = ""
+        model.artwork = nil
+    }
+
+    private func cancelDisplayHold() {
+        displayHoldExpiry?.invalidate()
+        displayHoldExpiry = nil
     }
 
     // MARK: - Hover
@@ -1542,13 +1615,70 @@ final class OverlayController {
         }
     }
 
-    /// The logical angle at `time`. The view runs the same rotation on Core
-    /// Animation, so this is only needed when the pointer takes over.
+    /// The logical angle at `time`. The view runs the same motion on Core
+    /// Animation, so this is only needed when the pointer takes over. Both
+    /// derive from the same reference, which is why the hand-off never jumps.
     private func spinAngle(at time: CFTimeInterval) -> Double {
-        guard model.isSpinning else { return model.angle }
-        let elapsed = time - spinBaseTime
-        return (spinBaseAngle + layout.playbackDegreesPerSecond * elapsed)
-            .truncatingRemainder(dividingBy: 360)
+        let target = layout.playbackDegreesPerSecond
+        switch model.spin {
+        case .spinning(let reference):
+            let elapsed = time - reference.since
+            return (reference.angle + target * elapsed)
+                .truncatingRemainder(dividingBy: 360)
+        case .spinningUp(let up):
+            return SpinUpCurve.angle(
+                from: up.angle,
+                target: target,
+                startSpeed: up.startSpeed,
+                elapsed: time - up.since
+            )
+        case .coasting(let down):
+            return SpinDownCurve.angle(
+                from: down.angle,
+                startSpeed: down.speed,
+                elapsed: time - down.since
+            )
+        case .stopped:
+            return model.angle
+        }
+    }
+
+    /// The speed the disc has at `time`, used to hand a launch or a brake over
+    /// to the other curve without a visible change in velocity.
+    private func spinSpeed(at time: CFTimeInterval) -> Double {
+        let target = layout.playbackDegreesPerSecond
+        switch model.spin {
+        case .spinning:
+            return target
+        case .spinningUp(let up):
+            return SpinUpCurve.speed(
+                target: target,
+                startSpeed: up.startSpeed,
+                elapsed: time - up.since
+            )
+        case .coasting(let down):
+            return SpinDownCurve.speed(startSpeed: down.speed, elapsed: time - down.since)
+        case .stopped:
+            return 0
+        }
+    }
+
+    /// A launch is only the first second of the motion. Once the speed deficit
+    /// is under 1 %, carry the exact angle into the constant-speed state so the
+    /// layer can stop animating the approach.
+    private func settleSpinUpIfNeeded(at time: CFTimeInterval) {
+        guard case .spinningUp(let up) = model.spin else { return }
+        let settleAt = up.since + SpinUpCurve.settleTime
+        guard time >= settleAt else { return }
+        let angle = SpinUpCurve.angle(
+            from: up.angle,
+            target: layout.playbackDegreesPerSecond,
+            startSpeed: up.startSpeed,
+            elapsed: SpinUpCurve.settleTime
+        )
+        Diag.log("settle spin-up at=\(String(format: "%.2f", settleAt)) angle=\(String(format: "%.1f", angle))")
+        model.angle = angle
+        model.spin = .spinning(SpinReference(angle: angle, since: settleAt))
     }
 
     /// True once a horizontal stroke has taken over the angle, even if the
@@ -1557,17 +1687,36 @@ final class OverlayController {
         (session?.scrubArmed ?? false) || (scrollSession?.scrubArmed ?? false)
     }
 
-    /// Start or stop the playback spin to match the current phase and player.
+    /// Start, coast, or stop the playback spin to match the current phase and
+    /// player.
     private func syncSpin() {
+        let now = CACurrentMediaTime()
+        settleSpinUpIfNeeded(at: now)
         let shouldSpin = model.isPlaying && phaseAllowsSpin && !pointerOwnsAngle
-        guard shouldSpin != model.isSpinning else { return }
+        Diag.log("syncSpin should=\(shouldSpin) play=\(model.isPlaying) phase=\(model.phase) ptr=\(pointerOwnsAngle) spin=\(model.spin.diagName)")
+
         if shouldSpin {
-            spinBaseAngle = model.angle
-            spinBaseTime = CACurrentMediaTime()
-            model.isSpinning = true
+            guard !model.spin.isSpinning else { return }
+            // The platter starts from rest, or from whatever speed a coast had
+            // left if playback is resumed while it is still slowing down.
+            let angle = spinAngle(at: now)
+            let speed = spinSpeed(at: now)
+            model.angle = angle
+            model.spin = .spinningUp(SpinUp(angle: angle, since: now, startSpeed: speed))
+            return
+        }
+
+        guard model.spin.isSpinning else { return }
+        let angle = spinAngle(at: now)
+        let speed = spinSpeed(at: now)
+        model.angle = angle
+        // Playback stopping while the record is out lets the platter coast
+        // down. Any other stop — a grab, the stage going away — hands the angle
+        // over instantly so the pointer never fights an animation.
+        if !model.isPlaying, model.phase.isEngaged, !pointerOwnsAngle {
+            model.spin = .coasting(SpinDown(angle: angle, since: now, speed: speed))
         } else {
-            model.angle = spinAngle(at: CACurrentMediaTime())
-            model.isSpinning = false
+            model.spin = .stopped
         }
     }
 
@@ -1577,7 +1726,7 @@ final class OverlayController {
     private func freezeSpin() -> Double {
         let angle = spinAngle(at: CACurrentMediaTime())
         model.angle = angle
-        model.isSpinning = false
+        model.spin = .stopped
         return angle
     }
 
@@ -1605,6 +1754,7 @@ final class OverlayController {
 
     deinit {
         tickTimer?.invalidate()
+        displayHoldExpiry?.invalidate()
     }
 
     private func tick() {
@@ -1613,7 +1763,11 @@ final class OverlayController {
         lastTick = now
 
         // Playback rotation runs on Core Animation (see RotatingDiscView), so
-        // this timer only drives short springs and timeouts.
+        // this timer only drives short springs and timeouts. The one exception
+        // is retiring a finished spin-up: the layer needs to know when to turn
+        // the approach into a constant-speed rotation.
+        Diag.log("tick spin=\(model.spin.diagName)")
+        settleSpinUpIfNeeded(at: now)
 
         if snapOpenActive, model.phase == .grabbed || model.phase == .scrubbing {
             stepSnapOpen(dt: dt)

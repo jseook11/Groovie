@@ -1054,6 +1054,52 @@ public enum SelfChecks {
             )
         }
 
+        // MARK: Spin-down and spin-up
+
+        let rpm = 200.0
+        expect(SpinDownCurve.travelled(startSpeed: rpm, elapsed: 0) == 0,
+               "the coast must start from the pause angle")
+        var previousTravel = -Double.infinity
+        for elapsed in [0.0, 0.05, 0.2, 0.5, 1.0, SpinDownCurve.settleTime] {
+            let travel = SpinDownCurve.travelled(startSpeed: rpm, elapsed: elapsed)
+            expect(travel >= previousTravel, "the coast must only move forward at \(elapsed) s")
+            previousTravel = travel
+        }
+        // Exponential decay: total travel is ω₀·τ, and at one time constant
+        // about 63 % of it is behind the disc.
+        let total = SpinDownCurve.travelled(startSpeed: rpm, elapsed: 10)
+        expect(approx(total, rpm * SpinDownCurve.timeConstant, 0.5),
+               "coast travel must converge on ω₀·τ")
+        let firstTau = SpinDownCurve.travelled(startSpeed: rpm, elapsed: SpinDownCurve.timeConstant)
+        expect(firstTau / total > 0.6, "most of the speed must be gone within one time constant")
+        expect(SpinDownCurve.travelled(startSpeed: rpm, elapsed: -1) == 0,
+               "time before the pause must not move the disc")
+        let wrapped = SpinDownCurve.angle(from: 359, startSpeed: rpm, elapsed: 1)
+        expect(wrapped >= 0 && wrapped < 360, "the coast angle must wrap into 0..<360")
+
+        // A launch starts at rest and approaches playback speed from below.
+        expect(SpinUpCurve.speed(target: rpm, startSpeed: 0, elapsed: 0) == 0,
+               "a launch must start from rest")
+        var previousSpeed = -Double.infinity
+        for elapsed in [0.0, 0.1, 0.3, 0.6, SpinUpCurve.settleTime, 5.0] {
+            let speed = SpinUpCurve.speed(target: rpm, startSpeed: 0, elapsed: elapsed)
+            expect(speed >= previousSpeed, "the launch must only gain speed at \(elapsed) s")
+            expect(speed <= rpm + 0.0001, "the launch must not overshoot playback speed")
+            previousSpeed = speed
+        }
+        expect(SpinUpCurve.speed(target: rpm, startSpeed: 0, elapsed: SpinUpCurve.settleTime) / rpm > 0.98,
+               "the launch must be at speed when the model settles it")
+        // Reversing a coast keeps the velocity continuous in both directions.
+        let coastSpeed = SpinDownCurve.speed(startSpeed: rpm, elapsed: 0.2)
+        expect(SpinUpCurve.speed(target: rpm, startSpeed: coastSpeed, elapsed: 0) == coastSpeed,
+               "a resume mid-coast must keep the coast's speed")
+        expect(SpinUpCurve.travelled(target: rpm, startSpeed: 0, elapsed: 0) == 0,
+               "a launch must not jump")
+        let lateA = SpinUpCurve.travelled(target: rpm, startSpeed: 0, elapsed: 9)
+        let lateB = SpinUpCurve.travelled(target: rpm, startSpeed: 0, elapsed: 10)
+        expect(approx(lateB - lateA, rpm, 0.001),
+               "the launch must settle at the target speed")
+
         // MARK: Report
 
         if failures.isEmpty {

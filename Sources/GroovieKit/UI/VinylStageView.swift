@@ -19,7 +19,7 @@ struct VinylStageView: View {
                     radius: layout.recordRadius,
                     labelRadius: layout.labelRadius,
                     angle: model.angle,
-                    isSpinning: model.isSpinning,
+                    spin: model.spin,
                     degreesPerSecond: layout.playbackDegreesPerSecond,
                     title: model.trackTitle,
                     artist: model.trackArtist,

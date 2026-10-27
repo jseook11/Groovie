@@ -5,7 +5,7 @@ struct VinylDiscView: View {
     let radius: CGFloat
     let labelRadius: CGFloat
     let angle: Double
-    let isSpinning: Bool
+    let spin: DiscSpin
     let degreesPerSecond: Double
     let title: String
     let artist: String
@@ -35,7 +35,7 @@ struct VinylDiscView: View {
                         image: texture,
                         size: size,
                         angle: angle,
-                        isSpinning: isSpinning,
+                        spin: spin,
                         degreesPerSecond: degreesPerSecond
                     )
                     .frame(width: size, height: size)
