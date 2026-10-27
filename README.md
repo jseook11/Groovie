@@ -146,6 +146,13 @@ resting place.
 
 ## Install
 
+Download `Umak-<version>-macos-universal.dmg` from the
+[releases page](https://github.com/jseook11/Umak/releases), open it, and drag
+`Umak.app` to the Applications shortcut. Releases are signed with a Developer
+ID and notarized, so they open without a Gatekeeper warning.
+
+To build from source instead:
+
 ```sh
 git clone https://github.com/jseook11/Umak.git
 cd Umak
@@ -154,12 +161,9 @@ open build/Umak.app
 ```
 
 Move `build/Umak.app` to `/Applications` to keep it around, and add it to
-**System Settings → General → Login Items** if you want it at login.
-
-Releases on the [releases page](https://github.com/jseook11/Umak/releases) are signed with a
-Developer ID and notarized, so they open without a Gatekeeper warning. Building from source
-produces an ad-hoc signed app instead, which is enough for development and for the Automation
-prompt.
+**System Settings → General → Login Items** if you want it at login. Source
+builds are ad-hoc signed, which is enough for development and for the
+Automation prompt.
 
 ### Updates
 

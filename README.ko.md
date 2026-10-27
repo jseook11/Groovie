@@ -149,6 +149,13 @@ Umak은 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 작
 
 ## 설치
 
+[릴리스 페이지](https://github.com/jseook11/Umak/releases)에서
+`Umak-<version>-macos-universal.dmg`를 내려받아 열고, `Umak.app`을 Applications
+단축키로 끌어다 놓으세요. 배포본은 Developer ID로 서명하고 Apple 공증을 받아
+Gatekeeper 경고 없이 실행됩니다.
+
+소스에서 직접 빌드하려면:
+
 ```sh
 git clone https://github.com/jseook11/Umak.git
 cd Umak
@@ -157,11 +164,8 @@ open build/Umak.app
 ```
 
 `build/Umak.app`을 `/Applications`로 옮기면 계속 사용할 수 있습니다. 로그인할 때
-자동으로 띄우려면 **시스템 설정 → 일반 → 로그인 항목**에 추가하세요.
-
-[릴리스 페이지](https://github.com/jseook11/Umak/releases)의 배포본은 Developer ID로
-서명하고 Apple 공증을 받아 Gatekeeper 경고 없이 실행됩니다. 소스에서 직접 빌드하면
-ad-hoc 서명된 앱이 만들어지며, 개발과 자동화 권한 요청에는 이것으로 충분합니다.
+자동으로 띄우려면 **시스템 설정 → 일반 → 로그인 항목**에 추가하세요. 소스 빌드는
+ad-hoc 서명되며, 개발과 자동화 권한 요청에는 이것으로 충분합니다.
 
 ### 업데이트
 

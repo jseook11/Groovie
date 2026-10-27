@@ -39,13 +39,19 @@ NOTARY_PROFILE="umak-notary" \
 ```
 
 `package-release.sh` builds a universal app, signs it with the hardened runtime
-and `Resources/Umak.entitlements`, submits a temporary zip to the notary
-service, staples the ticket to the app, and only then writes and hashes
-`build/Umak-<version>-macos-universal.zip`.
+and `Resources/Umak.entitlements`, notarizes a temporary zip, and staples the
+ticket to the app. It then writes and hashes two artifacts:
+
+- `build/Umak-<version>-macos-universal.zip`
+- `build/Umak-<version>-macos-universal.dmg`, a drag-to-install image with an
+  `/Applications` shortcut
+
+The disk image is signed, notarized separately, and stapled, so Gatekeeper can
+validate the downloaded container offline as well as the app inside it.
 
 Set only `SIGN_IDENTITY` to sign without notarizing. Setting `NOTARY_PROFILE`
 without `SIGN_IDENTITY` is an error. Running the script with neither variable
-produces the same ad-hoc zip as before.
+produces ad-hoc zip and DMG artifacts for local use.
 
 The `com.apple.security.automation.apple-events` entitlement is required because
 the app drives Music and Spotify through `NSAppleScript`; the hardened runtime
@@ -57,5 +63,7 @@ blocks Apple Events without it.
   Automation permission is remembered and users see fewer repeated prompts.
 - A notarized, stapled app opens without the Gatekeeper warning and verifies
   offline.
+- The DMG opens to the app and an Applications shortcut, so installation is a
+  single drag.
 - Notarization does not remove the Automation consent prompt itself. The first
   Apple Events command still asks the user for permission.
