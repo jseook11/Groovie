@@ -1155,10 +1155,18 @@ public enum SelfChecks {
                "a running player beats a closed one")
         expect(preferred(status(.appNotRunning), status(.noTrack)) == .spotify,
                "a closed player never wins over a running one")
+        expect(preferred(status(.appNotRunning), status(.permissionDenied)) == .music,
+               "a denied probe never takes over a closed player")
         expect(preferred(status(.permissionDenied), status(.appNotRunning)) == .music,
-               "a denied provider is selected so the permission alert can surface")
+               "a denied provider is not preferred over the current default")
         expect(preferred(status(.permissionDenied), status(.noTrack)) == .spotify,
                "a usable running provider beats a denied one")
+        expect(preferred(status(.permissionDenied), status(.appNotRunning), current: .spotify) == .spotify,
+               "a denied probe does not displace the current provider")
+        expect(preferred(status(.permissionDenied, later), status(.appNotRunning, earlier), current: .spotify) == .spotify,
+               "a stale playback timestamp does not let a denied probe take over")
+        expect(preferred(status(.permissionDenied, later), status(.permissionDenied, earlier), current: .music) == .music,
+               "two denied players keep the current provider regardless of timestamps")
         expect(preferred(status(.playing, earlier), status(.playing, later)) == .spotify,
                "the most recently started playback wins a playing tie")
         expect(preferred(status(.playing, later), status(.playing, earlier)) == .music,
@@ -1175,6 +1183,46 @@ public enum SelfChecks {
                "pinning overrides auto ranking")
         expect(PlayerSelection.preferred([:], current: nil, preference: .auto) == nil,
                "an empty candidate set has no preference")
+
+        // MARK: Player launch policy
+
+        let both: Set<PlayerID> = [.music, .spotify]
+        expect(PlayerLaunchPolicy.startupPlayer(
+            active: .music,
+            lastActive: nil,
+            installed: both,
+            running: [.spotify]
+        ) == .spotify, "the only running player is the launch target")
+        expect(PlayerLaunchPolicy.startupPlayer(
+            active: .music,
+            lastActive: .spotify,
+            installed: both,
+            running: [.music, .spotify]
+        ) == .spotify, "the last active player wins a two-player start")
+        expect(PlayerLaunchPolicy.startupPlayer(
+            active: .music,
+            lastActive: .spotify,
+            installed: both,
+            running: []
+        ) == .spotify, "no running player falls back to the last active one")
+        expect(PlayerLaunchPolicy.startupPlayer(
+            active: .music,
+            lastActive: nil,
+            installed: both,
+            running: []
+        ) == nil, "no history launches nothing")
+        expect(PlayerLaunchPolicy.startupPlayer(
+            active: .music,
+            lastActive: .spotify,
+            installed: [.music],
+            running: []
+        ) == nil, "a missing last-active player launches nothing")
+        expect(PlayerLaunchPolicy.startupPlayer(
+            active: .music,
+            lastActive: .spotify,
+            installed: [.music],
+            running: [.spotify]
+        ) == nil, "a missing running player is not a launch target")
 
         // MARK: Player preference
 
@@ -1198,6 +1246,24 @@ public enum SelfChecks {
             suite.removePersistentDomain(forName: "com.groovie.selfchecks.player")
         } else {
             expect(false, "could not create a defaults suite for the preference check")
+        }
+
+        // MARK: Player history
+
+        if let suite = UserDefaults(suiteName: "com.groovie.selfchecks.playerHistory") {
+            let domain = "com.groovie.selfchecks.playerHistory"
+            suite.removePersistentDomain(forName: domain)
+            expect(PlayerHistory.lastActive(defaults: suite) == nil,
+                   "an absent history has no launch target")
+            PlayerHistory.recordActive(.spotify, defaults: suite)
+            expect(PlayerHistory.lastActive(defaults: suite) == .spotify,
+                   "the last active player is remembered")
+            suite.set("bogus", forKey: PlayerHistory.lastActiveKey)
+            expect(PlayerHistory.lastActive(defaults: suite) == nil,
+                   "an unknown history value is ignored")
+            suite.removePersistentDomain(forName: domain)
+        } else {
+            expect(false, "could not create a defaults suite for the history check")
         }
 
         // MARK: Report

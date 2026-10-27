@@ -54,7 +54,7 @@ reproduces it.
 
 See [docs/localization/README.md](../docs/localization/README.md) for the translation rules
 and [docs/localization/keys.md](../docs/localization/keys.md) for the context of each key.
-Both are currently written in Korean. Adding a JSON file is enough to make a language
+Both are written in English. Adding a JSON file is enough to make a language
 discoverable:
 
 ```sh

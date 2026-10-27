@@ -38,8 +38,13 @@ enum ArtworkLoader {
             switch http.statusCode {
             case 200..<300:
                 break
-            case 404, 410, 403:
+            case 404, 410:
                 finish(.permanentMiss, completion)
+                return
+            case 403:
+                // A CDN/WAF hiccup or a stale signed URL can heal; a later
+                // read supplies a fresh URL for the same track.
+                finish(.transientFailure, completion)
                 return
             default:
                 finish(.transientFailure, completion)

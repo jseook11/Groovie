@@ -39,6 +39,10 @@ protocol MusicProviding: AnyObject {
     var availability: MusicAvailability { get }
     var artwork: NSImage? { get }
     var onUpdate: (() -> Void)? { get set }
+    /// Stable identity of the provider currently driving the record. Used to
+    /// key per-player UI state such as permission-alert announcements. Nil
+    /// for providers that have no player identity (the demo).
+    var playerIdentity: String? { get }
 
     func start()
     func stop()
@@ -64,6 +68,8 @@ protocol MusicProviding: AnyObject {
 }
 
 extension MusicProviding {
+    var playerIdentity: String? { nil }
+
     func setOverlayEngaged(_ engaged: Bool) {}
 
     func estimatedPosition(at date: Date) -> Double {

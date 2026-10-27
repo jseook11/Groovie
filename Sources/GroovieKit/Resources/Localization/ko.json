@@ -31,7 +31,7 @@
     "status.disabled": "비활성화됨",
     "status.playerNotRunning": "%1$@이(가) 실행 중이 아닙니다",
     "status.noTrack": "재생할 트랙이 없습니다",
-    "status.permissionRequired": "자동화 권한이 필요합니다",
+    "status.permissionRequired": "%1$@ 자동화 권한이 필요합니다",
     "header.noTrack": "재생 중인 곡 없음",
     "overlay.pullToLock": "더 당겨서 고정",
     "overlay.dropToRemove": "놓아서 정리",

@@ -31,7 +31,7 @@
     "status.disabled": "Disabled",
     "status.playerNotRunning": "%1$@ isn't running",
     "status.noTrack": "Nothing to play",
-    "status.permissionRequired": "Automation permission required",
+    "status.permissionRequired": "%1$@ needs Automation permission",
     "header.noTrack": "Nothing playing",
     "overlay.pullToLock": "Pull further to lock",
     "overlay.dropToRemove": "Drop to remove",

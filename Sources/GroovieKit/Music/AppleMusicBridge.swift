@@ -16,7 +16,6 @@ final class AppleMusicBridge: ScriptedPlayerBridge {
     private let log = Logger(subsystem: "com.groovie.app", category: "music")
 
     private var readScript: NSAppleScript?
-    private var readScriptFailed = false
 
     /// Written by callers, read on `queue`. The lock is what actually makes
     /// coalescing work: the newest target replaces any older ones before the
@@ -37,13 +36,11 @@ final class AppleMusicBridge: ScriptedPlayerBridge {
     }
 
     private func performRead() -> Result<PlayerRead, ScriptedBridgeError> {
-        if readScriptFailed {
-            return .failure(.scriptError(-1, "read script unavailable"))
-        }
         if readScript == nil {
             readScript = NSAppleScript(source: Self.readSource)
-            if readScript == nil {
-                readScriptFailed = true
+            // Do not latch a compile failure: a player update or a transient
+            // dictionary load problem should heal on the next read.
+            guard readScript != nil else {
                 return .failure(.scriptError(-1, "could not compile read script"))
             }
         }
@@ -122,13 +119,22 @@ final class AppleMusicBridge: ScriptedPlayerBridge {
     }
 
     private func runPositionScript(_ seconds: Double, completion: @escaping () -> Void) {
-        let clamped = String(format: "%.3f", max(0, seconds))
+        // AppleScript numeric literals always need a dot. `String(format:)`
+        // without an explicit locale follows the user's locale and would emit
+        // "12,345" on a comma-decimal system.
+        let clamped = String(
+            format: "%.3f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            max(0, seconds)
+        )
         let source = """
-        tell application "Music"
-            if it is running then
-                set player position to \(clamped)
-            end if
-        end tell
+        if application "Music" is running then
+            with timeout of 5 seconds
+                tell application "Music"
+                    set player position to \(clamped)
+                end tell
+            end timeout
+        end if
         """
         let script = NSAppleScript(source: source)
         var errorInfo: NSDictionary?
@@ -142,15 +148,20 @@ final class AppleMusicBridge: ScriptedPlayerBridge {
     private func runPlaybackScript(play: Bool, completion: @escaping () -> Void) {
         let action = play ? "play" : "pause"
         let source = """
-        tell application "Music"
-            if it is running then
-                \(action)
-            end if
-        end tell
+        if application "Music" is running then
+            with timeout of 5 seconds
+                tell application "Music"
+                    \(action)
+                end tell
+            end timeout
+        end if
         """
         let script = NSAppleScript(source: source)
         var errorInfo: NSDictionary?
         script?.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            self.reportPermissionDenied(Self.bridgeError(from: errorInfo))
+        }
         completion()
     }
 
@@ -159,11 +170,13 @@ final class AppleMusicBridge: ScriptedPlayerBridge {
     func togglePlayback(completion: ((Bool) -> Void)? = nil) {
         queue.async {
             let source = """
-            tell application "Music"
-                if it is running then
-                    playpause
-                end if
-            end tell
+            if application "Music" is running then
+                with timeout of 5 seconds
+                    tell application "Music"
+                        playpause
+                    end tell
+                end timeout
+            end if
             """
             let script = NSAppleScript(source: source)
             var errorInfo: NSDictionary?
@@ -186,11 +199,13 @@ final class AppleMusicBridge: ScriptedPlayerBridge {
         queue.async {
             let command = toNext ? "next track" : "previous track"
             let source = """
-            tell application "Music"
-                if it is running then
-                    \(command)
-                end if
-            end tell
+            if application "Music" is running then
+                with timeout of 5 seconds
+                    tell application "Music"
+                        \(command)
+                    end tell
+                end timeout
+            end if
             """
             let script = NSAppleScript(source: source)
             var errorInfo: NSDictionary?
@@ -225,16 +240,18 @@ final class AppleMusicBridge: ScriptedPlayerBridge {
 
     private func fetchArtworkData() -> Data? {
         let source = """
-        tell application "Music"
-            if it is running then
-                try
-                    set currentTrackRef to current track
-                    if (count of artworks of currentTrackRef) > 0 then
-                        return raw data of artwork 1 of currentTrackRef
-                    end if
-                end try
-            end if
-        end tell
+        if application "Music" is running then
+            with timeout of 5 seconds
+                tell application "Music"
+                    try
+                        set currentTrackRef to current track
+                        if (count of artworks of currentTrackRef) > 0 then
+                            return raw data of artwork 1 of currentTrackRef
+                        end if
+                    end try
+                end tell
+            end timeout
+        end if
         """
         guard let script = NSAppleScript(source: source) else { return nil }
         var errorInfo: NSDictionary?
@@ -268,30 +285,32 @@ final class AppleMusicBridge: ScriptedPlayerBridge {
     }
 
     private static let readSource = """
-    tell application "Music"
-        if it is running then
-            set stateText to (player state as string)
-            try
-                -- One Apple Event for every track property instead of six
-                -- separate `of current track` reads. The output order below is
-                -- unchanged so `parse` stays the same.
-                set trackProperties to properties of current track
-                set trackPersistentID to (persistent ID of trackProperties) as text
-                set trackName to (name of trackProperties) as text
-                set trackArtist to (artist of trackProperties) as text
-                set trackAlbum to (album of trackProperties) as text
-                set trackDuration to (duration of trackProperties) as real
-                set playerPositionSeconds to (player position) as real
-            on error
-                return "NOTTRACK"
-            end try
-            set positionMilliseconds to (playerPositionSeconds * 1000) as integer
-            set durationMilliseconds to (trackDuration * 1000) as integer
-            set fieldSeparator to (ASCII character 31)
-            return stateText & fieldSeparator & (positionMilliseconds as text) & fieldSeparator & trackPersistentID & fieldSeparator & trackName & fieldSeparator & trackArtist & fieldSeparator & trackAlbum & fieldSeparator & (durationMilliseconds as text)
-        else
-            return "NOTRUNNING"
-        end if
-    end tell
+    if application "Music" is running then
+        with timeout of 5 seconds
+            tell application "Music"
+                set stateText to (player state as string)
+                try
+                    -- One Apple Event for every track property instead of six
+                    -- separate `of current track` reads. The output order below is
+                    -- unchanged so `parse` stays the same.
+                    set trackProperties to properties of current track
+                    set trackPersistentID to (persistent ID of trackProperties) as text
+                    set trackName to (name of trackProperties) as text
+                    set trackArtist to (artist of trackProperties) as text
+                    set trackAlbum to (album of trackProperties) as text
+                    set trackDuration to (duration of trackProperties) as real
+                    set playerPositionSeconds to (player position) as real
+                on error
+                    return "NOTTRACK"
+                end try
+                set positionMilliseconds to (playerPositionSeconds * 1000) as integer
+                set durationMilliseconds to (trackDuration * 1000) as integer
+                set fieldSeparator to (ASCII character 31)
+                return stateText & fieldSeparator & (positionMilliseconds as text) & fieldSeparator & trackPersistentID & fieldSeparator & trackName & fieldSeparator & trackArtist & fieldSeparator & trackAlbum & fieldSeparator & (durationMilliseconds as text)
+            end tell
+        end timeout
+    else
+        return "NOTRUNNING"
+    end if
     """
 }

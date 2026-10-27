@@ -22,6 +22,32 @@ enum PlayerID: String, CaseIterable {
         case .spotify: return "com.spotify.client"
         }
     }
+
+    /// Whether LaunchServices can resolve the app. A missing player must never
+    /// reach AppleScript: compiling `tell application "Spotify"` when Spotify
+    /// is absent can fail permanently or ask the user where the app is.
+    var isInstalled: Bool {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
+
+    var isRunning: Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+    }
+}
+
+/// The last player the app actually drove. Auto mode uses it to decide which
+/// app, if any, may launch on a cold start.
+enum PlayerHistory {
+    static let lastActiveKey = "groovie.player.lastActive"
+
+    static func lastActive(defaults: UserDefaults = .standard) -> PlayerID? {
+        guard let raw = defaults.string(forKey: lastActiveKey) else { return nil }
+        return PlayerID(rawValue: raw)
+    }
+
+    static func recordActive(_ id: PlayerID, defaults: UserDefaults = .standard) {
+        defaults.set(id.rawValue, forKey: lastActiveKey)
+    }
 }
 
 /// The static facts the polling service needs about the player it drives.

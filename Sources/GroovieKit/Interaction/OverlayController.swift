@@ -62,7 +62,7 @@ final class OverlayController {
     private var demoPrevious: MusicProviding?
     private var demoGeneration = 0
     private var isDemoActive = false
-    private var announcedPermissionDenied = false
+    private var announcedPermissionDeniedFor: String?
     /// Global mouse-move monitor while the record is pinned.
     private var hoverMonitors: [Any] = []
     /// Whether the expanded stage is currently on screen. Used to restore the
@@ -292,8 +292,7 @@ final class OverlayController {
     }
 
     private func hideStage() {
-        guard let panel else { return }
-        if panel.frame != geometry.idleFrame {
+        if let panel, panel.frame != geometry.idleFrame {
             panel.setFrame(geometry.idleFrame, display: true)
         }
         stageEngaged = false
@@ -336,11 +335,12 @@ final class OverlayController {
         model.availability = music.availability
         model.permissionDenied = music.availability == .permissionDenied
 
-        if model.permissionDenied, !announcedPermissionDenied {
-            announcedPermissionDenied = true
+        let identity = music.playerIdentity ?? "unknown"
+        if model.permissionDenied, isEnabled, announcedPermissionDeniedFor != identity {
+            announcedPermissionDeniedFor = identity
             onPermissionDenied?()
         } else if !model.permissionDenied {
-            announcedPermissionDenied = false
+            announcedPermissionDeniedFor = nil
         }
 
         let interactive = music.availability.isInteractive && (nowPlaying?.isValid ?? false)

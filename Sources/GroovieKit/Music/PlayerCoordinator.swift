@@ -48,9 +48,9 @@ enum PlayerSelection {
     }
 
     /// Pinned modes return that provider. Auto prefers a playing player, then a
-    /// paused one, then one that only has a track, then a running one. Ties go
-    /// to the most recently started playback, then keep the current provider,
-    /// then Music so a cold start is stable.
+    /// paused one, then one that only has a track; denied and closed players
+    /// tie for last. A playing tie goes to the most recent playback start,
+    /// then keeps the current provider, then Music so a cold start is stable.
     static func preferred(
         _ statuses: [PlayerID: Status],
         current: PlayerID?,
@@ -65,9 +65,12 @@ enum PlayerSelection {
             case .playing: return 4
             case .paused: return 3
             case .noTrack: return 2
-            // A denied provider is running, and selecting it is what lets the
-            // permission alert surface. A closed player has nothing to say.
-            case .permissionDenied: return 1
+            // A denied provider cannot be driven. It is only worth selecting
+            // when it is the player already on screen, where the permission
+            // alert can explain the state; a denied probe must never take over
+            // a working or current player. Explicitly pinning it still starts
+            // it, so the alert can surface on request.
+            case .permissionDenied: return 0
             case .appNotRunning: return 0
             case nil: return 0
             }
@@ -77,18 +80,50 @@ enum PlayerSelection {
         let candidates = order.filter { score($0) == bestScore }
         if candidates.count == 1 { return candidates[0] }
 
-        let dated = candidates.map { id in
-            (id, statuses[id]?.lastStartedPlaying ?? .distantPast)
-        }
-        if let newest = dated.max(by: { $0.1 < $1.1 }), newest.1 > .distantPast {
-            // Only a strictly newer playback start wins a tie; two providers
-            // that have both been playing since launch keep the current one.
-            let newestDate = newest.1
-            let tied = dated.filter { $0.1 == newestDate }
-            if tied.count == 1 { return newest.0 }
+        // Only a playing tie is decided by playback recency. A denied or
+        // closed provider can still carry an old `lastStartedPlaying` from
+        // before it stopped, and that must not let it displace a current or
+        // closed player on an otherwise meaningless tie.
+        if bestScore == 4 {
+            let dated = candidates.map { id in
+                (id, statuses[id]?.lastStartedPlaying ?? .distantPast)
+            }
+            if let newest = dated.max(by: { $0.1 < $1.1 }), newest.1 > .distantPast {
+                // Only a strictly newer playback start wins a tie; two providers
+                // that have both been playing since launch keep the current one.
+                let newestDate = newest.1
+                let tied = dated.filter { $0.1 == newestDate }
+                if tied.count == 1 { return newest.0 }
+            }
         }
         if let current, candidates.contains(current) { return current }
         return candidates.first
+    }
+}
+
+/// Pure cold-start rule, kept static so `--self-test` can verify which app, if
+/// any, auto mode may open. A running player is used as-is; otherwise the last
+/// player the user actually drove is reopened. No history means no launch.
+enum PlayerLaunchPolicy {
+    static func startupPlayer(
+        active: PlayerID,
+        lastActive: PlayerID?,
+        installed: Set<PlayerID>,
+        running: Set<PlayerID>
+    ) -> PlayerID? {
+        let runningInstalled = running.intersection(installed)
+        if runningInstalled.count == 1 {
+            return runningInstalled.first
+        }
+        if runningInstalled.count > 1 {
+            // `active` is the synthetic Music default on a true cold start.
+            // The last player the user actually drove is the better tie-break.
+            return [lastActive, active, runningInstalled.first]
+                .compactMap { $0 }
+                .first { runningInstalled.contains($0) }
+        }
+        guard let lastActive, installed.contains(lastActive) else { return nil }
+        return lastActive
     }
 }
 
@@ -103,8 +138,23 @@ final class PlayerCoordinator: MusicProviding {
     private var statuses: [PlayerID: PlayerSelection.Status] = [:]
     private var wasPlaying: [PlayerID: Bool] = [:]
     private var lastAvailability: [PlayerID: MusicAvailability] = [:]
+    private var installedIDs: Set<PlayerID> = []
+    private var startedIDs: Set<PlayerID> = []
+    /// Avoids rewriting defaults on every poll for the same active player.
+    private var lastRecordedActiveID: PlayerID?
     private var stageEngaged = false
+    /// A takeover became preferable while the record was out. Applying it
+    /// mid-gesture would swap the player under the user's hand and send
+    /// `finishScrub` to the wrong service, so it waits for disengagement.
+    private var pendingSelection = false
+    /// The installed set changed while the record was out; rebuilding services
+    /// would restart the active one mid-gesture.
+    private var pendingRestart = false
+    /// Service callbacks can fire synchronously from `start()`. Selection is
+    /// suspended until every status has been seeded.
+    private var initializing = false
     private var running = false
+    private var playerAppObserver: NSObjectProtocol?
 
     var onUpdate: (() -> Void)?
 
@@ -114,7 +164,10 @@ final class PlayerCoordinator: MusicProviding {
 
     /// Used by the menu header and the permission alert, which name the player
     /// the user is actually controlling.
+    var activePlayerID: PlayerID { activeID }
     var activePlayerName: String { activeID.displayName }
+    var activePlayerIsInstalled: Bool { activeID.isInstalled }
+    var playerIdentity: String? { activeID.rawValue }
 
     private var activeService: ScriptedMusicService {
         // Every PlayerID has a service, so this cannot be nil.
@@ -127,6 +180,7 @@ final class PlayerCoordinator: MusicProviding {
         let spotify = ScriptedMusicService(descriptor: .spotify, bridge: SpotifyBridge())
         self.services = [.music: music, .spotify: spotify]
         self.activeID = preference.playerID ?? .music
+        self.lastRecordedActiveID = PlayerHistory.lastActive()
         for (id, service) in services {
             statuses[id] = PlayerSelection.Status(
                 availability: service.availability,
@@ -141,7 +195,16 @@ final class PlayerCoordinator: MusicProviding {
     // MARK: - MusicProviding
 
     func start() {
+        // The controller calls `start()` again when the screen configuration
+        // changes. Restarting the services there would re-run the cold-start
+        // launch policy and could reopen a player behind the user's back.
+        if running {
+            activeService.setOverlayEngaged(stageEngaged)
+            onUpdate?()
+            return
+        }
         running = true
+        observePlayerApps()
         switch preference {
         case .auto:
             startBoth()
@@ -153,16 +216,73 @@ final class PlayerCoordinator: MusicProviding {
 
     func stop() {
         running = false
+        startedIDs.removeAll()
+        pendingSelection = false
+        pendingRestart = false
+        initializing = false
+        stageEngaged = false
+        if let playerAppObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(playerAppObserver)
+            self.playerAppObserver = nil
+        }
         services.values.forEach { $0.stop() }
+    }
+
+    /// A player installed after launch (or launched for the first time) was not
+    /// in the startup candidate set. Pick it up without requiring a manual
+    /// Reconnect.
+    private func observePlayerApps() {
+        guard playerAppObserver == nil else { return }
+        playerAppObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  let id = PlayerID.allCases.first(where: { $0.bundleID == app.bundleIdentifier })
+            else { return }
+            Task { @MainActor in
+                guard let self, self.running, !self.startedIDs.contains(id) else { return }
+                self.refresh()
+            }
+        }
     }
 
     func refresh() {
         guard running else { return }
+        let installed = Set(PlayerID.allCases.filter { $0.isInstalled })
+        // Rebuilding services while the record is out would restart the active
+        // provider mid-gesture. Record the need and rebuild on disengage.
+        if stageEngaged, installed != installedIDs {
+            pendingRestart = true
+            onUpdate?()
+            return
+        }
         switch preference {
         case .auto:
-            services.values.forEach { $0.refresh() }
+            // An app installed or removed while the menu was open changes the
+            // candidate set; rebuild services instead of polling a player the
+            // coordinator was never told about.
+            if installed != installedIDs {
+                startBoth()
+            } else {
+                installed.forEach { services[$0]?.refresh() }
+            }
         case .music, .spotify:
-            if let id = preference.playerID { services[id]?.refresh() }
+            guard let id = preference.playerID else { break }
+            installedIDs = installed
+            if installed.contains(id) {
+                if startedIDs.contains(id) {
+                    services[id]?.refresh()
+                } else {
+                    startPinned()
+                }
+            } else {
+                // The pinned player is missing: leave it selected so the menu
+                // and header keep naming it, but stop all scripting work.
+                services.values.forEach { $0.stop() }
+                startedIDs.removeAll()
+            }
         }
         onUpdate?()
     }
@@ -170,6 +290,23 @@ final class PlayerCoordinator: MusicProviding {
     func setOverlayEngaged(_ engaged: Bool) {
         stageEngaged = engaged
         activeService.setOverlayEngaged(engaged)
+        guard !engaged else { return }
+        if pendingRestart {
+            pendingRestart = false
+            refresh()
+            return
+        }
+        guard pendingSelection else { return }
+        pendingSelection = false
+        if preference == .auto,
+           let next = PlayerSelection.preferred(
+               eligibleStatuses,
+               current: activeID,
+               preference: .auto
+           ),
+           next != activeID {
+            activate(next)
+        }
     }
 
     func presentPlayer() {
@@ -206,6 +343,13 @@ final class PlayerCoordinator: MusicProviding {
         // choice; the next start honours it. Starting services here would
         // re-arm polling and could launch a player behind a disabled overlay.
         guard running else {
+            // Keep the menu titles honest about the player the user just
+            // pinned, even though no service is running yet.
+            if let id = newPreference.playerID {
+                activeID = id
+            }
+            pendingSelection = false
+            pendingRestart = false
             onUpdate?()
             return
         }
@@ -221,27 +365,36 @@ final class PlayerCoordinator: MusicProviding {
     // MARK: - Lifecycle
 
     private func startBoth() {
+        initializing = true
         services.values.forEach { $0.stop() }
+        startedIDs.removeAll()
         wasPlaying.removeAll()
         statuses.removeAll()
         lastAvailability.removeAll()
+        pendingSelection = false
 
-        // Only one provider may open its app during startup: the one that is
-        // already running, or Music when neither is. Launching both would
-        // surprise a user who only installed the other player.
-        let runningIDs = PlayerID.allCases.filter {
-            !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleID).isEmpty
-        }
-        let startup: PlayerID
-        if runningIDs.count == 1, let only = runningIDs.first {
-            startup = only
-        } else if runningIDs.isEmpty {
-            startup = .music
-        } else {
-            startup = activeID
+        let installed = Set(PlayerID.allCases.filter { $0.isInstalled })
+        installedIDs = installed
+        let running = Set(installed.filter { $0.isRunning })
+
+        // Launch at most one app on a cold start, and only when the choice is
+        // meaningful. An already-running player is used as-is; otherwise the
+        // last player the user actually drove may be reopened. With no history
+        // Auto opens nothing, so a Spotify user is not handed Music.
+        let startup = PlayerLaunchPolicy.startupPlayer(
+            active: activeID,
+            lastActive: PlayerHistory.lastActive(),
+            installed: installed,
+            running: running
+        )
+        // Start from the player we just chose to use or launch. Without this,
+        // an equal-score cold start keeps Music selected even when Spotify is
+        // the only running app, flashing the wrong name until the first poll.
+        if let startup {
+            activeID = startup
         }
 
-        for id in PlayerID.allCases {
+        for id in PlayerID.allCases where installed.contains(id) {
             let service = services[id]!
             service.launchesWhenClosed = (id == startup)
             statuses[id] = PlayerSelection.Status(
@@ -250,29 +403,52 @@ final class PlayerCoordinator: MusicProviding {
             )
             service.start()
         }
+        startedIDs = installed
+        initializing = false
 
-        let next = PlayerSelection.preferred(statuses, current: activeID, preference: .auto)
-        if let next {
-            activate(next)
+        let next = PlayerSelection.preferred(
+            eligibleStatuses,
+            current: activeID,
+            preference: .auto
+        )
+        let fallback: PlayerID
+        if installed.contains(activeID) {
+            fallback = activeID
         } else {
-            activate(.music)
+            fallback = PlayerID.allCases.first { installed.contains($0) } ?? .music
         }
+        activate(next ?? fallback)
     }
 
     private func startPinned() {
         guard let pinned = preference.playerID else { return }
+        initializing = true
         services.values.forEach { $0.stop() }
+        startedIDs.removeAll()
         wasPlaying.removeAll()
+        lastAvailability.removeAll()
+        pendingSelection = false
+
+        let installed = Set(PlayerID.allCases.filter { $0.isInstalled })
+        installedIDs = installed
+        activeID = pinned
+
         for id in PlayerID.allCases {
             statuses[id] = PlayerSelection.Status(
                 availability: services[id]!.availability,
                 lastStartedPlaying: nil
             )
         }
+
+        guard installed.contains(pinned) else {
+            initializing = false
+            return
+        }
         let service = services[pinned]!
         service.launchesWhenClosed = true
-        activeID = pinned
         service.start()
+        startedIDs = [pinned]
+        initializing = false
         service.setProbeMode(false)
         service.setOverlayEngaged(stageEngaged)
     }
@@ -289,7 +465,7 @@ final class PlayerCoordinator: MusicProviding {
             }
         }
         let service = services[id]!
-        service.launchesWhenClosed = true
+        service.launchesWhenClosed = installedIDs.contains(id)
         service.setProbeMode(false)
         service.setOverlayEngaged(stageEngaged)
         service.resumeArtworkIfNeeded()
@@ -297,9 +473,24 @@ final class PlayerCoordinator: MusicProviding {
             availability: service.availability,
             lastStartedPlaying: statuses[id]?.lastStartedPlaying
         )
+        if installedIDs.contains(id),
+           service.availability != .appNotRunning,
+           service.availability != .permissionDenied {
+            recordActiveIfNeeded(id)
+        }
         if changed {
             onUpdate?()
         }
+    }
+
+    private var eligibleStatuses: [PlayerID: PlayerSelection.Status] {
+        statuses.filter { installedIDs.contains($0.key) }
+    }
+
+    private func recordActiveIfNeeded(_ id: PlayerID) {
+        guard lastRecordedActiveID != id else { return }
+        lastRecordedActiveID = id
+        PlayerHistory.recordActive(id)
     }
 
     // MARK: - Updates
@@ -308,6 +499,33 @@ final class PlayerCoordinator: MusicProviding {
         let previousAvailability = lastAvailability[id]
         updateStatus(for: id)
         lastAvailability[id] = services[id]?.availability
+        // `start()` reads providers synchronously, and those callbacks must
+        // not select against a half-seeded status table.
+        guard !initializing else { return }
+
+        // Let the UI and the permission alert observe a denial before any
+        // takeover decision moves the record to another player.
+        if id == activeID, services[id]?.availability == .permissionDenied {
+            onUpdate?()
+            // The other provider may already be playing but will not emit a
+            // new update on its own. Poll it now and reconsider after the
+            // alert has had a chance to run, instead of stranding the record
+            // on a player that cannot be controlled.
+            for playerID in PlayerID.allCases where playerID != id && installedIDs.contains(playerID) {
+                services[playerID]?.pollNow()
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.reconsiderSelection()
+            }
+            return
+        }
+
+        if id == activeID,
+           installedIDs.contains(id),
+           let availability = services[id]?.availability,
+           availability == .playing || availability == .paused || availability == .noTrack {
+            recordActiveIfNeeded(id)
+        }
 
         // The player driving the record just left playback. Check the other
         // provider now instead of waiting out its probe interval, so takeover
@@ -317,18 +535,47 @@ final class PlayerCoordinator: MusicProviding {
            previousAvailability == .playing,
            services[id]?.availability != .playing {
             for playerID in PlayerID.allCases where playerID != id {
-                services[playerID]?.pollNow()
+                if installedIDs.contains(playerID) {
+                    services[playerID]?.pollNow()
+                }
             }
         }
 
         if preference == .auto,
-           let next = PlayerSelection.preferred(statuses, current: activeID, preference: .auto),
+           let next = PlayerSelection.preferred(
+               eligibleStatuses,
+               current: activeID,
+               preference: .auto
+           ),
            next != activeID {
-            activate(next)
+            if stageEngaged {
+                // Swapping mid-gesture would change what the record is
+                // scrubbing and could send finishScrub to the wrong service.
+                pendingSelection = true
+                if id == activeID { onUpdate?() }
+            } else {
+                activate(next)
+            }
             return
         }
         if id == activeID {
             onUpdate?()
+        }
+    }
+
+    /// Re-evaluate auto selection outside a service callback. Used after a
+    /// permission alert and when the record returns from a deferred switch.
+    private func reconsiderSelection() {
+        guard running, !initializing, preference == .auto else { return }
+        guard let next = PlayerSelection.preferred(
+            eligibleStatuses,
+            current: activeID,
+            preference: .auto
+        ), next != activeID else { return }
+        if stageEngaged {
+            pendingSelection = true
+        } else {
+            activate(next)
         }
     }
 
@@ -338,7 +585,11 @@ final class PlayerCoordinator: MusicProviding {
         var status = statuses[id]
             ?? PlayerSelection.Status(availability: service.availability, lastStartedPlaying: nil)
         status.availability = service.availability
-        if playing, wasPlaying[id] != true {
+        // The first observation only tells us the player is playing, not when
+        // it started. Stamping it would let whichever read finishes last win a
+        // two-player playing tie. Only a real paused/stopped -> playing
+        // transition gets a timestamp.
+        if playing, wasPlaying[id] == false {
             status.lastStartedPlaying = Date()
         }
         wasPlaying[id] = playing

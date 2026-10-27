@@ -14,7 +14,6 @@ final class SpotifyBridge: ScriptedPlayerBridge {
     private let log = Logger(subsystem: "com.groovie.app", category: "music")
 
     private var readScript: NSAppleScript?
-    private var readScriptFailed = false
 
     /// Written by callers, read on `queue`. The newest finish replaces any
     /// older target before the queued pump blocks run.
@@ -34,13 +33,11 @@ final class SpotifyBridge: ScriptedPlayerBridge {
     }
 
     private func performRead() -> Result<PlayerRead, ScriptedBridgeError> {
-        if readScriptFailed {
-            return .failure(.scriptError(-1, "read script unavailable"))
-        }
         if readScript == nil {
             readScript = NSAppleScript(source: Self.readSource)
-            if readScript == nil {
-                readScriptFailed = true
+            // Do not latch a compile failure: a player update or a transient
+            // dictionary load problem should heal on the next read.
+            guard readScript != nil else {
                 return .failure(.scriptError(-1, "could not compile read script"))
             }
         }
@@ -129,7 +126,14 @@ final class SpotifyBridge: ScriptedPlayerBridge {
     }
 
     private func runPositionScript(_ seconds: Double, wasPlaying: Bool, completion: @escaping () -> Void) {
-        let clamped = String(format: "%.3f", max(0, seconds))
+        // AppleScript numeric literals always need a dot. `String(format:)`
+        // without an explicit locale follows the user's locale and would emit
+        // "12,345" on a comma-decimal system.
+        let clamped = String(
+            format: "%.3f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            max(0, seconds)
+        )
         // When paused, start playback first so the seek lands, then return to
         // the paused state the scrub started from.
         let body: String
@@ -144,9 +148,11 @@ final class SpotifyBridge: ScriptedPlayerBridge {
         }
         let source = """
         if application "Spotify" is running then
-            tell application "Spotify"
-                \(body)
-            end tell
+            with timeout of 5 seconds
+                tell application "Spotify"
+                    \(body)
+                end tell
+            end timeout
         end if
         """
         let script = NSAppleScript(source: source)
@@ -164,9 +170,11 @@ final class SpotifyBridge: ScriptedPlayerBridge {
         queue.async {
             let source = """
             if application "Spotify" is running then
-                tell application "Spotify"
-                    playpause
-                end tell
+                with timeout of 5 seconds
+                    tell application "Spotify"
+                        playpause
+                    end tell
+                end timeout
             end if
             """
             let script = NSAppleScript(source: source)
@@ -194,9 +202,11 @@ final class SpotifyBridge: ScriptedPlayerBridge {
             let command = toNext ? "next track" : "previous track"
             let source = """
             if application "Spotify" is running then
-                tell application "Spotify"
-                    \(command)
-                end tell
+                with timeout of 5 seconds
+                    tell application "Spotify"
+                        \(command)
+                    end tell
+                end timeout
             end if
             """
             let script = NSAppleScript(source: source)
@@ -239,32 +249,59 @@ final class SpotifyBridge: ScriptedPlayerBridge {
 
     private static let readSource = """
     if application "Spotify" is running then
-        tell application "Spotify"
-            set stateText to (player state as text)
-            try
-                -- `properties of current track` fails in Spotify (-10000), but
-                -- a property list is answered in one Apple Event.
-                set trackProperties to {name, artist, album, duration, id, artwork url} of current track
-            on error
-                return "NOTTRACK"
-            end try
-            set trackName to (item 1 of trackProperties) as text
-            set trackArtist to (item 2 of trackProperties) as text
-            set trackAlbum to (item 3 of trackProperties) as text
-            set trackDuration to (item 4 of trackProperties) as integer
-            set trackID to (item 5 of trackProperties) as text
-            set artworkText to ""
-            try
-                set artworkText to (item 6 of trackProperties) as text
-            end try
-            set playerPositionSeconds to 0
-            try
-                set playerPositionSeconds to (player position) as real
-            end try
-            set positionMilliseconds to (playerPositionSeconds * 1000) as integer
-            set fieldSeparator to (ASCII character 31)
-            return stateText & fieldSeparator & trackID & fieldSeparator & trackName & fieldSeparator & trackArtist & fieldSeparator & trackAlbum & fieldSeparator & (trackDuration as text) & fieldSeparator & artworkText & fieldSeparator & (positionMilliseconds as text)
-        end tell
+        with timeout of 5 seconds
+            tell application "Spotify"
+                set stateText to (player state as text)
+                try
+                    -- `properties of current track` fails in Spotify (-10000), but
+                    -- a property list is answered in one Apple Event.
+                    set trackProperties to {name, artist, album, duration, id, artwork url} of current track
+                on error
+                    return "NOTTRACK"
+                end try
+                -- Every coercion is guarded: Spotify uses `missing value` for
+                -- fields that do not apply (ads, local files, pauses), and
+                -- `missing value as integer` raises -1700. Text coercion of
+                -- missing value yields the literal "missing value", so those
+                -- are normalized to empty as well.
+                set trackName to ""
+                set trackArtist to ""
+                set trackAlbum to ""
+                set trackDuration to 0
+                set trackID to ""
+                set artworkText to ""
+                try
+                    set trackName to (item 1 of trackProperties) as text
+                    if trackName is "missing value" then set trackName to ""
+                end try
+                try
+                    set trackArtist to (item 2 of trackProperties) as text
+                    if trackArtist is "missing value" then set trackArtist to ""
+                end try
+                try
+                    set trackAlbum to (item 3 of trackProperties) as text
+                    if trackAlbum is "missing value" then set trackAlbum to ""
+                end try
+                try
+                    set trackDuration to (item 4 of trackProperties) as integer
+                end try
+                try
+                    set trackID to (item 5 of trackProperties) as text
+                    if trackID is "missing value" then set trackID to ""
+                end try
+                try
+                    set artworkText to (item 6 of trackProperties) as text
+                    if artworkText is "missing value" then set artworkText to ""
+                end try
+                set playerPositionSeconds to 0
+                try
+                    set playerPositionSeconds to (player position) as real
+                end try
+                set positionMilliseconds to (playerPositionSeconds * 1000) as integer
+                set fieldSeparator to (ASCII character 31)
+                return stateText & fieldSeparator & trackID & fieldSeparator & trackName & fieldSeparator & trackArtist & fieldSeparator & trackAlbum & fieldSeparator & (trackDuration as text) & fieldSeparator & artworkText & fieldSeparator & (positionMilliseconds as text)
+            end tell
+        end timeout
     else
         return "NOTRUNNING"
     end if

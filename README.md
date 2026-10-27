@@ -36,7 +36,7 @@
 
 ---
 
-Groovie turns the MacBook camera notch into a control surface for Apple Music. Click the notch to
+Groovie turns the MacBook camera notch into a control surface for Apple Music and Spotify. Click the notch to
 pause, swipe across it to skip, or pull the record down to explore. The record lives inside the
 notch: pull it far enough and it snaps out with a magnetic detent. Grab it and turn it sideways to
 seek — slowly for precision, quickly to jump. Pull once more and it stays out, ready for play/pause
@@ -282,10 +282,13 @@ Some implementation details that make the physical metaphor work:
 - **A serial bridge to the active player.** Every AppleScript command goes through one queue per
   player. The position is estimated locally between polls, and a requested play state is held
   briefly until the player agrees, so a stale read cannot flip the record back.
-- **Automatic player selection.** `PlayerCoordinator` runs both services in auto mode: the one
-  driving the record polls normally, the other at a slow probe cadence, so starting playback in
-  the other app is noticed without doubling the AppleScript cost. Pinning a player stops the
-  other one entirely.
+- **Automatic player selection.** `PlayerCoordinator` runs every installed player's service in
+  auto mode: the one driving the record polls normally, the other at a 30 s safety-net probe, so
+  starting playback in the other app is noticed without doubling the AppleScript cost. A
+  missing player is never started and is greyed out in the Player submenu. Pinning a player stops
+  the other one entirely. On a cold start it reopens only the last player it actually drove, and
+  launches nothing when there is no history. A takeover that becomes preferable while the record
+  is out waits until the record returns, so a gesture never switches players underneath it.
 - **One axis per scroll gesture.** `ScrollAxisLock` decides between horizontal and vertical early
   and keeps that decision until the gesture ends. It is a pure value type, which makes the tricky
   part of track skipping straightforward to test.
@@ -389,7 +392,7 @@ open build/Groovie.app --args --lang=ja
 
 See [docs/localization/README.md](docs/localization/README.md) for the translation rules and
 [docs/localization/keys.md](docs/localization/keys.md) for the context of each key. Both are
-currently written in Korean.
+written in English.
 
 ## Tuning
 
@@ -415,8 +418,10 @@ Record palettes are in `VinylSkin`; the selected skin is stored under `groovie.s
 - Spotify's playback-state notification is undocumented. Groovie only treats it as a hint and
   keeps polling, so if a future Spotify stops posting it, updates merely slow to the polling
   cadence. Seeks and a contextual "previous" do not post it.
-- Auto mode probes a running player, which can trigger its Automation prompt even if you normally
-  use the other one; pin a player to avoid that.
+- Auto mode probes only installed players, and with no launch history it opens nothing on a cold
+  start. Probing a running player can still trigger its Automation prompt even if you normally use
+  the other one, and a denied probe is not selected over a usable player; pin a player to avoid
+  the prompt entirely.
 - Rebuilding changes the ad-hoc signature, so macOS may ask for Automation permission again during
   development.
 

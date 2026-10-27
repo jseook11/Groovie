@@ -39,6 +39,17 @@ final class ScriptedMusicService: MusicProviding {
     private var readInFlight = false
     private var permissionDenied = false
     private var launchInFlight = false
+    /// A player that stops answering Apple Events must not leave the record
+    /// spinning on a phantom track forever. Degrade after a few failed reads.
+    private var consecutiveReadFailures = 0
+    /// Notification-driven reads are throttled so an undocumented, chatty
+    /// player notification cannot turn into a read per event.
+    private var lastReadStartedAt = Date.distantPast
+    private let notificationReadThrottle: TimeInterval = 0.5
+    /// An activation is the best signal that the user may have just granted
+    /// Automation access; retry a denied player, but not on every focus change.
+    private var lastPermissionRetryAt = Date.distantPast
+    private let permissionRetryInterval: TimeInterval = 5
 
     /// Bumped whenever the service starts or stops. Completions from an older
     /// generation are dropped before they can touch state or re-arm work.
@@ -150,8 +161,18 @@ final class ScriptedMusicService: MusicProviding {
         scheduledPoll = nil
         readInFlight = false
         needsImmediatePoll = false
+        launchInFlight = false
+        consecutiveReadFailures = 0
+        lastReadStartedAt = .distantPast
         playerIsRunning = false
         lastRunningCheck = Date()
+        // A stopped service must not keep publishing the track it last read:
+        // a preference switch or overlay rebuild would otherwise seed the
+        // coordinator and the menu with stale availability and artwork.
+        availability = .appNotRunning
+        nowPlaying = nil
+        artwork = nil
+        clearPendingPlayback()
         artworkCache.removeAllObjects()
         noCoverTracks.removeAll()
         artworkRequestTrackID = nil
@@ -182,11 +203,28 @@ final class ScriptedMusicService: MusicProviding {
             start()
             return
         }
+        // Clear the denied state while re-checking. The controller otherwise
+        // keeps its "already announced" flag and an explicit retry could never
+        // surface a permission alert again.
+        if availability == .permissionDenied {
+            availability = .appNotRunning
+        }
         refreshPlayerRunning()
         startPolling()
         presentWhenNoTrack = true
         launchPlayerIfNeeded()
         pollNow()
+    }
+
+    /// Activation is the strongest hint that the user may have just granted
+    /// Automation access in System Settings. Retry a denied player, with a
+    /// short cooldown so alt-tabbing does not spam Apple Events.
+    private func retryPermissionIfNeeded() {
+        guard permissionDenied,
+              Date().timeIntervalSince(lastPermissionRetryAt) >= permissionRetryInterval
+        else { return }
+        lastPermissionRetryAt = Date()
+        refresh()
     }
 
     private func observeWorkspace() {
@@ -242,7 +280,22 @@ final class ScriptedMusicService: MusicProviding {
                 self?.pollNow()
             }
         }
-        runningObservers = [launch, terminate, wake]
+        let activate = center.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.bundleIdentifier == bundleID
+            else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                self.playerIsRunning = true
+                self.lastRunningCheck = Date()
+                self.retryPermissionIfNeeded()
+            }
+        }
+        runningObservers = [launch, terminate, wake, activate]
 
         if let notification = descriptor.changeNotification {
             changeObserver = DistributedNotificationCenter.default().addObserver(
@@ -265,6 +318,16 @@ final class ScriptedMusicService: MusicProviding {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.changeDebounce = nil
+                if self.readInFlight {
+                    // Coalesce with the read that is already running.
+                    self.pollNow()
+                    return
+                }
+                // Do not let a chatty undocumented notification turn into a
+                // read per event. A read from the last half second is fresh.
+                guard Date().timeIntervalSince(self.lastReadStartedAt)
+                    >= self.notificationReadThrottle
+                else { return }
                 self.pollNow()
             }
         }
@@ -382,9 +445,10 @@ final class ScriptedMusicService: MusicProviding {
             return
         }
         launchInFlight = true
+        let generation = lifecycleGeneration
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, _ in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, self.started, generation == self.lifecycleGeneration else { return }
                 self.launchInFlight = false
                 self.playerIsRunning = true
                 self.lastRunningCheck = Date()
@@ -453,6 +517,7 @@ final class ScriptedMusicService: MusicProviding {
         }
         needsImmediatePoll = false
         readInFlight = true
+        lastReadStartedAt = Date()
         let generation = lifecycleGeneration
         bridge.read { [weak self] result in
             Task { @MainActor in
@@ -491,19 +556,32 @@ final class ScriptedMusicService: MusicProviding {
             case .permissionDenied:
                 handlePermissionDenied()
             case .notRunning:
+                consecutiveReadFailures = 0
                 applyNotRunning()
             case .scriptError(let number, let message):
+                consecutiveReadFailures += 1
                 log.error("Read failed (\(number)): \(message, privacy: .public)")
+                // Do not leave the record spinning on a snapshot that will
+                // never update. A player behind a modal/hung Apple Event
+                // source gets a few chances, then the UI stops lying.
+                if consecutiveReadFailures >= 3 {
+                    consecutiveReadFailures = 0
+                    presentWhenNoTrack = false
+                    applyNoTrack()
+                }
             }
             return
 
         case .success(.notRunning):
+            consecutiveReadFailures = 0
             applyNotRunning()
 
         case .success(.noTrack):
+            consecutiveReadFailures = 0
             applyNoTrack()
 
         case .success(.track(let reading)):
+            consecutiveReadFailures = 0
             let duration = Double(reading.durationMilliseconds) / 1000
             guard duration > 0.5 else {
                 applyNoTrack()
@@ -639,21 +717,24 @@ final class ScriptedMusicService: MusicProviding {
     // MARK: - Seeking
 
     func finishScrub(position: Double, wasPlaying: Bool) {
+        guard started else { return }
+        var target = position
         if var now = nowPlaying {
             now.position = min(max(position, 0), now.duration)
+            target = now.position
             now.sampledAt = Date()
             if now.isPlaying != wasPlaying {
                 now.isPlaying = wasPlaying
             }
             nowPlaying = now
         }
-        bridge.finish(position: position, wasPlaying: wasPlaying) { [weak self] in
+        bridge.finish(position: target, wasPlaying: wasPlaying) { [weak self] in
             self?.pollNow()
         }
     }
 
     func togglePlayback() {
-        guard var now = nowPlaying else { return }
+        guard started, var now = nowPlaying else { return }
         // Reflect the new state immediately so the record starts or stops
         // spinning without waiting for the AppleScript round trip.
         now.position = estimatedPosition(at: Date())
@@ -682,7 +763,7 @@ final class ScriptedMusicService: MusicProviding {
     }
 
     private func skip(forward: Bool) {
-        guard nowPlaying != nil else { return }
+        guard started, nowPlaying != nil else { return }
         // The next track's metadata is unknown until the player answers, so
         // read it back as soon as the command completes instead of showing a
         // guess.
@@ -730,7 +811,10 @@ final class ScriptedMusicService: MusicProviding {
         } else if let url {
             requestDownloadedArtwork(for: trackID, url: url)
         } else {
-            finishArtwork(for: trackID, image: nil, permanentMiss: true)
+            // Spotify can omit the URL on the first read after a skip or
+            // pause. Do not burn the track's permanent-miss marker; the next
+            // poll can supply it.
+            finishArtwork(for: trackID, image: nil, permanentMiss: false)
         }
     }
 
@@ -780,6 +864,21 @@ final class ScriptedMusicService: MusicProviding {
         if artworkRequestTrackID == trackID {
             artworkRequestTrackID = nil
         }
+
+        let currentTrackID = nowPlaying?.trackID
+        if bridge.providesEmbeddedArtwork, currentTrackID != trackID {
+            // The embedded-artwork script re-reads whichever track is current
+            // when it runs, so this image may belong to the new track. Do not
+            // cache it under the old ID.
+            if let currentTrackID,
+               artworkCache.object(forKey: currentTrackID as NSString) == nil,
+               !noCoverTracks.contains(currentTrackID) {
+                updateArtwork(for: currentTrackID, url: currentArtworkURL)
+                onUpdate?()
+            }
+            return
+        }
+
         if let image {
             artworkCache.setObject(
                 image,
@@ -790,7 +889,6 @@ final class ScriptedMusicService: MusicProviding {
             noCoverTracks.insert(trackID)
         }
 
-        let currentTrackID = nowPlaying?.trackID
         guard currentTrackID == trackID else {
             // The user moved on while this read was in flight. Keep the result
             // for when they come back, and fetch the current track's artwork now.

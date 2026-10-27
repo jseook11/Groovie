@@ -16,7 +16,7 @@
 <p align="center">
   <a href="#요구-사항"><img src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white&style=flat-square" alt="macOS 14 이상"></a>
   <a href="#요구-사항"><img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white&style=flat-square" alt="Swift 6.0"></a>
-  <a href="#apple-music"><img src="https://img.shields.io/badge/Apple%20Music-driven-FA2D48?logo=applemusic&logoColor=white&style=flat-square" alt="Apple Music"></a>
+  <a href="#apple-music과-spotify"><img src="https://img.shields.io/badge/Music%20%2B%20Spotify-driven-FA2D48?logo=applemusic&logoColor=white&style=flat-square" alt="Apple Music과 Spotify"></a>
   <a href="#동작-방식"><img src="https://img.shields.io/badge/dependencies-none-3DA639?style=flat-square" alt="의존성 없음"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-4C78A8?style=flat-square" alt="MIT 라이선스"></a>
 </p>
@@ -36,7 +36,7 @@
 
 ---
 
-Groovie는 맥북의 카메라 노치를 Apple Music을 조작하는 작은 아날로그 덱으로 바꿔 줍니다.
+Groovie는 맥북의 카메라 노치를 Apple Music과 Spotify를 조작하는 작은 아날로그 덱으로 바꿔 줍니다.
 레코드를 꺼내지 않고도 노치를 클릭해 재생을 멈추거나 시작하고, 스와이프해 곡을 넘기고,
 레코드를 아래로 당겨 탐색할 수 있습니다. 레코드는 평소 노치 속에 숨어 있다가, 충분히
 당기면 자석처럼 경쾌하게 모습을 드러냅니다. 잡고 좌우로 돌리면 재생 위치를 탐색합니다.
@@ -286,10 +286,13 @@ idle ── hover ──► armed ── pull ──► pulling ── detent �
 - **활성 플레이어로 가는 직렬 브리지.** 모든 AppleScript 명령은 플레이어별 하나의 큐를
   지납니다. 재생 위치는 폴링 사이에 로컬로 추정하고, 요청한 재생 상태는 플레이어가 동의할
   때까지 잠시 유지합니다. 오래된 읽기 결과가 레코드를 되돌리지 못합니다.
-- **자동 플레이어 선택.** `PlayerCoordinator`는 자동 모드에서 두 서비스를 함께 실행합니다.
-  레코드를 구동하는 쪽은 정상 주기로, 다른 쪽은 느린 프로브 주기로 폴링하므로 다른 앱에서
-  재생을 시작해도 AppleScript 비용을 두 배로 늘리지 않고 알아챕니다. 플레이어를 고정하면
-  나머지 서비스는 완전히 멈춥니다.
+- **자동 플레이어 선택.** `PlayerCoordinator`는 자동 모드에서 설치된 플레이어의 서비스만
+  실행합니다. 레코드를 구동하는 쪽은 정상 주기로, 다른 쪽은 30초 안전망 프로브로 폴링하므로
+  다른 앱에서 재생을 시작해도 AppleScript 비용을 두 배로 늘리지 않고 알아챕니다. 설치되지
+  않은 플레이어는 시작하지 않고 플레이어 하위 메뉴에서 회색으로 표시합니다. 플레이어를
+  고정하면 나머지 서비스는 완전히 멈춥니다. 콜드 스타트에서는 마지막으로 실제 구동했던
+  플레이어만 다시 열고, 기록이 없으면 아무 것도 실행하지 않습니다. 레코드가 나와 있는 동안
+  더 나은 후보가 생기면 전환을 미뤘다가 레코드가 돌아간 뒤 적용합니다.
 - **스크롤 제스처당 하나의 축.** `ScrollAxisLock`은 제스처가 시작될 때 가로·세로 축을 먼저
   판단하고, 제스처가 끝날 때까지 그 결정을 유지합니다. 순수 값 타입이라 곡 넘기기의
   까다로운 부분을 간단하게 테스트할 수 있습니다.
@@ -392,8 +395,8 @@ open build/Groovie.app --args --lang=ja
 ```
 
 번역 규칙은 [docs/localization/README.md](docs/localization/README.md), 키별 문맥은
-[docs/localization/keys.md](docs/localization/keys.md)를 참고하세요. 두 문서 모두
-한국어로 작성되어 있습니다.
+[docs/localization/keys.md](docs/localization/keys.md)를 참고하세요. 두 문서 모두 영어로
+작성되어 있습니다.
 
 ## 튜닝
 
@@ -419,8 +422,10 @@ open build/Groovie.app --args --lang=ja
 - Spotify의 재생 상태 알림은 비공식입니다. Groovie는 이를 힌트로만 쓰고 폴링을 계속하므로,
   나중에 Spotify가 알림을 보내지 않아도 폴링 주기로만 느려집니다. 탐색과 문맥형
   "이전 곡"은 알림을 보내지 않습니다.
-- 자동 모드는 실행 중인 다른 플레이어도 확인하므로, 평소 쓰지 않는 앱의 자동화 권한
-  요청이 뜰 수 있습니다. 플레이어를 고정하면 피할 수 있습니다.
+- 자동 모드는 설치된 플레이어만 확인하고, 실행 기록이 없으면 콜드 스타트에서 아무 것도
+  실행하지 않습니다. 실행 중인 다른 플레이어를 확인할 때는 여전히 자동화 권한 요청이 뜰 수
+  있지만, 권한이 거부된 플레이어가 사용 가능한 플레이어를 밀어내지는 않습니다. 권한 요청
+  자체를 피하려면 플레이어를 고정하세요.
 - 다시 빌드하면 ad-hoc 서명이 바뀌어 macOS가 자동화 권한을 다시 물을 수 있습니다.
 
 ## 기여

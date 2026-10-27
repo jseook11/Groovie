@@ -18,7 +18,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     private let gestureHint = GestureHintPresenter()
     private var hintSchedule: DispatchWorkItem?
     private static let gestureHintShownKey = "groovie.gestureHintShown"
-    private var permissionAlertShown = false
+    private var permissionAlertsShown: Set<PlayerID> = []
     private var screenObserver: NSObjectProtocol?
     private let updateChecker = UpdateChecker()
     private var availableUpdate: UpdateChecker.Release?
@@ -322,7 +322,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             )
             item.target = self
             item.representedObject = preference.rawValue
-            item.isEnabled = hasNotch && enabled && controller != nil && playerCoordinator != nil
+            let installed = preference.playerID?.isInstalled ?? true
+            item.isEnabled = hasNotch
+                && enabled
+                && controller != nil
+                && playerCoordinator != nil
+                && installed
             item.state = playerCoordinator?.preference == preference ? .on : .off
             playerMenu.addItem(item)
         }
@@ -347,7 +352,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             keyEquivalent: ""
         )
         retryItem.target = self
-        retryItem.isEnabled = hasNotch && enabled
+        retryItem.isEnabled = hasNotch
+            && enabled
+            && playerCoordinator != nil
+            && (playerCoordinator?.activePlayerIsInstalled ?? true)
         menu.addItem(retryItem)
 
         let playerOpenItem = NSMenuItem(
@@ -356,6 +364,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             keyEquivalent: ""
         )
         playerOpenItem.target = self
+        playerOpenItem.isEnabled = hasNotch
+            && enabled
+            && playerCoordinator != nil
+            && (playerCoordinator?.activePlayerIsInstalled ?? true)
         menu.addItem(playerOpenItem)
 
         let automationItem = NSMenuItem(
@@ -424,7 +436,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         case .noTrack:
             menuHeader.setStatus(L10n.t(.statusNoTrack))
         case .permissionDenied:
-            menuHeader.setStatus(L10n.t(.statusPermissionRequired), warning: true)
+            menuHeader.setStatus(
+                L10n.t(.statusPermissionRequired, activePlayerName),
+                warning: true
+            )
         case .playing, .paused:
             let snapshot = controller.playbackSnapshot()
             menuHeader.setContent(
@@ -470,6 +485,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     }
 
     @objc private func retryPlayer() {
+        // An explicit retry is a new permission attempt; allow the alert for
+        // the player to appear again if access is still denied.
+        permissionAlertsShown.removeAll()
         controller?.refreshMusic()
     }
 
@@ -516,6 +534,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         guard let raw = sender.representedObject as? String,
               let preference = PlayerPreference(rawValue: raw)
         else { return }
+        // Choosing the already-selected player is a natural "try again" after
+        // granting Automation access.
+        if playerCoordinator?.preference == preference {
+            retryPlayer()
+            return
+        }
+        permissionAlertsShown.removeAll()
         playerCoordinator?.setPreference(preference)
         rebuildMenu()
     }
@@ -630,13 +655,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     }
 
     private func showPermissionAlert() {
-        guard !permissionAlertShown else { return }
-        permissionAlertShown = true
+        let playerID = playerCoordinator?.activePlayerID ?? .music
+        guard !permissionAlertsShown.contains(playerID) else { return }
+        permissionAlertsShown.insert(playerID)
 
+        let playerName = playerCoordinator?.activePlayerName ?? playerID.displayName
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = L10n.t(.alertPermissionTitle, activePlayerName)
-        alert.informativeText = L10n.t(.alertPermissionBody, activePlayerName)
+        alert.messageText = L10n.t(.alertPermissionTitle, playerName)
+        alert.informativeText = L10n.t(.alertPermissionBody, playerName)
         alert.addButton(withTitle: L10n.t(.alertOpenSettings))
         alert.addButton(withTitle: L10n.t(.alertLater))
 

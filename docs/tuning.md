@@ -39,8 +39,10 @@ uses the 260/24 pair above.
 ## Music providers
 
 `Music/PlayerCoordinator.swift` drives one `ScriptedMusicService` per player. In **auto** mode
-both services run: the selected one uses the normal cadence below, the other a slower probe
-cadence. Pinning a player stops the other service completely, so it costs nothing.
+every installed player runs: the selected one uses the normal cadence below, the other a slower
+probe cadence. Pinning a player stops the other service completely, so it costs nothing. A
+missing player is never started, never receives AppleScript, and is greyed out in the Player
+submenu.
 
 | Availability | Engaged | Background | Probe |
 | --- | ---: | ---: | ---: |
@@ -54,16 +56,25 @@ the undocumented `com.spotify.client.PlaybackStateChanged`). The service debounc
 and reads authoritative state, so the table above is a safety net, not the primary trigger. A
 probe that receives the notification polls immediately, which is why probe mode can sit at 30 s.
 
-- Auto ranks `playing > paused > noTrack > permissionDenied > appNotRunning`. A playing tie goes
-  to the most recent playback start, then the current provider, then Music.
+- Auto ranks `playing > paused > noTrack`; `permissionDenied` and `appNotRunning` both count as
+  unavailable, so a denied probe never displaces a usable or current player. Uninstalled players
+  are excluded. A playing tie goes to the most recent playback start, then the current provider,
+  then Music when it is a candidate.
 - A probe never downloads artwork. Promotion to active fetches the current cover immediately.
+- AppleScript commands carry a 5 s timeout. Notification-driven reads are throttled to one per
+  0.5 s, and three consecutive read failures drop the stale snapshot instead of leaving the
+  record spinning on a phantom track.
 - When the selected provider leaves playback, the other one is polled once immediately instead
   of waiting out its probe interval.
+- While the record is out, a better candidate is queued instead of applied. Switching mid-gesture
+  would change what the record is scrubbing and could send the seek to the wrong service; the
+  queued choice is applied when the record returns.
 - Artwork: Music embeds raw data in the script; Spotify supplies an HTTPS URL that
   `Music/ArtworkLoader.swift` downloads (10 s timeout, 32 MB cap, `image/*` only) and downsamples
   to 320 px with the same ImageIO path.
-- On startup only the provider that is already running — or Music when neither is — may launch
-  its app. Auto never opens both.
+- On startup at most one app may launch. A player that is already running is used as-is; when
+  none is running, the last player Groovie actually drove (`groovie.player.lastActive`) is
+  reopened if installed. With no history, auto launches nothing.
 
 ## Notch geometry
 
@@ -207,4 +218,5 @@ enlarged derivative of the mark.
 | --- | --- |
 | `groovie.skinID` | Selected record skin. |
 | `groovie.player` | Player preference: `auto`, `music`, or `spotify`. |
+| `groovie.player.lastActive` | Last player Groovie drove; the only auto cold-start launch target. |
 | `groovie.gestureHintShown` | Whether the first-run gesture card has been seen. |
