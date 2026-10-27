@@ -4,6 +4,7 @@ build/
 *.xcodeproj
 
 .claude/
+.commandcode/
 
 # Local credentials and signing material
 .env
