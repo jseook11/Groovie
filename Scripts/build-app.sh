@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
 UNIVERSAL="${UNIVERSAL:-0}"
+# Empty keeps the ad-hoc signature used for local builds. Set to a
+# "Developer ID Application: Name (TEAMID)" identity to sign for release.
+SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 cd "$ROOT"
 
 BUILD_ARGS=(-c "$CONFIG")
@@ -44,7 +47,22 @@ fi
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # Ad-hoc signature: stable enough for local use and Automation permission prompts.
-codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/Groovie" >/dev/null 2>&1 || true
-codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || true
+if [ -z "$SIGN_IDENTITY" ]; then
+    codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/Groovie" >/dev/null 2>&1 || true
+    codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || true
+else
+    # Developer ID: notarization requires the hardened runtime. Under it, Apple
+    # Events are blocked unless the automation entitlement is embedded.
+    ENTITLEMENTS="$ROOT/Resources/Groovie.entitlements"
+    if [ ! -f "$ENTITLEMENTS" ]; then
+        echo "error: missing entitlements: $ENTITLEMENTS" >&2
+        exit 1
+    fi
+    # Signing the bundle also signs the main executable, so sign it once.
+    # --timestamp contacts Apple's timestamp server, which Developer ID needs.
+    codesign --force --options runtime --timestamp \
+        --entitlements "$ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP"
+    codesign --verify --deep --strict --verbose=2 "$APP"
+fi
 
 echo "Built $APP"

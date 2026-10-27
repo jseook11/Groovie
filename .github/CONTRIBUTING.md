@@ -44,6 +44,11 @@ the [README](../README.md#development-flags).
 - Do not commit `build/`, `.build/`, `DerivedData/`, or any signing material.
 - By contributing you agree to license your work under the project's [MIT license](../LICENSE).
 
+## Releasing
+
+See [docs/release.md](../docs/release.md) for Developer ID signing and
+notarization. Local ad-hoc builds need no Apple account.
+
 ## Reporting bugs
 
 Open an issue with the bug report template. Include the macOS version, Mac model (notch or
