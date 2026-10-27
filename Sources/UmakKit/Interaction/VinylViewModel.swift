@@ -7,9 +7,9 @@ final class VinylViewModel: ObservableObject {
     @Published var phase: VinylPhase = .idle
     @Published var exposure: CGFloat = 0
     @Published var angle: Double = 0
-    /// True while Core Animation spins the disc at playback speed. The angle is
-    /// only sampled at transitions; the view does not update per frame.
-    @Published var isSpinning: Bool = false
+    /// Playback rotation, including its run-up and brake. Core Animation renders
+    /// it from the same curve, so the angle is only sampled at transitions.
+    @Published var spin: SpinMotion = .stopped
     @Published var offsetSeconds: Double = 0
     @Published var confirmProgress: Double = 0
     @Published var showConfirmGauge = false

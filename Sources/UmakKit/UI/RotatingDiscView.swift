@@ -5,15 +5,14 @@ import SwiftUI
 ///
 /// Playback rotation is a Core Animation animation running on the render
 /// server, so a record left out while music plays does not drive SwiftUI's
-/// view graph every frame. Only a scrub (where the angle follows the pointer)
-/// updates the view, and the freeze/spin transitions are driven by the
-/// controller's phase changes.
+/// view graph every frame. The run-up and brake are keyframe animations built
+/// from the same `SpinMotion` the controller samples, so taking the angle with
+/// the pointer mid-transition never jumps.
 struct RotatingDiscView: NSViewRepresentable {
     let image: NSImage?
     let size: CGFloat
     let angle: Double
-    let isSpinning: Bool
-    let degreesPerSecond: Double
+    let spin: SpinMotion
 
     func makeNSView(context: Context) -> DiscLayerView {
         let view = DiscLayerView()
@@ -22,19 +21,18 @@ struct RotatingDiscView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: DiscLayerView, context: Context) {
-        view.update(
-            image: image,
-            angle: angle,
-            isSpinning: isSpinning,
-            degreesPerSecond: degreesPerSecond
-        )
+        view.update(image: image, angle: angle, spin: spin)
     }
 }
 
 final class DiscLayerView: NSView {
     private let spinner = CALayer()
     private var textureIdentity: ObjectIdentifier?
-    private let rotationKey = "com.umak.disc.spin"
+    private let rampKey = "com.umak.disc.ramp"
+    private let steadyKey = "com.umak.disc.steady"
+    /// The motion already handed to the layer. Unrelated SwiftUI updates must
+    /// not restart an animation that is in flight.
+    private var appliedSpin: SpinMotion?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -72,31 +70,91 @@ final class DiscLayerView: NSView {
         CATransaction.commit()
     }
 
-    func update(image: NSImage?, angle: Double, isSpinning: Bool, degreesPerSecond: Double) {
+    func update(image: NSImage?, angle: Double, spin: SpinMotion) {
         updateImage(image)
 
-        // SwiftUI's positive rotation reads clockwise; the layer tree is y-up,
-        // where a positive z rotation reads counter-clockwise.
-        let radians = -angle * .pi / 180
-
-        if isSpinning {
-            // Keep the animation that is already running: restarting it on every
-            // state change would jump the record back to the sampled angle.
-            guard spinner.animation(forKey: rotationKey) == nil else { return }
-            setRotation(radians)
-
-            let animation = CABasicAnimation(keyPath: "transform.rotation.z")
-            animation.fromValue = radians
-            animation.toValue = radians - 2 * .pi
-            animation.duration = 360 / max(degreesPerSecond, 1)
-            animation.repeatCount = .infinity
-            animation.timingFunction = CAMediaTimingFunction(name: .linear)
-            animation.isRemovedOnCompletion = false
-            spinner.add(animation, forKey: rotationKey)
-        } else {
-            spinner.removeAnimation(forKey: rotationKey)
-            setRotation(radians)
+        // When playback is off the pointer owns the angle, which changes while
+        // scrubbing even though the motion does not.
+        guard spin.isRotating else {
+            appliedSpin = .stopped
+            clearSpinAnimations()
+            setRotation(radians(angle))
+            return
         }
+
+        guard spin != appliedSpin else { return }
+        appliedSpin = spin
+        clearSpinAnimations()
+
+        switch spin {
+        case .stopped:
+            break
+
+        case let .starting(_, _, topSpeed, startTime, duration):
+            let rampEnd = spin.angle(at: startTime + duration)
+            setRotation(radians(rampEnd))
+            addRamp(spin, startTime: startTime, duration: duration)
+            // Hand the end of the run-up straight to the steady spin so the
+            // render server crosses the boundary without a controller tick.
+            addSteady(fromAngle: rampEnd, speed: topSpeed, beginTime: startTime + duration)
+
+        case let .steady(fromAngle, speed, startTime):
+            setRotation(radians(fromAngle))
+            addSteady(fromAngle: fromAngle, speed: speed, beginTime: startTime)
+
+        case let .stopping(_, _, startTime, duration):
+            setRotation(radians(spin.angle(at: startTime + duration)))
+            addRamp(spin, startTime: startTime, duration: duration)
+        }
+    }
+
+    /// Sample the shared curve at video rate. Linear keyframes between those
+    /// samples are indistinguishable from the analytic curve.
+    private func addRamp(_ spin: SpinMotion, startTime: CFTimeInterval, duration: Double) {
+        let steps = max(2, Int((duration * 60).rounded(.up)))
+        var values: [Double] = []
+        var keyTimes: [NSNumber] = []
+        values.reserveCapacity(steps + 1)
+        keyTimes.reserveCapacity(steps + 1)
+
+        for step in 0...steps {
+            let progress = Double(step) / Double(steps)
+            values.append(radians(spin.angle(at: startTime + duration * progress)))
+            keyTimes.append(NSNumber(value: progress))
+        }
+
+        let animation = CAKeyframeAnimation(keyPath: "transform.rotation.z")
+        animation.values = values
+        animation.keyTimes = keyTimes
+        // The controller's clock is the host clock, so a late update starts
+        // the curve where it should be rather than at the beginning.
+        animation.beginTime = startTime
+        animation.duration = duration
+        animation.calculationMode = .linear
+        animation.isRemovedOnCompletion = false
+        spinner.add(animation, forKey: rampKey)
+    }
+
+    private func addSteady(
+        fromAngle: Double,
+        speed: Double,
+        beginTime: CFTimeInterval
+    ) {
+        let from = radians(fromAngle)
+        let animation = CABasicAnimation(keyPath: "transform.rotation.z")
+        animation.fromValue = from
+        animation.toValue = from - 2 * .pi
+        animation.duration = 360 / max(speed, 1)
+        animation.beginTime = beginTime
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .linear)
+        animation.isRemovedOnCompletion = false
+        spinner.add(animation, forKey: steadyKey)
+    }
+
+    private func clearSpinAnimations() {
+        spinner.removeAnimation(forKey: rampKey)
+        spinner.removeAnimation(forKey: steadyKey)
     }
 
     private func updateImage(_ image: NSImage?) {
@@ -110,6 +168,12 @@ final class DiscLayerView: NSView {
         var rect = CGRect(origin: .zero, size: image.size)
         spinner.contents = image.cgImage(forProposedRect: &rect, context: nil, hints: nil)
         spinner.contentsScale = window?.backingScaleFactor ?? 2
+    }
+
+    /// SwiftUI's positive rotation reads clockwise; the layer tree is y-up,
+    /// where a positive z rotation reads counter-clockwise.
+    private func radians(_ angle: Double) -> Double {
+        -angle * .pi / 180
     }
 
     private func setRotation(_ radians: Double) {

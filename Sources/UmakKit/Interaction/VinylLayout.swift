@@ -83,6 +83,12 @@ struct VinylLayout {
 
     /// 33⅓ RPM.
     let playbackDegreesPerSecond: Double = 200
+    /// A turntable does not reach speed instantly: playback eases in from rest
+    /// over this long.
+    let spinUpDuration: Double = 1.2
+    /// Stopping still sheds speed faster than the run-up gained it, but the
+    /// brake eases in instead of jolting the disc on the first frame.
+    let spinDownDuration: Double = 0.6
     let collapseStiffness: Double = 260
     let collapseDamping: Double = 24
     let collapseMaximumTime: Double = 0.42

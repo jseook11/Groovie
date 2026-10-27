@@ -22,11 +22,6 @@ final class OverlayController {
     private var contentView: OverlayContentView?
     private var tickTimer: Timer?
     private var lastTick: CFTimeInterval = CACurrentMediaTime()
-    /// Playback rotation is handed to Core Animation: the model stores the
-    /// angle the spin started from and when, instead of changing `model.angle`
-    /// every frame and forcing SwiftUI to redraw the whole stage.
-    private var spinBaseAngle: Double = 0
-    private var spinBaseTime: CFTimeInterval = 0
 
     private var session: Session?
     private var copySession: CopySession?
@@ -270,11 +265,10 @@ final class OverlayController {
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
-        model.isSpinning = false
+        model.angle = 0
+        model.spin = .stopped
         hover.region = .none
         resetSkipGesture()
-        spinBaseAngle = 0
-        spinBaseTime = CACurrentMediaTime()
 
         if isEnabled {
             contentView?.window?.invalidateCursorRects(for: content)
@@ -318,7 +312,10 @@ final class OverlayController {
         model.phase = .idle
         model.exposure = 0
         model.offsetSeconds = 0
-        model.isSpinning = false
+        // The record may be hidden mid-spin, so freeze the angle it reached
+        // before forgetting the motion.
+        model.angle = spinAngle(at: CACurrentMediaTime())
+        model.spin = .stopped
         hideStage()
         NSCursor.arrow.set()
     }
@@ -1547,13 +1544,13 @@ final class OverlayController {
         }
     }
 
-    /// The logical angle at `time`. The view runs the same rotation on Core
+    /// The logical angle at `time`. The view runs the same curve on Core
     /// Animation, so this is only needed when the pointer takes over.
     private func spinAngle(at time: CFTimeInterval) -> Double {
-        guard model.isSpinning else { return model.angle }
-        let elapsed = time - spinBaseTime
-        return (spinBaseAngle + layout.playbackDegreesPerSecond * elapsed)
-            .truncatingRemainder(dividingBy: 360)
+        guard model.spin.isRotating else { return model.angle }
+        // A long playback session accumulates turns. Normalising keeps the
+        // value handed to Core Animation small enough for its float transform.
+        return model.spin.angle(at: time).truncatingRemainder(dividingBy: 360)
     }
 
     /// True once a horizontal stroke has taken over the angle, even if the
@@ -1562,18 +1559,50 @@ final class OverlayController {
         (session?.scrubArmed ?? false) || (scrollSession?.scrubArmed ?? false)
     }
 
-    /// Start or stop the playback spin to match the current phase and player.
+    /// Start, brake, or leave the playback rotation to match the current phase
+    /// and player.
     private func syncSpin() {
         let shouldSpin = model.isPlaying && phaseAllowsSpin && !pointerOwnsAngle
-        guard shouldSpin != model.isSpinning else { return }
         if shouldSpin {
-            spinBaseAngle = model.angle
-            spinBaseTime = CACurrentMediaTime()
-            model.isSpinning = true
+            guard !model.spin.isSpinning else { return }
+            beginSpinUp(at: CACurrentMediaTime())
         } else {
-            model.angle = spinAngle(at: CACurrentMediaTime())
-            model.isSpinning = false
+            guard model.spin.isSpinning else { return }
+            beginSpinDown(at: CACurrentMediaTime())
         }
+    }
+
+    /// Ease into playback speed instead of jumping to 33⅓ RPM. When the record
+    /// is starting mid-brake, the run-up begins from the speed it still has.
+    private func beginSpinUp(at time: CFTimeInterval) {
+        let angle = spinAngle(at: time)
+        let velocity = model.spin.velocity(at: time)
+        model.angle = angle
+        model.spin = .starting(
+            fromAngle: angle,
+            velocity: velocity,
+            topSpeed: layout.playbackDegreesPerSecond,
+            startTime: time,
+            duration: layout.spinUpDuration
+        )
+    }
+
+    /// Brake to a stop. The deceleration curve lives in `SpinMotion`, so the
+    /// wheel keeps turning for a moment after the pause instead of freezing.
+    private func beginSpinDown(at time: CFTimeInterval) {
+        let angle = spinAngle(at: time)
+        let velocity = model.spin.velocity(at: time)
+        model.angle = angle
+        guard velocity > 0.5 else {
+            model.spin = .stopped
+            return
+        }
+        model.spin = .stopping(
+            fromAngle: angle,
+            velocity: velocity,
+            startTime: time,
+            duration: layout.spinDownDuration
+        )
     }
 
     /// Hand the angle from the animation to the pointer, returning where the
@@ -1582,7 +1611,7 @@ final class OverlayController {
     private func freezeSpin() -> Double {
         let angle = spinAngle(at: CACurrentMediaTime())
         model.angle = angle
-        model.isSpinning = false
+        model.spin = .stopped
         return angle
     }
 

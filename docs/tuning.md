@@ -26,6 +26,8 @@ All values are in `Interaction/VinylLayout.swift` unless noted.
 | `labelRadius` | 30 pt | Printed label size. |
 | `labelHitSlop` | 12 pt | Extra play/pause hit area around the label (42 pt total radius). |
 | `playbackDegreesPerSecond` | 200 | 33⅓ RPM. |
+| `spinUpDuration` | 1.2 s | Run-up from rest to playback speed (smoothstep). |
+| `spinDownDuration` | 0.6 s | Brake from playback speed to rest (eased in). |
 | `collapseStiffness` | 260 | Spring constant for putting the record away. |
 | `collapseDamping` | 24 | Damping for the put-back spring. |
 | `collapseMaximumTime` | 0.42 s | Longest collapse animation. |

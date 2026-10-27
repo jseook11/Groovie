@@ -81,6 +81,41 @@ public enum SelfChecks {
         expect(approx(endResult.position, 199.85), "seeking must stop just before the end")
         expect(endResult.hitEnd, "hitting the end must be reported")
 
+        // MARK: Playback rotation
+
+        let runUp = SpinMotion.starting(
+            fromAngle: 10,
+            velocity: 0,
+            topSpeed: 200,
+            startTime: 100,
+            duration: 1.2
+        )
+        expect(approx(runUp.velocity(at: 100), 0), "run-up must begin at rest")
+        expect(approx(runUp.velocity(at: 101.2), 200), "run-up must reach playback speed")
+        let firstQuarter = runUp.angle(at: 100.3) - 10
+        let secondQuarter = runUp.angle(at: 100.6) - runUp.angle(at: 100.3)
+        expect(secondQuarter > firstQuarter, "run-up must accelerate")
+        let afterRamp = runUp.angle(at: 102.2) - runUp.angle(at: 101.2)
+        expect(approx(afterRamp, 200, 0.01), "run-up must hold playback speed afterwards")
+        expect(runUp.isSpinning, "a run-up counts as playback spinning")
+
+        let brake = SpinMotion.stopping(
+            fromAngle: 40,
+            velocity: 200,
+            startTime: 5,
+            duration: 0.6
+        )
+        expect(approx(brake.velocity(at: 5), 200), "brake must start at playback speed")
+        expect(brake.velocity(at: 5.05) > 190, "brake must ease in instead of jolting")
+        expect(approx(brake.velocity(at: 5.6), 0), "brake must reach a stop")
+        let firstHalf = brake.angle(at: 5.3) - 40
+        let secondHalf = brake.angle(at: 5.6) - brake.angle(at: 5.3)
+        expect(firstHalf > secondHalf, "brake must shed speed through its run")
+        expect(approx(brake.angle(at: 6), brake.angle(at: 5.6)),
+               "a finished brake must hold its angle")
+        expect(brake.isRotating && !brake.isSpinning,
+               "a brake is still rotating but no longer playback spinning")
+
         // MARK: Wiggle cancel
 
         var wiggle = WiggleDetector()
