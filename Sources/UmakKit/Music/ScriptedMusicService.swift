@@ -38,7 +38,10 @@ final class ScriptedMusicService: MusicProviding {
     private var started = false
     private var readInFlight = false
     private var permissionDenied = false
-    private var launchInFlight = false
+    /// One open request at a time. A scroll gesture asks on every event, and
+    /// each completion polls, so without this a burst of events became a burst
+    /// of LaunchServices calls and reads on the shared AppleScript queue.
+    private var openRequest = OpenCoalescer()
     /// A player that stops answering Apple Events must not leave the record
     /// spinning on a phantom track forever. Degrade after a few failed reads.
     private var consecutiveReadFailures = 0
@@ -167,7 +170,7 @@ final class ScriptedMusicService: MusicProviding {
         scheduledPoll = nil
         readInFlight = false
         needsImmediatePoll = false
-        launchInFlight = false
+        openRequest.reset()
         consecutiveReadFailures = 0
         lastReadStartedAt = .distantPast
         // A stopped service owns no permission state. Leaving this set let an
@@ -476,24 +479,8 @@ final class ScriptedMusicService: MusicProviding {
     private func launchPlayerIfNeeded() {
         guard launchesWhenClosed else { return }
         refreshPlayerRunning()
-        guard !playerIsRunning, !launchInFlight else { return }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: descriptor.bundleID) else {
-            return
-        }
-        launchInFlight = true
-        let generation = lifecycleGeneration
-        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, _ in
-            Task { @MainActor in
-                guard let self, self.started, generation == self.lifecycleGeneration else { return }
-                self.launchInFlight = false
-                self.playerIsRunning = true
-                self.lastRunningCheck = Date()
-                // The workspace launch observer also polls, but the player can
-                // take a moment to answer AppleScript. This second read covers
-                // the case where the first one arrives too early.
-                self.pollNow()
-            }
-        }
+        guard !playerIsRunning, !openRequest.isInFlight else { return }
+        openPlayer()
     }
 
     /// Bring the player forward, launching it when it is closed. The overlay
@@ -507,21 +494,46 @@ final class ScriptedMusicService: MusicProviding {
     /// restores all of those cases in one step; it also launches an app that is
     /// not running yet.
     func presentPlayer() {
+        // A scroll gesture calls this once per event. `openPlayer` drops the
+        // duplicates, so a burst cannot become a burst of reads.
+        openPlayer()
+    }
+
+    /// The single LaunchServices entry point for both callers. The completion
+    /// is authoritative about whether the app actually opened: recording it as
+    /// running on failure left the next poll to re-read a player that is not
+    /// there, and the record kept showing it as live for up to 30 s.
+    private func openPlayer() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: descriptor.bundleID) else {
             return
         }
+        guard let token = openRequest.begin() else { return }
         let config = NSWorkspace.OpenConfiguration()
+        // `activates` defaults to YES, which both callers rely on: a cold start
+        // puts the player in front, and a record with no track needs the app
+        // where the user can pick one.
         config.activates = true
         // Opening a running app must not hand it a new window every time the
         // gesture repeats: LaunchServices routes it to the existing instance.
-        launchInFlight = true
         let generation = lifecycleGeneration
-        NSWorkspace.shared.openApplication(at: url, configuration: config) { [weak self] _, _ in
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { [weak self] app, error in
             Task { @MainActor in
-                guard let self, self.started, generation == self.lifecycleGeneration else { return }
-                self.launchInFlight = false
+                guard let self else { return }
+                // Release the claim on every completion, success or not: a
+                // failed open must not block the next attempt. Only a claim
+                // that is still ours may report success.
+                let ownsClaim = self.openRequest.finish(token)
+                guard self.started, generation == self.lifecycleGeneration else { return }
+                guard app != nil, error == nil else {
+                    self.log.debug("open \(self.descriptor.displayName, privacy: .public) failed: \(error?.localizedDescription ?? "no application", privacy: .public)")
+                    return
+                }
+                guard ownsClaim else { return }
                 self.playerIsRunning = true
                 self.lastRunningCheck = Date()
+                // The workspace launch observer also polls, but the player can
+                // take a moment to answer AppleScript. This second read covers
+                // the case where the first one arrives too early.
                 self.pollNow()
             }
         }

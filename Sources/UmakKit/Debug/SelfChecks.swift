@@ -446,6 +446,43 @@ public enum SelfChecks {
         recent.removeAll()
         expect(recent.count == 0 && !recent.contains(2), "recent set can be cleared")
 
+        // MARK: Open coalescing
+
+        var opener = OpenCoalescer()
+        expect(opener.begin() != nil, "the first open request starts")
+        expect(opener.isInFlight, "an open request is tracked while it runs")
+        // Repeated gesture events keep being dropped until the first finishes.
+        expect(opener.begin() == nil, "a second request is dropped while one runs")
+        expect(opener.begin() == nil, "requests keep being dropped while one runs")
+        expect(opener.isInFlight, "a dropped request leaves the claim in place")
+
+        // A stopped service must not hold the claim forever.
+        opener.reset()
+        expect(!opener.isInFlight, "reset drops a claim without a completion")
+        let fresh = opener.begin()
+        expect(fresh != nil, "reset lets the next service start open again")
+        if let fresh {
+            expect(opener.finish(fresh), "the owner releases its own claim")
+            expect(!opener.isInFlight, "releasing the claim frees the next request")
+        }
+
+        // A completion from a request that was replaced cannot release the
+        // claim the current request holds.
+        var stranger = OpenCoalescer()
+        let kept = stranger.begin()!
+        expect(!stranger.finish(kept + 1), "a stale completion cannot release the current claim")
+        expect(stranger.isInFlight, "a stale completion leaves the claim in place")
+
+        // A completion that never arrives must not disable the gesture.
+        let t0 = Date(timeIntervalSince1970: 1000)
+        var expiring = OpenCoalescer(timeout: 5)
+        let pending = expiring.begin(at: t0)!
+        expect(expiring.begin(at: t0.addingTimeInterval(4)) == nil,
+               "a pending claim is held for its whole timeout")
+        expect(expiring.begin(at: t0.addingTimeInterval(6)) != nil,
+               "an expired claim lets the next request through")
+        expect(!expiring.finish(pending), "the abandoned completion is ignored after expiry")
+
         // MARK: Formatter
 
         expect(TimeOffsetFormatter.string(for: -2.74) == "−2.7s", "negative offset formatting")
