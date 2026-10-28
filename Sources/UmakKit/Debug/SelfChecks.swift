@@ -1382,6 +1382,33 @@ public enum SelfChecks {
             expect(false, "could not create a defaults suite for the preference check")
         }
 
+        // MARK: Display preference
+
+        if let suite = UserDefaults(suiteName: "com.umak.selfchecks.display") {
+            let domain = "com.umak.selfchecks.display"
+            suite.removePersistentDomain(forName: domain)
+            expect(DisplayPreference.stored(defaults: suite) == nil,
+                   "an absent display preference is automatic")
+            DisplayPreference.persist(42, defaults: suite)
+            expect(DisplayPreference.stored(defaults: suite) == 42,
+                   "a chosen display is remembered")
+            DisplayPreference.persist(nil, defaults: suite)
+            expect(DisplayPreference.stored(defaults: suite) == nil,
+                   "automatic clears the chosen display")
+            suite.removePersistentDomain(forName: domain)
+        } else {
+            expect(false, "could not create a defaults suite for the display check")
+        }
+
+        // MARK: Display placement
+
+        if let screen = NSScreen.screens.first, let id = NotchScreen.displayID(of: screen) {
+            expect(NotchScreen.current(preferredDisplayID: id)?.screen === screen,
+                   "the chosen display hosts the record")
+        }
+        expect(NotchScreen.current(preferredDisplayID: CGDirectDisplayID.max) != nil,
+               "a disconnected choice falls back to a connected display")
+
         // MARK: Player history
 
         if let suite = UserDefaults(suiteName: "com.umak.selfchecks.playerHistory") {

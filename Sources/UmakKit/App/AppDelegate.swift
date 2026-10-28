@@ -281,6 +281,41 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         enableItem.state = enabled ? .on : .off
         menu.addItem(enableItem)
 
+        if NSScreen.screens.count > 1 {
+            let displayItem = NSMenuItem(title: L10n.t(.menuDisplay), action: nil, keyEquivalent: "")
+            let displayMenu = NSMenu()
+            displayMenu.autoenablesItems = false
+            let selectedID = DisplayPreference.available()
+
+            let autoItem = NSMenuItem(
+                title: L10n.t(.menuDisplayAuto),
+                action: #selector(selectDisplay(_:)),
+                keyEquivalent: ""
+            )
+            autoItem.target = self
+            autoItem.isEnabled = hasNotch && enabled
+            autoItem.state = selectedID == nil ? .on : .off
+            displayMenu.addItem(autoItem)
+
+            for screen in NSScreen.screens {
+                guard let id = NotchScreen.displayID(of: screen) else { continue }
+                let item = NSMenuItem(
+                    title: screen.localizedName,
+                    action: #selector(selectDisplay(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = NSNumber(value: id)
+                item.isEnabled = hasNotch && enabled
+                item.state = selectedID == id ? .on : .off
+                displayMenu.addItem(item)
+            }
+
+            displayItem.submenu = displayMenu
+            displayItem.isEnabled = hasNotch && enabled
+            menu.addItem(displayItem)
+        }
+
         let hintItem = NSMenuItem(title: L10n.t(.menuGestureTips), action: #selector(showGestureTips), keyEquivalent: "")
         hintItem.target = self
         hintItem.isEnabled = hasNotch && enabled
@@ -488,6 +523,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
 
     @objc private func showGestureTips() {
         showGestureHint(force: true)
+    }
+
+    @objc private func selectDisplay(_ sender: NSMenuItem) {
+        let id = (sender.representedObject as? NSNumber).map {
+            CGDirectDisplayID(truncating: $0)
+        }
+        DisplayPreference.persist(id)
+        refreshOverlaySetup()
     }
 
     @objc private func selectSkin(_ sender: NSMenuItem) {

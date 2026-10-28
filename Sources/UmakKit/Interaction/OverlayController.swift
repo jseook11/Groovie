@@ -20,6 +20,8 @@ final class OverlayController {
 
     private var panel: OverlayPanel?
     private var contentView: OverlayContentView?
+    /// Idle-only strips on the displays that do not host the record.
+    private var remoteInputs: [RemoteNotchInput] = []
     private var tickTimer: Timer?
     private var lastTick: CFTimeInterval = CACurrentMediaTime()
 
@@ -165,6 +167,7 @@ final class OverlayController {
         music.start()
         syncFromMusic()
         panel?.orderFrontRegardless()
+        installRemoteInputs()
     }
 
     func deactivate() {
@@ -176,6 +179,7 @@ final class OverlayController {
         demoTask = nil
         endDemo()
         vanishImmediately()
+        closeRemoteInputs()
         music.stop()
         panel?.orderOut(nil)
         // Nothing can draw these while the overlay is off. Keeping them would
@@ -231,7 +235,51 @@ final class OverlayController {
 
     // MARK: - Panel
 
+    // MARK: - Remote idle surfaces
+
+    /// Whether the closed-record gestures on a display that does not host the
+    /// record can act. They work even while a record is pinned, but never while
+    /// the host display is mid-gesture.
+    var acceptsIdleSurfaceInput: Bool {
+        isEnabled
+            && session == nil
+            && scrollSession == nil
+            && copySession == nil
+    }
+
+    func noteInteractionStart() {
+        onInteractionStart?()
+    }
+
+    func clickFromIdleSurface() {
+        guard acceptsIdleSurfaceInput else { return }
+        if !model.canInteract {
+            presentPlayerForUnavailableMusic()
+            return
+        }
+        guard music.nowPlaying != nil else { return }
+        togglePlayback()
+    }
+
+    func skipFromIdleSurface(forward: Bool) {
+        guard acceptsIdleSurfaceInput, model.canInteract, music.nowPlaying != nil else { return }
+        performTrackSkip(forward: forward)
+    }
+
+    func presentPlayerFromIdleSurface() {
+        guard acceptsIdleSurfaceInput else { return }
+        if model.canInteract {
+            music.presentPlayer()
+            performHaptic(.alignment)
+        } else {
+            presentPlayerForUnavailableMusic()
+        }
+    }
+
+    // MARK: - Panel
+
     private func installPanel() {
+        closeRemoteInputs()
         panel?.orderOut(nil)
         panel?.close()
         panel = nil
@@ -282,6 +330,34 @@ final class OverlayController {
         if isEnabled {
             contentView?.window?.invalidateCursorRects(for: content)
         }
+        installRemoteInputs()
+    }
+
+    /// Give every other display an idle strip so the closed-record gestures
+    /// work there too. Pulling the record out remains exclusive to the host.
+    private func installRemoteInputs() {
+        closeRemoteInputs()
+        guard isEnabled, NSScreen.screens.count > 1 else { return }
+        for screen in NSScreen.screens {
+            if let hostID = geometry.screenID,
+               NotchScreen.displayID(of: screen) == hostID
+            {
+                continue
+            }
+            // Mirrored displays share the host's frame; a second strip there
+            // would sit on top of the real one.
+            if screen.frame == geometry.screenFrame { continue }
+            remoteInputs.append(
+                RemoteNotchInput(notch: NotchScreen.forScreen(screen), controller: self)
+            )
+        }
+    }
+
+    private func closeRemoteInputs() {
+        for input in remoteInputs {
+            input.close()
+        }
+        remoteInputs.removeAll()
     }
 
     private func showStage() {

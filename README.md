@@ -116,7 +116,9 @@ resting place.
 - **Out of the way.** The overlay is a borderless panel that sits above the status bar without
   taking focus or activating the app, and there is no Dock icon.
 - **Works without a notch.** On displays without a camera housing, the top-centre strip behaves
-  exactly the same way.
+  exactly the same way. With more than one display, the basic notch gestures work at the top
+  centre of every display, while the record comes out on the display chosen from **Display** in
+  the status menu.
 - **First-run hint.** On a display without a notch, a small card under the strip introduces the
   hidden gestures: click to play/pause, swipe with two fingers to change tracks, pull down for the
   record, and swipe up for the music app. It never takes mouse events, disappears on the first

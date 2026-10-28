@@ -6,6 +6,8 @@ only the value in your language file.
 | Key | English (reference) | Where it appears |
 | --- | --- | --- |
 | `menu.enable` | Enable | Status menu toggle |
+| `menu.display` | Display | Status menu submenu title (two or more displays) |
+| `menu.displayAuto` | Auto | Display submenu |
 | `menu.gestureTips` | Show Gesture Tips | Status menu |
 | `menu.skin` | Record Skin | Status menu submenu title |
 | `menu.clearDesktopRecords` | Clear Desktop Records (%1$d) | Status menu (number of records) |
