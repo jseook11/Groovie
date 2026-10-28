@@ -1,0 +1,64 @@
+name: Sync website release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-website-release
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout: release tags cannot provide code that runs with this token.
+      - name: Notify website after the stable download is available
+        uses: actions/github-script@v7
+        env:
+          DISPATCH_TOKEN: ${{ secrets.UMAK_WEB_DISPATCH_TOKEN }}
+        with:
+          script: |
+            const token = process.env.DISPATCH_TOKEN;
+            if (!token) {
+              core.setFailed('Set UMAK_WEB_DISPATCH_TOKEN in this repository Actions secrets.');
+              return;
+            }
+            let release;
+            for (let attempt = 0; attempt < 12; attempt++) {
+              const { data } = await github.rest.repos.getLatestRelease(context.repo);
+              const asset = data.assets.find(asset => /macos.*universal.*\.zip$/i.test(asset.name));
+              if (!data.draft && !data.prerelease && asset?.state === 'uploaded' && asset.size > 0) {
+                release = data;
+                break;
+              }
+              if (attempt < 11) await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            if (!release) {
+              core.setFailed('The latest stable release has no completed macOS universal ZIP upload.');
+              return;
+            }
+            const response = await fetch(`https://api.github.com/repos/${context.repo.owner}/umak-web/dispatches`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+              body: JSON.stringify({
+                event_type: 'umak-release',
+                client_payload: { repository: `${context.repo.owner}/${context.repo.repo}`, tag: release.tag_name },
+              }),
+              signal: AbortSignal.timeout(30000),
+            });
+            if (response.status !== 204) {
+              core.setFailed(`Website notification failed (HTTP ${response.status}). Check the dispatch token permissions and expiry.`);
+              return;
+            }
+            core.info(`Notified umak-web about ${release.tag_name}. Website deployment runs in the private website repository.`);
