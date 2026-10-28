@@ -186,7 +186,7 @@ or installed automatically. Use **Check for Updates…** in the status menu to c
 ## Usage
 
 <p align="center">
-  <img src="docs/assets/gestures.svg" alt="Gesture map: hover the notch, pull down to grab, spin sideways to seek, pull once more to pin" width="1000">
+  <img src="docs/assets/gestures.svg" alt="Gesture map: hover the notch, pull down to grab, spin sideways to seek, and pull once more to pin. With the record closed, click to play or pause, swipe for the previous or next track, and swipe up to bring the music app forward." width="1000">
 </p>
 
 For a full walkthrough of every gesture, threshold, and edge case, see the

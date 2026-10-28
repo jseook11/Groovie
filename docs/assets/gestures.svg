@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="470" viewBox="0 0 1000 470" role="img" aria-labelledby="title desc">
   <title id="title">The Umak gesture map</title>
-  <desc id="desc">Four steps: hover the notch, pull down to grab the record, spin it sideways to seek, and pull once more to pin it.</desc>
+  <desc id="desc">Hover the notch, pull down to grab the record, spin it sideways to seek, and pull once more to pin it. With the record closed, click to play or pause, swipe for the previous or next track, and swipe up to bring the music app forward.</desc>
 
-  <rect x="0.5" y="0.5" width="999" height="299" rx="24" fill="#F2E9D8" stroke="#E0D2B8"/>
+  <rect x="0.5" y="0.5" width="999" height="469" rx="24" fill="#F2E9D8" stroke="#E0D2B8"/>
 
   <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
     <!-- 1. Hover -->
@@ -63,5 +63,44 @@
     <line x1="250" y1="60" x2="250" y2="200" stroke="#E0D2B8"/>
     <line x1="500" y1="60" x2="500" y2="200" stroke="#E0D2B8"/>
     <line x1="750" y1="60" x2="750" y2="200" stroke="#E0D2B8"/>
+    <line x1="32" y1="290" x2="968" y2="290" stroke="#E0D2B8"/>
+
+    <!-- Closed notch: the controls that work without pulling the record out -->
+    <text x="500" y="322" text-anchor="middle" font-size="10" font-weight="600" letter-spacing="1.2" fill="#7A6F5E">CLOSED NOTCH</text>
+
+    <!-- Click -->
+    <g>
+      <rect x="114" y="336" width="104" height="30" rx="8" fill="#0B0B0C"/>
+      <circle cx="166" cy="356" r="12" fill="none" stroke="#B3543D" stroke-opacity="0.10" stroke-width="2"/>
+      <circle cx="166" cy="356" r="8" fill="none" stroke="#B3543D" stroke-opacity="0.22" stroke-width="2"/>
+      <circle cx="166" cy="356" r="3" fill="#B3543D"/>
+      <path d="M186 362 L186 384 L192 378 L197 389 L202 386 L197 376 L205 376 Z" fill="#3A342B"/>
+      <text x="166" y="422" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">Click</text>
+      <text x="166" y="444" text-anchor="middle" font-size="12" fill="#7A6F5E">play or pause</text>
+    </g>
+
+    <!-- Swipe -->
+    <g>
+      <rect x="448" y="336" width="104" height="30" rx="8" fill="#0B0B0C"/>
+      <circle cx="488" cy="356" r="8" fill="#B3543D" fill-opacity="0.14"/>
+      <circle cx="488" cy="356" r="4" fill="#B3543D"/>
+      <circle cx="512" cy="356" r="8" fill="#B3543D" fill-opacity="0.14"/>
+      <circle cx="512" cy="356" r="4" fill="#B3543D"/>
+      <path d="M455 384 H545" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M464 376 L455 384 L464 392" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M536 376 L545 384 L536 392" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="500" y="422" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">Swipe</text>
+      <text x="500" y="444" text-anchor="middle" font-size="12" fill="#7A6F5E">previous / next track</text>
+    </g>
+
+    <!-- Swipe up -->
+    <g>
+      <rect x="782" y="336" width="104" height="30" rx="8" fill="#0B0B0C"/>
+      <path d="M818 400 H850" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M834 398 V370" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M826 378 L834 368 L842 378" fill="none" stroke="#B3543D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="834" y="422" text-anchor="middle" font-size="15" font-weight="600" fill="#3A342B">Swipe up</text>
+      <text x="834" y="444" text-anchor="middle" font-size="12" fill="#7A6F5E">bring the music app up</text>
+    </g>
   </g>
 </svg>
