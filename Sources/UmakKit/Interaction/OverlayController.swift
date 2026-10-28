@@ -72,6 +72,11 @@ final class OverlayController {
     private var skipGestureActive = false
     private var skipLastEvent: TimeInterval = 0
 
+    /// Recognises the upward swipe that brings the player app forward while
+    /// the record is closed. Its gesture boundary follows the skip gesture's:
+    /// both are reset together when a new scroll gesture starts.
+    private var presentSwipe = PresentSwipeDetector()
+
     private enum SkipTarget {
         /// The closed notch: the record must be pulled out first.
         case notch
@@ -1198,6 +1203,30 @@ final class OverlayController {
             return
         }
 
+        // Upward swipe with the record closed: bring the player app forward.
+        // This sits after every branch that gives the gesture another meaning,
+        // so scrolling up to close a pinned record, opening the record, and
+        // skipping tracks all keep working. It deliberately does nothing when
+        // there is no track to change, where the existing "present the player"
+        // path already covers the closed state.
+        if model.phase == .idle || model.phase == .armed,
+           model.canInteract
+        {
+            switch presentSwipe.update(right: vector.right, pull: vector.pull) {
+            case .ignored:
+                break
+            case .tracking:
+                // The gesture is a present swipe; do not let its later
+                // movement open the record.
+                return
+            case .fired:
+                interactionLog.debug("scroll up -> present player")
+                performHaptic(.alignment)
+                music.presentPlayer()
+                return
+            }
+        }
+
         // Opening requires a downward scroll; horizontal or upward gestures in
         // the closed state are ignored.
         guard vector.pull > 0.5,
@@ -1302,6 +1331,7 @@ final class OverlayController {
         skipFired = false
         skipGestureActive = false
         skipLastEvent = 0
+        presentSwipe.reset()
     }
 
     private func processScroll(right: CGFloat, pull: CGFloat, timestamp: TimeInterval, wallClock: TimeInterval) {

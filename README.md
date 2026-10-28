@@ -198,6 +198,7 @@ For a full walkthrough of every gesture, threshold, and edge case, see the
 | Pin it out | Pull farther, or grab again within 1 s | Keep scrolling down, or pause and scroll down again |
 | Play / pause | Click the label (pinned) or the notch (closed) | Click the label or the notch |
 | Next / previous track | — | Swipe right / left |
+| Bring the music app forward | — | Swipe up (a track is loaded and the record is closed) |
 | Put it back | Click the vinyl, or drag up | Scroll up |
 | Copy the record to the desktop | ⌥-drag a fully opened record | ⌥-drag |
 | Put the album on the desktop | ⌥-click a fully opened record | ⌥-click |
@@ -209,7 +210,7 @@ For a full walkthrough of every gesture, threshold, and edge case, see the
 With the record closed, the notch strip still has its own controls:
 
 <p align="center">
-  <img src="docs/assets/notch-gestures.svg" alt="Notch gestures: click to play or pause, swipe with two fingers for the previous or next track, and pull down to open the record" width="1000">
+  <img src="docs/assets/notch-gestures.svg" alt="Notch gestures: click to play or pause, swipe with two fingers for the previous or next track, pull down to open the record, and swipe up to bring the music app forward" width="1000">
 </p>
 
 ### Pull and grab
@@ -269,7 +270,8 @@ release-based:
 - **Left / right over the vinyl** scrubs, with the same speed-sensitive mapping as dragging.
 - **Left / right over the notch or a pinned label** changes tracks. A skip needs a long, clearly
   horizontal gesture, and each gesture skips only once.
-- **Up** puts the record back.
+- **Up** puts the record back, or with the record closed and a track loaded, brings the music app
+  forward instead (one swipe per gesture).
 - **No input for a moment** after opening puts the record back, unless it has been confirmed.
 - Momentum is ignored, so a flick does not keep scrubbing after your fingers leave the trackpad.
 

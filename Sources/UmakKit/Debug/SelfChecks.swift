@@ -184,6 +184,68 @@ public enum SelfChecks {
                "leftward scrolling must also lock horizontally")
         expect(approx(axisLock.horizontalTravel, -10), "leftward travel must be signed")
 
+        // MARK: Present swipe
+
+        var present = PresentSwipeDetector()
+        expect(present.update(right: 0, pull: -30) == .tracking,
+               "an upward swipe must be claimed before it fires")
+        expect(present.update(right: 0, pull: -30) == .tracking,
+               "an upward swipe must not fire before the activation distance")
+        expect(present.update(right: 0, pull: -40) == .fired,
+               "an upward swipe past the activation distance must fire")
+        expect(present.update(right: 0, pull: -40) == .tracking,
+               "a swipe must fire exactly once")
+        expect(present.update(right: 0, pull: -40) == .tracking,
+               "continued upward travel must not fire again")
+
+        var shortSwipe = PresentSwipeDetector()
+        for _ in 1...4 {
+            expect(shortSwipe.update(right: 0, pull: -20) == .tracking,
+                   "a short upward scroll is claimed but must not fire yet")
+        }
+        expect(shortSwipe.update(right: 0, pull: -9) == .tracking,
+               "travel short of the activation distance must not fire")
+
+        var sideways = PresentSwipeDetector()
+        expect(sideways.update(right: 40, pull: -10) == .ignored,
+               "a horizontal swipe must not be claimed as a present swipe")
+        expect(sideways.update(right: 0, pull: -200) == .ignored,
+               "a gesture that started sideways must not turn into a present swipe")
+
+        var downward = PresentSwipeDetector()
+        expect(downward.update(right: 0, pull: 30) == .ignored,
+               "a downward scroll must not be claimed as a present swipe")
+        expect(downward.update(right: 0, pull: -200) == .ignored,
+               "a gesture that started downward must not reverse into a present swipe")
+
+        var jittery = PresentSwipeDetector()
+        expect(jittery.update(right: 0, pull: -2) == .ignored,
+               "sub-threshold movement must stay undecided")
+        expect(jittery.update(right: 0, pull: -100) == .fired,
+               "a clear upward swipe after jitter must still fire")
+
+        var resetPresent = PresentSwipeDetector()
+        _ = resetPresent.update(right: 0, pull: -120)
+        resetPresent.reset()
+        expect(resetPresent.update(right: 0, pull: -50) == .tracking,
+               "a new gesture must get its own activation budget")
+        expect(resetPresent.update(right: 0, pull: -50) == .fired,
+               "the new gesture must fire once it completes")
+
+        var wobble = PresentSwipeDetector()
+        _ = wobble.update(right: 0, pull: -40)
+        expect(wobble.update(right: 0, pull: 40) != .fired,
+               "reversing direction must give the travel back")
+        expect(wobble.update(right: 0, pull: -40) != .fired,
+               "a wobble must not add up to a swipe on the second pass")
+
+        var committed = PresentSwipeDetector()
+        _ = committed.update(right: 0, pull: -20)
+        expect(committed.update(right: 0, pull: 200) == .tracking,
+               "an upward-locked gesture must keep its meaning instead of opening the record")
+        expect(committed.update(right: 0, pull: 200) == .tracking,
+               "an upward-locked gesture must stay consumed")
+
         // MARK: Confirm meter
 
         var slowMeter = ConfirmAccumulator()

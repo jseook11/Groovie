@@ -473,8 +473,8 @@ final class ScriptedMusicService: MusicProviding {
         lastRunningCheck = Date()
     }
 
-    private func launchPlayerIfNeeded(force: Bool = false) {
-        guard force || launchesWhenClosed else { return }
+    private func launchPlayerIfNeeded() {
+        guard launchesWhenClosed else { return }
         refreshPlayerRunning()
         guard !playerIsRunning, !launchInFlight else { return }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: descriptor.bundleID) else {
@@ -499,11 +499,31 @@ final class ScriptedMusicService: MusicProviding {
     /// Bring the player forward, launching it when it is closed. The overlay
     /// has nothing to scrub without a track, so the player is where the user
     /// needs to be to start one.
+    ///
+    /// Activation alone is not enough: a player whose window was closed (the
+    /// red button, or ⌘W) keeps running with `activate` bringing nothing to
+    /// the screen, and a minimized or hidden app is activated without its
+    /// window. The LaunchServices "open" path is what the Dock icon uses, so it
+    /// restores all of those cases in one step; it also launches an app that is
+    /// not running yet.
     func presentPlayer() {
-        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: descriptor.bundleID).first {
-            app.activate(options: [])
-        } else {
-            launchPlayerIfNeeded(force: true)
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: descriptor.bundleID) else {
+            return
+        }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        // Opening a running app must not hand it a new window every time the
+        // gesture repeats: LaunchServices routes it to the existing instance.
+        launchInFlight = true
+        let generation = lifecycleGeneration
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { [weak self] _, _ in
+            Task { @MainActor in
+                guard let self, self.started, generation == self.lifecycleGeneration else { return }
+                self.launchInFlight = false
+                self.playerIsRunning = true
+                self.lastRunningCheck = Date()
+                self.pollNow()
+            }
         }
     }
 
