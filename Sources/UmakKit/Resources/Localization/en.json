@@ -41,6 +41,8 @@
     "hint.swipe.detail": "Previous · next track",
     "hint.pull.title": "Pull down",
     "hint.pull.detail": "Open the record",
+    "hint.up.title": "Swipe up",
+    "hint.up.detail": "Bring the app forward",
     "alert.permissionTitle": "Umak can't control %1$@",
     "alert.permissionBody": "Allow Umak to control %1$@ in System Settings → Privacy & Security → Automation.",
     "alert.openSettings": "Open Settings",

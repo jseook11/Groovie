@@ -30,6 +30,12 @@ struct GestureHintView: View {
                     title: L10n.t(.hintPullTitle),
                     detail: L10n.t(.hintPullDetail)
                 )
+                separator
+                item(
+                    symbol: "arrow.up",
+                    title: L10n.t(.hintUpTitle),
+                    detail: L10n.t(.hintUpDetail)
+                )
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
@@ -99,7 +105,7 @@ final class GestureHintPresenter {
         generation += 1
         let currentGeneration = generation
 
-        let width = min(440, notch.screen.frame.width - 32)
+        let width = min(560, notch.screen.frame.width - 32)
         let height: CGFloat = 70
         let screen = notch.screen.frame
         let x = min(

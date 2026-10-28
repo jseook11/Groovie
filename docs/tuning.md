@@ -74,6 +74,10 @@ probe that receives the notification polls immediately, which is why probe mode 
   0.5 s, and a notification that arrives inside that window schedules one follow-up read when it
   closes rather than being dropped. Three consecutive read failures drop the stale snapshot
   instead of leaving the record spinning on a phantom track.
+- Player opens are coalesced: one LaunchServices request at a time
+  (`Support/OpenCoalescer.swift`, 5 s timeout). A gesture that repeats the request queues no
+  further opens, and a completion that never arrives expires instead of disabling the gesture
+  for the rest of the session.
 - When the selected provider leaves playback, the other one is polled once immediately instead
   of waiting out its probe interval.
 - While the record is out, a better candidate is queued instead of applied. Switching mid-gesture

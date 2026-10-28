@@ -59,6 +59,8 @@ enum LocalizationKey: String, CaseIterable {
     case hintSwipeDetail = "hint.swipe.detail"
     case hintPullTitle = "hint.pull.title"
     case hintPullDetail = "hint.pull.detail"
+    case hintUpTitle = "hint.up.title"
+    case hintUpDetail = "hint.up.detail"
 
     // MARK: Permission alert
 

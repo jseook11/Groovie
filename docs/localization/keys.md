@@ -41,6 +41,8 @@ only the value in your language file.
 | `hint.swipe.detail` | Previous · next track | Gesture hint card |
 | `hint.pull.title` | Pull down | Gesture hint card |
 | `hint.pull.detail` | Open the record | Gesture hint card |
+| `hint.up.title` | Swipe up | Gesture hint card |
+| `hint.up.detail` | Bring the app forward | Gesture hint card |
 | `alert.clearDesktopRecordsTitle` | Clear desktop records? | Clear-desktop confirmation title |
 | `alert.clearDesktopRecordsBody` | %1$d records on your desktop will be removed. The record in the notch and playback are not affected. | Clear-desktop confirmation body (record count) |
 | `alert.clear` | Clear | Clear-desktop confirmation button |

@@ -41,6 +41,8 @@
     "hint.swipe.detail": "이전·다음 곡",
     "hint.pull.title": "아래로 당기기",
     "hint.pull.detail": "레코드 꺼내기",
+    "hint.up.title": "위로 스와이프",
+    "hint.up.detail": "음악 앱 부르기",
     "alert.permissionTitle": "Umak이 %1$@을(를) 제어할 수 없습니다",
     "alert.permissionBody": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 Umak이 %1$@을(를) 제어하도록 허용해 주세요.",
     "alert.openSettings": "설정 열기",

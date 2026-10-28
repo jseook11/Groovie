@@ -119,8 +119,8 @@ resting place.
   exactly the same way.
 - **First-run hint.** On a display without a notch, a small card under the strip introduces the
   hidden gestures: click to play/pause, swipe with two fingers to change tracks, pull down for the
-  record. It never takes mouse events, disappears on the first gesture, and can be replayed from
-  the status menu.
+  record, and swipe up for the music app. It never takes mouse events, disappears on the first
+  gesture, and can be replayed from the status menu.
 - **Status menu.** A fixed-width header with the logo, track, artist, and progress. Long titles
   scroll; short ones stay still. Only actionable states — player closed, no track, permission
   needed — are surfaced there.
