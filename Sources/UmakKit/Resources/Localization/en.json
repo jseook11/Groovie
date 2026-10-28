@@ -6,7 +6,6 @@
   "complete": true,
   "strings": {
     "menu.enable": "Enable",
-    "menu.demo": "Play Demo",
     "menu.gestureTips": "Show Gesture Tips",
     "menu.skin": "Record Skin",
     "menu.player": "Player",

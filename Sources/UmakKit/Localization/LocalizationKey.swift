@@ -9,7 +9,6 @@ enum LocalizationKey: String, CaseIterable {
     // MARK: Menu
 
     case menuEnable = "menu.enable"
-    case menuDemo = "menu.demo"
     case menuGestureTips = "menu.gestureTips"
     case menuSkin = "menu.skin"
     case menuPlayer = "menu.player"

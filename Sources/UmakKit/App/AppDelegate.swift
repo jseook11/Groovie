@@ -281,11 +281,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         enableItem.state = enabled ? .on : .off
         menu.addItem(enableItem)
 
-        let demoItem = NSMenuItem(title: L10n.t(.menuDemo), action: #selector(runDemo), keyEquivalent: "")
-        demoItem.target = self
-        demoItem.isEnabled = hasNotch && enabled
-        menu.addItem(demoItem)
-
         let hintItem = NSMenuItem(title: L10n.t(.menuGestureTips), action: #selector(showGestureTips), keyEquivalent: "")
         hintItem.target = self
         hintItem.isEnabled = hasNotch && enabled
@@ -489,10 +484,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
         // the player to appear again if access is still denied.
         permissionAlertsShown.removeAll()
         controller?.refreshMusic()
-    }
-
-    @objc private func runDemo() {
-        controller?.runDemo()
     }
 
     @objc private func showGestureTips() {
