@@ -72,6 +72,15 @@ final class OverlayController {
     private var skipGestureActive = false
     private var skipLastEvent: TimeInterval = 0
 
+    /// Recognises the upward swipe that brings the player app forward while
+    /// the record is closed. Its gesture boundary follows the skip gesture's:
+    /// both are reset together when a new scroll gesture starts.
+    private var presentSwipe = PresentSwipeDetector()
+    /// Whether this scroll gesture already tried to bring the player forward
+    /// because there was no track. Without it a single gesture asked once per
+    /// event, and each request opened the app and polled.
+    private var presentOnNoTrackFired = false
+
     private enum SkipTarget {
         /// The closed notch: the record must be pulled out first.
         case notch
@@ -1120,14 +1129,8 @@ final class OverlayController {
         guard event.momentumPhase.isEmpty else { return }
         guard isEnabled, session == nil else { return }
         onInteractionStart?()
-        if !model.canInteract && !latched && pendingConfirmUntil == nil {
-            presentPlayerForUnavailableMusic()
-            return
-        }
-        guard scrollSession != nil || latched || pendingConfirmUntil != nil
-                || model.phase == .idle || model.phase == .armed || model.phase == .releasing
-        else { return }
 
+        let wallClock = ProcessInfo.processInfo.systemUptime
         let vector = ScrollDirection.physical(
             deltaX: event.scrollingDeltaX,
             deltaY: event.scrollingDeltaY,
@@ -1135,15 +1138,39 @@ final class OverlayController {
             precise: event.hasPreciseScrollingDeltas
         )
         guard abs(vector.right) > 0.01 || abs(vector.pull) > 0.01 else { return }
+
+        // Classify the gesture before any branch that can act on it: a wheel
+        // stream has no `.began`, and the no-track path below runs for every
+        // event of one gesture.
+        if event.phase == .began || !skipGestureActive || wallClock - skipLastEvent > 0.35 {
+            resetSkipGesture()
+            skipGestureActive = true
+            skipTarget = skipTargetAtPointer()
+        }
+        skipLastEvent = wallClock
+
+        if !model.canInteract && !latched && pendingConfirmUntil == nil {
+            // One attempt per gesture. The player takes a moment to answer, so
+            // repeating the request on every scroll event only queued more
+            // opens and reads behind the same AppleScript queue.
+            if !presentOnNoTrackFired {
+                presentOnNoTrackFired = true
+                presentPlayerForUnavailableMusic()
+            }
+            return
+        }
+        guard scrollSession != nil || latched || pendingConfirmUntil != nil
+                || model.phase == .idle || model.phase == .armed || model.phase == .releasing
+        else { return }
+
         scrollLog.debug("scroll right=\(vector.right, privacy: .public) pull=\(vector.pull, privacy: .public) inverted=\(event.isDirectionInvertedFromDevice, privacy: .public) precise=\(event.hasPreciseScrollingDeltas, privacy: .public)")
 
         let timestamp = event.timestamp > 0 ? event.timestamp : ProcessInfo.processInfo.systemUptime
-        let wallClock = ProcessInfo.processInfo.systemUptime
 
         // A deliberate horizontal swipe changes tracks. This must run before
         // the pull and scrub paths so a sideways gesture cannot open the
         // record or seek by accident.
-        if handleTrackSkip(event: event, vector: vector, wallClock: wallClock) {
+        if handleTrackSkip(vector: vector) {
             return
         }
 
@@ -1198,6 +1225,30 @@ final class OverlayController {
             return
         }
 
+        // Upward swipe with the record closed: bring the player app forward.
+        // This sits after every branch that gives the gesture another meaning,
+        // so scrolling up to close a pinned record, opening the record, and
+        // skipping tracks all keep working. It deliberately does nothing when
+        // there is no track to change, where the existing "present the player"
+        // path already covers the closed state.
+        if model.phase == .idle || model.phase == .armed,
+           model.canInteract
+        {
+            switch presentSwipe.update(right: vector.right, pull: vector.pull) {
+            case .ignored:
+                break
+            case .tracking:
+                // The gesture is a present swipe; do not let its later
+                // movement open the record.
+                return
+            case .fired:
+                interactionLog.debug("scroll up -> present player")
+                performHaptic(.alignment)
+                music.presentPlayer()
+                return
+            }
+        }
+
         // Opening requires a downward scroll; horizontal or upward gestures in
         // the closed state are ignored.
         guard vector.pull > 0.5,
@@ -1229,19 +1280,10 @@ final class OverlayController {
     /// event belongs to a skip gesture and must not reach the pull or scrub
     /// paths.
     private func handleTrackSkip(
-        event: NSEvent,
-        vector: (right: CGFloat, pull: CGFloat),
-        wallClock: TimeInterval
+        vector: (right: CGFloat, pull: CGFloat)
     ) -> Bool {
-        // Start a fresh classification at the beginning of a gesture. A quiet
-        // gap also starts one, which covers wheels and devices without phases.
-        if event.phase == .began || !skipGestureActive || wallClock - skipLastEvent > 0.35 {
-            resetSkipGesture()
-            skipGestureActive = true
-            skipTarget = skipTargetAtPointer()
-        }
-        skipLastEvent = wallClock
-
+        // The gesture boundary is classified in `handleScroll` before any
+        // branch acts, so every path shares one gesture definition.
         guard skipTarget != nil else { return false }
 
         switch skipAxis.update(right: vector.right, pull: vector.pull) {
@@ -1302,6 +1344,8 @@ final class OverlayController {
         skipFired = false
         skipGestureActive = false
         skipLastEvent = 0
+        presentSwipe.reset()
+        presentOnNoTrackFired = false
     }
 
     private func processScroll(right: CGFloat, pull: CGFloat, timestamp: TimeInterval, wallClock: TimeInterval) {

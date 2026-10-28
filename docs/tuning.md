@@ -21,6 +21,9 @@ All values are in `Interaction/VinylLayout.swift` unless noted.
 | `confirmWindow` (`OverlayController`) | 1.0 s | Time allowed for the re-grab confirm. |
 | `confirmScrubDeadzone` | 90 pt | Horizontal dead zone while confirming. |
 | `scrollSkipDistance` | 90 pt | Horizontal travel required to change tracks. |
+| `PresentSwipeDetector.activationDistance` | 90 pt | Upward travel required to bring the player forward (closed record only). |
+| `PresentSwipeDetector.verticalDominance` | 1.5× | How much more vertical than lateral a present swipe must be. |
+| `PresentSwipeDetector.lockDistance` | 8 pt | Upward travel before a gesture is committed to a present swipe. |
 | `clickSlop` | 4 pt | Movement still treated as a click. |
 | `recordRadius` | 90 pt | Record size. |
 | `labelRadius` | 30 pt | Printed label size. |
@@ -159,7 +162,11 @@ Scroll input has no button-release event, so the policy is time-based. Values li
 
 The axis is decided once per gesture and never flips. A skip fires once per gesture, after
 `scrollSkipDistance`; this is deliberately conservative because an accidental skip is worse than
-a missed one.
+a missed one. The present swipe follows the same rule: a gesture that starts downward or
+sideways can never turn into it, and one that starts upward stays upward until it ends — it
+either fires or is consumed, and never opens the record partway. Momentum after the fingers lift
+is ignored like every other scroll path. Reversing direction gives the accumulated travel back,
+so a wobble near the threshold cannot add up to a false swipe.
 
 ## Scrub sensitivity
 

@@ -184,6 +184,68 @@ public enum SelfChecks {
                "leftward scrolling must also lock horizontally")
         expect(approx(axisLock.horizontalTravel, -10), "leftward travel must be signed")
 
+        // MARK: Present swipe
+
+        var present = PresentSwipeDetector()
+        expect(present.update(right: 0, pull: -30) == .tracking,
+               "an upward swipe must be claimed before it fires")
+        expect(present.update(right: 0, pull: -30) == .tracking,
+               "an upward swipe must not fire before the activation distance")
+        expect(present.update(right: 0, pull: -40) == .fired,
+               "an upward swipe past the activation distance must fire")
+        expect(present.update(right: 0, pull: -40) == .tracking,
+               "a swipe must fire exactly once")
+        expect(present.update(right: 0, pull: -40) == .tracking,
+               "continued upward travel must not fire again")
+
+        var shortSwipe = PresentSwipeDetector()
+        for _ in 1...4 {
+            expect(shortSwipe.update(right: 0, pull: -20) == .tracking,
+                   "a short upward scroll is claimed but must not fire yet")
+        }
+        expect(shortSwipe.update(right: 0, pull: -9) == .tracking,
+               "travel short of the activation distance must not fire")
+
+        var sideways = PresentSwipeDetector()
+        expect(sideways.update(right: 40, pull: -10) == .ignored,
+               "a horizontal swipe must not be claimed as a present swipe")
+        expect(sideways.update(right: 0, pull: -200) == .ignored,
+               "a gesture that started sideways must not turn into a present swipe")
+
+        var downward = PresentSwipeDetector()
+        expect(downward.update(right: 0, pull: 30) == .ignored,
+               "a downward scroll must not be claimed as a present swipe")
+        expect(downward.update(right: 0, pull: -200) == .ignored,
+               "a gesture that started downward must not reverse into a present swipe")
+
+        var jittery = PresentSwipeDetector()
+        expect(jittery.update(right: 0, pull: -2) == .ignored,
+               "sub-threshold movement must stay undecided")
+        expect(jittery.update(right: 0, pull: -100) == .fired,
+               "a clear upward swipe after jitter must still fire")
+
+        var resetPresent = PresentSwipeDetector()
+        _ = resetPresent.update(right: 0, pull: -120)
+        resetPresent.reset()
+        expect(resetPresent.update(right: 0, pull: -50) == .tracking,
+               "a new gesture must get its own activation budget")
+        expect(resetPresent.update(right: 0, pull: -50) == .fired,
+               "the new gesture must fire once it completes")
+
+        var wobble = PresentSwipeDetector()
+        _ = wobble.update(right: 0, pull: -40)
+        expect(wobble.update(right: 0, pull: 40) != .fired,
+               "reversing direction must give the travel back")
+        expect(wobble.update(right: 0, pull: -40) != .fired,
+               "a wobble must not add up to a swipe on the second pass")
+
+        var committed = PresentSwipeDetector()
+        _ = committed.update(right: 0, pull: -20)
+        expect(committed.update(right: 0, pull: 200) == .tracking,
+               "an upward-locked gesture must keep its meaning instead of opening the record")
+        expect(committed.update(right: 0, pull: 200) == .tracking,
+               "an upward-locked gesture must stay consumed")
+
         // MARK: Confirm meter
 
         var slowMeter = ConfirmAccumulator()
@@ -383,6 +445,43 @@ public enum SelfChecks {
         expect(!recent.contains(3), "a refreshed value is not evicted")
         recent.removeAll()
         expect(recent.count == 0 && !recent.contains(2), "recent set can be cleared")
+
+        // MARK: Open coalescing
+
+        var opener = OpenCoalescer()
+        expect(opener.begin() != nil, "the first open request starts")
+        expect(opener.isInFlight, "an open request is tracked while it runs")
+        // Repeated gesture events keep being dropped until the first finishes.
+        expect(opener.begin() == nil, "a second request is dropped while one runs")
+        expect(opener.begin() == nil, "requests keep being dropped while one runs")
+        expect(opener.isInFlight, "a dropped request leaves the claim in place")
+
+        // A stopped service must not hold the claim forever.
+        opener.reset()
+        expect(!opener.isInFlight, "reset drops a claim without a completion")
+        let fresh = opener.begin()
+        expect(fresh != nil, "reset lets the next service start open again")
+        if let fresh {
+            expect(opener.finish(fresh), "the owner releases its own claim")
+            expect(!opener.isInFlight, "releasing the claim frees the next request")
+        }
+
+        // A completion from a request that was replaced cannot release the
+        // claim the current request holds.
+        var stranger = OpenCoalescer()
+        let kept = stranger.begin()!
+        expect(!stranger.finish(kept + 1), "a stale completion cannot release the current claim")
+        expect(stranger.isInFlight, "a stale completion leaves the claim in place")
+
+        // A completion that never arrives must not disable the gesture.
+        let t0 = Date(timeIntervalSince1970: 1000)
+        var expiring = OpenCoalescer(timeout: 5)
+        let pending = expiring.begin(at: t0)!
+        expect(expiring.begin(at: t0.addingTimeInterval(4)) == nil,
+               "a pending claim is held for its whole timeout")
+        expect(expiring.begin(at: t0.addingTimeInterval(6)) != nil,
+               "an expired claim lets the next request through")
+        expect(!expiring.finish(pending), "the abandoned completion is ignored after expiry")
 
         // MARK: Formatter
 
